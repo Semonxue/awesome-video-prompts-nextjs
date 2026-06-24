@@ -1,7 +1,11 @@
 {
   "site": {
     "title": "Awesome Video Prompts",
-    "description": "An open-source collection of awesome AI video generation prompts"
+    "description": "An open-source collection of awesome AI video generation prompts",
+    "footer": {
+      "copyright": "© 2026 Awesome Video Prompts · Open Source",
+      "tagline": "Curated by the community, for the community."
+    }
   },
   "nav": {
     "home": "Home",
@@ -15,14 +19,22 @@
     "author": "Author",
     "models": "Models",
     "tags": "Tags",
-    "watchVideo": "Watch Video"
+    "watchVideo": "Watch Video",
+    "copyPrompt": "Copy prompt",
+    "copied": "Copied!",
+    "hoverToPlay": "Hover to play",
+    "loading": "Loading...",
+    "byAuthor": "By",
+    "clickToCopy": "Click to copy",
+    "noDescription": "No description available"
   },
   "filter": {
     "allModels": "All Models",
     "allTags": "All Tags",
     "sortBy": "Sort by",
     "newest": "Newest",
-    "sortByDate": "Sort by Date"
+    "sortByDate": "Sort by Date",
+    "searchPlaceholder": "Search prompts..."
   },
   "stats": {
     "prompts": "Prompts",
@@ -30,7 +42,21 @@
     "tags": "Tags"
   },
   "empty": {
+    "title": "No prompts yet",
     "noResults": "No prompts found",
-    "tryDifferent": "Try a different filter or search term"
+    "tryDifferent": "Try a different filter or search term",
+    "phaseOneHint": "Phase 1 skeleton — data layer ships in Phase 2."
+  },
+  "common": {
+    "loading": "Loading...",
+    "comingSoon": "Coming soon"
+  },
+  "pages": {
+    "aboutTitle": "About Awesome Video Prompts",
+    "aboutDescription": "A community-curated library of AI video generation prompts. Browse, copy, and remix.",
+    "tagsTitle": "Browse by tag",
+    "tagsDescription": "Explore prompts organized by topic and style.",
+    "modelsTitle": "Browse by model",
+    "modelsDescription": "Find prompts for your favorite video generation models."
   }
 }

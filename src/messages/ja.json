@@ -1,7 +1,11 @@
 {
   "site": {
     "title": "素晴らしい動画プロンプト",
-    "description": "オープンソースのAI動画生成プロンプト集"
+    "description": "オープンソースのAI動画生成プロンプト集",
+    "footer": {
+      "copyright": "© 2026 素晴らしい動画プロンプト · オープンソース",
+      "tagline": "コミュニティが厳選し、コミュニティのために。"
+    }
   },
   "nav": {
     "home": "ホーム",
@@ -15,14 +19,22 @@
     "author": "作者",
     "models": "モデル",
     "tags": "タグ",
-    "watchVideo": "動画を見る"
+    "watchVideo": "動画を見る",
+    "copyPrompt": "プロンプトをコピー",
+    "copied": "コピーしました!",
+    "hoverToPlay": "ホバーで再生",
+    "loading": "読み込み中...",
+    "byAuthor": "作者",
+    "clickToCopy": "クリックでコピー",
+    "noDescription": "説明がありません"
   },
   "filter": {
     "allModels": "すべてのモデル",
     "allTags": "すべてのタグ",
     "sortBy": "並び替え",
     "newest": "新着順",
-    "sortByDate": "日付順"
+    "sortByDate": "日付順",
+    "searchPlaceholder": "プロンプトを検索..."
   },
   "stats": {
     "prompts": "プロンプト",
@@ -30,7 +42,21 @@
     "tags": "タグ"
   },
   "empty": {
+    "title": "プロンプトがありません",
     "noResults": "プロンプトが見つかりません",
-    "tryDifferent": "別のフィルターをお試しください"
+    "tryDifferent": "別のフィルターをお試しください",
+    "phaseOneHint": "Phase 1 スケルトン — データ層は Phase 2 で実装予定。"
+  },
+  "common": {
+    "loading": "読み込み中...",
+    "comingSoon": "近日公開"
+  },
+  "pages": {
+    "aboutTitle": "素晴らしい動画プロンプトについて",
+    "aboutDescription": "コミュニティが厳選した AI 動画生成プロンプト集。閲覧、コピー、リミックス。",
+    "tagsTitle": "タグで探す",
+    "tagsDescription": "トピックとスタイル別にプロンプトを探索。",
+    "modelsTitle": "モデルで探す",
+    "modelsDescription": "お気に入りの動画生成モデル向けプロンプトを発見。"
   }
 }
