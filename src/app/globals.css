@@ -1,0 +1,7 @@
+/* ============================================================
+ * Global Styles — entry point
+ * 真实样式从 assets/css/main.css（老站迁过来的 1126 行）导入
+ * Phase 1 之后在 src/app/globals.css 添加 Next.js 专属样式
+ * ============================================================ */
+
+@import "../../assets/css/main.css";
