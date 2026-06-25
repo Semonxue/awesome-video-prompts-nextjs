@@ -1,32 +1,90 @@
 {
   "site": {
     "title": "素晴らしい動画プロンプト",
-    "description": "オープンソースのAI動画生成プロンプト集",
-    "footer": {
-      "copyright": "© 2026 素晴らしい動画プロンプト · オープンソース",
-      "tagline": "コミュニティが厳選し、コミュニティのために。"
-    }
+    "description": "オープンソースのAI動画生成プロンプト集"
   },
   "nav": {
     "home": "ホーム",
     "tags": "タグ",
     "models": "モデル",
-    "about": "概要",
-    "search": "プロンプトを検索..."
+    "about": "概要"
   },
-  "prompt": {
-    "source": "ソース",
-    "author": "作者",
-    "models": "モデル",
+  "header": {
+    "siteTitle": "素晴らしい動画プロンプト",
+    "introPrefix": "",
+    "introMiddle": "の素晴らしい動画プロンプト集",
+    "introSuffix": "{count}件収録",
+    "openSourceLink": "オープンソース",
+    "all": "すべて",
+    "showMore": "さらに表示 +{count}",
+    "showLess": "折りたたむ",
+    "searchPlaceholder": "プロンプトを検索...",
+    "searchAriaLabel": "プロンプトを検索"
+  },
+  "home": {
+    "popularPrompts": "人気プロンプト",
+    "promptsFound": "{count}件のプロンプトが見つかりました",
+    "viewMoreModel": "{name}のプロンプトをもっと見る →",
+    "viewMoreTag": "{name}のプロンプトをもっと見る →"
+  },
+  "footer": {
+    "siteName": "Seedance2, HappyHorse, Gemini Omni, Kling3 AI動画プロンプト | 素晴らしい動画プロンプト",
+    "copyright": "© {year} {siteName} · オープンソースプロジェクト",
     "tags": "タグ",
-    "watchVideo": "動画を見る",
-    "copyPrompt": "プロンプトをコピー",
-    "copied": "コピーしました!",
-    "hoverToPlay": "ホバーで再生",
-    "loading": "読み込み中...",
-    "byAuthor": "作者",
-    "clickToCopy": "クリックでコピー",
-    "noDescription": "説明がありません"
+    "models": "モデル",
+    "github": "GitHub",
+    "about": "概要"
+  },
+  "card": {
+    "clickToCopyTitle": "クリックでプロンプトをコピー",
+    "hoverHint": "クリックでコピー · ホバーで再生",
+    "copied": "✓ コピーしました！",
+    "noPrompts": "プロンプトが見つかりません"
+  },
+  "copy": {
+    "label": "プロンプトをコピー",
+    "copied": "✓ コピーしました"
+  },
+  "detail": {
+    "date": "日付",
+    "tags": "タグ",
+    "models": "モデル",
+    "source": "ソース",
+    "copyPromptTitle": "プロンプトをコピー",
+    "clickToCopyHint": "クリックでコピー",
+    "youMightAlsoLike": "おすすめ",
+    "previous": "前へ",
+    "next": "次へ"
+  },
+  "model": {
+    "officialWebsite": "公式サイト",
+    "promptsFound": "{count}件のプロンプトが見つかりました",
+    "all": "すべて",
+    "backToModels": "← モデル",
+    "noPrompts": "プロンプトが見つかりません"
+  },
+  "tag": {
+    "breadcrumbTags": "タグ",
+    "byModel": "モデル別：",
+    "promptsFound": "{count}件のプロンプトが見つかりました",
+    "popularPrompts": "人気プロンプト",
+    "backToTags": "← タグ",
+    "noPrompts": "プロンプトが見つかりません"
+  },
+  "mobileFilters": {
+    "filters": "フィルター",
+    "activeDot": "•",
+    "filter": "フィルター",
+    "tag": "タグ",
+    "allTags": "すべてのタグ",
+    "model": "モデル",
+    "allModels": "すべてのモデル"
+  },
+  "grid": {
+    "page": "{page} ページ",
+    "prev": "← 前へ",
+    "next": "次へ →",
+    "noPrompts": "プロンプトが見つかりません"
   },
   "filter": {
     "allModels": "すべてのモデル",
@@ -41,11 +99,25 @@
     "models": "モデル",
     "tags": "タグ"
   },
+  "prompt": {
+    "source": "ソース",
+    "author": "作者",
+    "models": "モデル",
+    "tags": "タグ",
+    "watchVideo": "動画を見る",
+    "copyPrompt": "プロンプトをコピー",
+    "copied": "コピーしました！",
+    "hoverToPlay": "ホバーで再生",
+    "loading": "読み込み中...",
+    "byAuthor": "作者",
+    "clickToCopy": "クリックでコピー",
+    "noDescription": "説明なし"
+  },
   "empty": {
-    "title": "プロンプトがありません",
+    "title": "プロンプトなし",
     "noResults": "プロンプトが見つかりません",
     "tryDifferent": "別のフィルターをお試しください",
-    "phaseOneHint": "Phase 1 スケルトン — データ層は Phase 2 で実装予定。"
+    "phaseOneHint": "Phase 1 スケルトン — データ層は Phase 2 で追加"
   },
   "common": {
     "loading": "読み込み中...",
@@ -53,10 +125,10 @@
   },
   "pages": {
     "aboutTitle": "素晴らしい動画プロンプトについて",
-    "aboutDescription": "コミュニティが厳選した AI 動画生成プロンプト集。閲覧、コピー、リミックス。",
+    "aboutDescription": "コミュニティが管理する AI 動画生成プロンプトライブラリ。閲覧、コピー、リミックス。",
     "tagsTitle": "タグで探す",
-    "tagsDescription": "トピックとスタイル別にプロンプトを探索。",
+    "tagsDescription": "テーマとスタイル別にプロンプトを探索。",
     "modelsTitle": "モデルで探す",
-    "modelsDescription": "お気に入りの動画生成モデル向けプロンプトを発見。"
+    "modelsDescription": "お気に入りの動画生成モデルのプロンプトを見つける。"
   }
 }

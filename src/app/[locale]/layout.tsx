@@ -7,8 +7,8 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { locales, type Locale } from '@/i18n/request';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
+import { Header } from '@/components/Header';
+import { Footer } from '@/components/Footer';
 import MobileFilters from '@/components/MobileFilters';
 
 interface LocaleLayoutProps {

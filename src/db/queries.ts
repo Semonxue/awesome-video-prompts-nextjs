@@ -16,6 +16,7 @@ import type { Locale } from '@/i18n/request';
 import type { PromptCardData, ModelRef, TagRef } from '@/components/types';
 import { getDb } from './index';
 import { prompts, tags, models, promptTags, promptModels } from './schema';
+import { formatModelName } from '@/lib/format';
 
 /** 拿 D1 binding（OpenNext 注入 env.DB） */
 async function getD1(): Promise<D1Database> {
@@ -90,7 +91,7 @@ async function hydratePrompts(
   const modelsByPromptId = new Map<number, ModelRef[]>();
   for (const m of modelRows) {
     const arr = modelsByPromptId.get(m.promptId) ?? [];
-    arr.push({ slug: m.slug, name: m.name });
+    arr.push({ slug: m.slug, name: formatModelName(m.slug) });
     modelsByPromptId.set(m.promptId, arr);
   }
 
@@ -230,5 +231,5 @@ export async function listAllModels(locale: Locale): Promise<{ slug: string; nam
     .groupBy(models.slug, models.name)
     .orderBy(desc(sql`count(${promptModels.promptId})`), models.name);
 
-  return rows.map((r) => ({ slug: r.slug, name: r.name, count: Number(r.count) }));
+  return rows.map((r) => ({ slug: r.slug, name: formatModelName(r.slug), count: Number(r.count) }));
 }

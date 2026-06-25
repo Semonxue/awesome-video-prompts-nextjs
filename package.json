@@ -23,8 +23,10 @@
     "dev:cf": "opennextjs-cloudflare dev"
   },
   "dependencies": {
+    "@types/masonry-layout": "^4.2.8",
     "drizzle-orm": "^0.45.2",
     "gray-matter": "^4.0.3",
+    "masonry-layout": "^4.2.2",
     "next": "^15.0.0",
     "next-intl": "^3.26.0",
     "react": "^19.0.0",

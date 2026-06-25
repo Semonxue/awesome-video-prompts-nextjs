@@ -1,22 +1,59 @@
 /**
- * PromptCard — 提示词卡片
- * Server Component 主结构 + PromptCardVideo（client）做 hover 自动播放
+ * PromptCard — 瀑布流卡片
+ * Server Component 主结构 + click-to-copy（client handler via useState）
+ *
+ * 行为：
+ *   - 点击卡片：复制 description 到剪贴板 + ✓ Copied! 反馈
+ *   - hover：image 保持，video 自动加载并 play（PromptCardVideo）
+ *   - 视觉对齐 awesomevideoprompts.com：natural aspect ratio、model badge、tags
  */
+'use client';
+
+import { useState } from 'react';
 import Link from 'next/link';
-import type { Locale } from '@/i18n/request';
+import { useTranslations } from 'next-intl';
 import type { PromptCardData } from './types';
-import TagDisplay from './TagDisplay';
 import PromptCardVideo from './PromptCardVideo';
 
-interface PromptCardProps {
+interface Props {
   prompt: PromptCardData;
-  locale: Locale;
+  locale: string;
 }
 
-export default function PromptCard({ prompt, locale }: PromptCardProps) {
+export function PromptCard({ prompt, locale }: Props) {
+  const t = useTranslations('card');
   const detailHref = `/${locale}/prompts/${prompt.slug}`;
-  const tagsAttr = prompt.tags.map((t) => t.slug).join(',');
+  const modelLabel = prompt.models[0]?.slug ?? '';
+  const modelDisplayName = prompt.models[0]?.name ?? '';
+  const tagsAttr = prompt.tags.map((tt) => tt.slug).join(',');
   const modelAttr = prompt.models.map((m) => m.slug).join(',');
+
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy(e: React.MouseEvent) {
+    if (!prompt.description) return;
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(prompt.description);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // fallback: execCommand
+      const ta = document.createElement('textarea');
+      ta.value = prompt.description;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      } catch {}
+      document.body.removeChild(ta);
+    }
+  }
 
   return (
     <article
@@ -24,9 +61,22 @@ export default function PromptCard({ prompt, locale }: PromptCardProps) {
       data-tags={tagsAttr}
       data-model={modelAttr}
       data-prompt-name={prompt.slug}
+      data-copied={copied || undefined}
+      onClick={handleCopy}
+      role="button"
+      tabIndex={0}
+      title={t('clickToCopyTitle')}
+      style={{ cursor: 'pointer' }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleCopy(e as unknown as React.MouseEvent);
+        }
+      }}
     >
       {prompt.coverUrl && (
         <div className="prompt-image-wrapper">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={prompt.coverUrl}
             alt={prompt.title}
@@ -35,76 +85,48 @@ export default function PromptCard({ prompt, locale }: PromptCardProps) {
             decoding="async"
           />
 
-          {prompt.models.map((m) => (
-            <span key={m.slug} className="model-badge" data-model-key={m.slug}>
-              {m.name}
-            </span>
-          ))}
+          {modelLabel && (
+            <Link
+              href={`/${locale}?model=${modelLabel}`}
+              className="model-badge"
+              data-model-key={modelLabel}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {modelDisplayName}
+            </Link>
+          )}
 
           {prompt.videoUrl && (
             <PromptCardVideo src={prompt.videoUrl} title={prompt.title} />
           )}
 
           <div className="prompt-overlay">
-            <span className="hover-text">Hover to play</span>
+            <span className="hover-text">{copied ? t('copied') : t('hoverHint')}</span>
           </div>
         </div>
       )}
 
       <div className="prompt-content">
         <h3 className="prompt-title">
-          <Link href={detailHref} style={{ color: 'inherit', textDecoration: 'none' }}>
+          <Link href={detailHref} onClick={(e) => e.stopPropagation()} style={{ color: 'inherit', textDecoration: 'none' }}>
             {prompt.title}
           </Link>
         </h3>
 
-        {prompt.description && (
-          <p
-            className="prompt-description"
-            data-hint="Click to copy"
-            title="Copy prompt"
-            style={{ cursor: 'pointer' }}
-          >
-            <span className="prompt-description-text">{prompt.description}</span>
-          </p>
-        )}
-
         {prompt.tags.length > 0 && (
           <div className="prompt-tags">
-            {prompt.tags.map((tag) => (
-              <span key={tag.slug} className="prompt-tag">
-                <TagDisplay tag={tag.slug} locale={locale} />
-              </span>
+            {prompt.tags.slice(0, 4).map((tag) => (
+              <Link
+                key={tag.slug}
+                href={`/${locale}?tag=${tag.slug}`}
+                className="prompt-tag"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {tag.name}
+              </Link>
             ))}
           </div>
         )}
-
-        {(prompt.author || prompt.promptDate) && (
-          <div className="prompt-meta">
-            {prompt.author && (
-              <div className="prompt-author">
-                <span className="author-label">By</span>
-                {prompt.sourceUrl ? (
-                  <a
-                    href={prompt.sourceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="author-name"
-                  >
-                    {prompt.author}
-                  </a>
-                ) : (
-                  <span className="author-name">{prompt.author}</span>
-                )}
-              </div>
-            )}
-            {prompt.promptDate && (
-              <div className="prompt-date">{prompt.promptDate}</div>
-            )}
-          </div>
-        )}
-
-        <div className="prompt-actions" />
       </div>
     </article>
   );

@@ -1,18 +1,103 @@
 {
   "site": {
     "title": "Awesome Video Prompts",
-    "description": "An open-source collection of awesome AI video generation prompts",
-    "footer": {
-      "copyright": "© 2026 Awesome Video Prompts · Open Source",
-      "tagline": "Curated by the community, for the community."
-    }
+    "description": "An open-source collection of awesome AI video generation prompts"
   },
   "nav": {
     "home": "Home",
     "tags": "Tags",
     "models": "Models",
-    "about": "About",
-    "search": "Search prompts..."
+    "about": "About"
+  },
+  "header": {
+    "siteTitle": "Awesome Video Prompts",
+    "introPrefix": "An",
+    "introMiddle": "collection of awesome video prompts.",
+    "introSuffix": "Collected {count} prompts",
+    "openSourceLink": "open-source",
+    "all": "All",
+    "showMore": "Show more +{count}",
+    "showLess": "Show less",
+    "searchPlaceholder": "Search prompts...",
+    "searchAriaLabel": "Search prompts"
+  },
+  "home": {
+    "popularPrompts": "Popular Prompts",
+    "promptsFound": "{count} prompts found",
+    "viewMoreModel": "view more {name} prompts →",
+    "viewMoreTag": "view more {name} prompts →"
+  },
+  "footer": {
+    "siteName": "Seedance2, HappyHorse, Gemini Omni, Kling3 AI Video Prompts | Awesome Video Prompts",
+    "copyright": "© {year} {siteName}. Open source project",
+    "tags": "Tags",
+    "models": "Models",
+    "github": "GitHub",
+    "about": "About"
+  },
+  "card": {
+    "clickToCopyTitle": "Click to copy prompt",
+    "hoverHint": "Click to copy · Hover to play",
+    "copied": "✓ Copied!",
+    "noPrompts": "No prompts found."
+  },
+  "copy": {
+    "label": "Copy prompt",
+    "copied": "✓ Copied"
+  },
+  "detail": {
+    "date": "Date",
+    "tags": "Tags",
+    "models": "Models",
+    "source": "Source",
+    "copyPromptTitle": "Copy prompt",
+    "clickToCopyHint": "Click to copy",
+    "youMightAlsoLike": "You Might Also Like",
+    "previous": "Previous",
+    "next": "Next"
+  },
+  "model": {
+    "officialWebsite": "Official Website",
+    "promptsFound": "{count} prompts found",
+    "all": "All",
+    "backToModels": "← Models",
+    "noPrompts": "No prompts found."
+  },
+  "tag": {
+    "breadcrumbTags": "Tags",
+    "byModel": "By model:",
+    "promptsFound": "{count} prompts found",
+    "popularPrompts": "Popular prompts",
+    "backToTags": "← Tags",
+    "noPrompts": "No prompts found."
+  },
+  "mobileFilters": {
+    "filters": "Filters",
+    "activeDot": "•",
+    "filter": "Filter",
+    "tag": "Tag",
+    "allTags": "All tags",
+    "model": "Model",
+    "allModels": "All models"
+  },
+  "grid": {
+    "page": "Page {page}",
+    "prev": "← Prev",
+    "next": "Next →",
+    "noPrompts": "No prompts found."
+  },
+  "filter": {
+    "allModels": "All Models",
+    "allTags": "All Tags",
+    "sortBy": "Sort by",
+    "newest": "Newest",
+    "sortByDate": "Sort by Date",
+    "searchPlaceholder": "Search prompts..."
+  },
+  "stats": {
+    "prompts": "Prompts",
+    "models": "Models",
+    "tags": "Tags"
   },
   "prompt": {
     "source": "Source",
@@ -27,19 +112,6 @@
     "byAuthor": "By",
     "clickToCopy": "Click to copy",
     "noDescription": "No description available"
-  },
-  "filter": {
-    "allModels": "All Models",
-    "allTags": "All Tags",
-    "sortBy": "Sort by",
-    "newest": "Newest",
-    "sortByDate": "Sort by Date",
-    "searchPlaceholder": "Search prompts..."
-  },
-  "stats": {
-    "prompts": "Prompts",
-    "models": "Models",
-    "tags": "Tags"
   },
   "empty": {
     "title": "No prompts yet",
