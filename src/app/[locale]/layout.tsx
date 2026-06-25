@@ -1,14 +1,12 @@
 /**
- * Locale Layout — 接 Header / Footer
- * Phase 1：基础布局 + i18n provider
+ * Locale Layout — 基础布局 + i18n provider
+ * Header / Footer 由各 page 自己渲染（page 才知道 activeTag/activeModel/totalCount）
  */
 import { ReactNode } from 'react';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { locales, type Locale } from '@/i18n/request';
-import { Header } from '@/components/Header';
-import { Footer } from '@/components/Footer';
 import MobileFilters from '@/components/MobileFilters';
 
 interface LocaleLayoutProps {
@@ -27,11 +25,7 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
     <html lang={locale}>
       <body>
         <NextIntlClientProvider messages={messages} locale={locale}>
-          <Header locale={locale} />
-          <main>
-            {children}
-          </main>
-          <Footer locale={locale} />
+          {children}
           {/* Mobile filters 浮动在右下角，Phase 3 接筛选逻辑 */}
           <div
             style={{
