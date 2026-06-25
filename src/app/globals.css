@@ -176,8 +176,34 @@ body:has(.site-header.header-compact) .main-content {
 }
 
 /* ============================================================
+ * search-section 紧凑布局：search 框 max 320px，model tabs flex: 1
+ * (老站 search 400px 太宽，1200px viewport 容易 wrap)
+ * ============================================================ */
+.search-box-wrapper:not(.compact) {
+  flex-shrink: 0;
+  max-width: 320px;
+}
+.model-tags,
+.content-tags {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ============================================================
  * responsive
  * ============================================================ */
+@media (max-width: 1024px) {
+  .search-row {
+    flex-direction: column !important;
+  }
+  .search-box-wrapper:not(.compact) {
+    max-width: 100%;
+  }
+  .model-tags,
+  .content-tags {
+    width: 100%;
+  }
+}
 @media (max-width: 640px) {
   .model-hero__title {
     font-size: 24px;

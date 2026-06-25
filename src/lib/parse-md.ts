@@ -21,14 +21,21 @@ export function extractSlug(filename: string): string {
 
 /**
  * 解析日期，支持多种格式：
+ *   - Date 对象（gray-matter 自动解析）→ toISOString().slice(0,10)
  *   - YYYY-MM-DD             → 原样
  *   - YYYY-MM                → 补 -01
  *   - YYYY-MM-DDTHH:MM:SSZ  → 截取日期部分（ISO 8601）
  *   - YYYY/MM/DD             → 转换分隔符
  * 返回值始终为 YYYY-MM-DD 或 null
  */
-export function parseDate(dateStr: string | undefined): string | null {
+export function parseDate(dateStr: string | Date | undefined): string | null {
   if (!dateStr) return null;
+  // gray-matter 会把 `date: 2025-02-03` 解析成 JS Date 对象
+  if (dateStr instanceof Date) {
+    if (isNaN(dateStr.getTime())) return null;
+    return dateStr.toISOString().slice(0, 10);
+  }
+  if (typeof dateStr !== 'string') return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
   if (/^\d{4}-\d{2}$/.test(dateStr)) return `${dateStr}-01`;
   if (/^\d{4}-\d{2}-\d{2}T/.test(dateStr)) return dateStr.slice(0, 10);
@@ -73,12 +80,16 @@ export function parsePromptMeta(data: Record<string, unknown>, content: string):
 
   return {
     title: String(data.title || ''),
-    description: content.trim(),
+    // description 优先用 front matter 字段（老 MD 用 `description: |` YAML block 写在 front matter），
+    // fallback 到 markdown body（content.trim()）
+    description: data.description
+      ? String(data.description).trim()
+      : content.trim(),
     videoUrl: data.video ? String(data.video) : null,
     coverUrl: data.image ? String(data.image) : (data.cover ? String(data.cover) : null),
     sourceUrl: data.source_url ? String(data.source_url) : null,
     author: data.author ? String(data.author) : null,
-    promptDate: parseDate(data.date as string | undefined),
+    promptDate: parseDate(data.date as string | Date | undefined),
     tags,
     models,
     isDraft,

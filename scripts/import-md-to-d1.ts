@@ -45,6 +45,7 @@ const { values: args } = _isDirectRun
         local: { type: 'boolean', default: false },
         remote: { type: 'boolean', default: false },
         'dry-run': { type: 'boolean', default: false },
+        reset: { type: 'boolean', default: false },
         'content-dir': { type: 'string', default: DEFAULT_CONTENT_DIR },
         'limit': { type: 'string' },
         'r2-public-url': { type: 'string', default: DEFAULT_R2_URL },
@@ -56,6 +57,7 @@ const { values: args } = _isDirectRun
         local: false,
         remote: false,
         'dry-run': false,
+        reset: false,
         'content-dir': DEFAULT_CONTENT_DIR,
         limit: undefined,
         'r2-public-url': DEFAULT_R2_URL,
@@ -70,6 +72,7 @@ if (_isDirectRun && !args.local && !args.remote) {
 
 const MODE = args.local ? 'local' : 'remote';
 const LIMIT = args.limit ? parseInt(args.limit, 10) : Infinity;
+const RESET = args.reset === true;
 const R2_PUBLIC_URL = (args['r2-public-url'] as string).replace(/\/$/, '');
 
 // ============================================================
@@ -222,13 +225,17 @@ function buildBatchSqlInline(prompts: ParsedPrompt[]): string {
 // ============================================================
 
 function importLocal(prompts: ParsedPrompt[]): void {
-  const sql = buildBatchSqlInline(prompts);
+  let sql = '';
+  if (RESET) {
+    sql += 'DELETE FROM prompt_tags; DELETE FROM prompt_models; DELETE FROM prompts; DELETE FROM tags; DELETE FROM models;\n';
+  }
+  sql += buildBatchSqlInline(prompts);
   const tmpFile = path.join(os.tmpdir(), `import-md-${Date.now()}.sql`);
   fs.writeFileSync(tmpFile, sql, 'utf8');
 
   try {
     const out = execSync(
-      `npx wrangler d1 execute prompts-db --local --file="${tmpFile}" --json`,
+      `npx wrangler d1 execute awesomevideoprompts-db --local --file="${tmpFile}" --json`,
       { encoding: 'utf8', maxBuffer: 50 * 1024 * 1024, cwd: ROOT },
     );
     const lines = out.trim().split('\n');
@@ -305,7 +312,20 @@ async function main() {
   console.log(`🎯 模式: ${MODE}${args['dry-run'] ? ' (DRY-RUN)' : ''}`);
   console.log(`📏 上限: ${LIMIT === Infinity ? '无' : LIMIT}`);
   console.log(`☁️  R2 公网 URL: ${R2_PUBLIC_URL}`);
+  console.log(`🔄 Reset 模式: ${RESET ? '是（先清空 D1）' : '否'}`);
   console.log('═══════════════════════════════════════════════════\n');
+
+  if (RESET && MODE === 'remote') {
+    console.log('🗑️  清空 D1 关联表 + 主表...');
+    await d1HttpBatch([
+      { sql: 'DELETE FROM prompt_tags', params: [] },
+      { sql: 'DELETE FROM prompt_models', params: [] },
+      { sql: 'DELETE FROM prompts', params: [] },
+      { sql: 'DELETE FROM tags', params: [] },
+      { sql: 'DELETE FROM models', params: [] },
+    ]);
+    console.log('   ✅ D1 已清空\n');
+  }
 
   const promptsDir = path.join(args['content-dir']!, 'prompts');
   if (!fs.existsSync(promptsDir)) {
@@ -335,6 +355,8 @@ async function main() {
     allParsed.slice(0, 3).forEach((p, i) => {
       console.log(`  [${i + 1}] ${p.locale} | ${p.slug}`);
       console.log(`       title: ${p.title.slice(0, 50)}${p.title.length > 50 ? '...' : ''}`);
+      console.log(`       description length: ${p.description.length} chars`);
+      console.log(`       author: ${p.author ?? '(无)'} | date: ${p.promptDate ?? '(无)'}`);
       console.log(`       cover: ${p.coverUrl ?? '(无)'}`);
       console.log(`       tags: ${p.tags.slice(0, 6).join(', ')} | models: ${p.models.join(', ')}`);
       console.log();

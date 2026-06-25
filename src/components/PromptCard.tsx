@@ -15,6 +15,12 @@ import { useTranslations } from 'next-intl';
 import type { PromptCardData } from './types';
 import PromptCardVideo from './PromptCardVideo';
 
+function truncate(s: string, n: number): string {
+  if (!s) return '';
+  const t = s.replace(/\s+/g, ' ').trim();
+  return t.length > n ? t.slice(0, n) + '…' : t;
+}
+
 interface Props {
   prompt: PromptCardData;
   locale: string;
@@ -112,6 +118,34 @@ export function PromptCard({ prompt, locale }: Props) {
             {prompt.title}
           </Link>
         </h3>
+
+        {prompt.description && (
+          <p className="prompt-description">
+            <span className="prompt-description-text">{truncate(prompt.description, 180)}</span>
+          </p>
+        )}
+
+        <div className="prompt-meta">
+          {prompt.author && (
+            <span className="prompt-author">
+              <span className="author-label">By</span>{' '}
+              {prompt.sourceUrl ? (
+                <a
+                  href={prompt.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="author-name"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {prompt.author}
+                </a>
+              ) : (
+                <span className="author-name">{prompt.author}</span>
+              )}
+            </span>
+          )}
+          {prompt.promptDate && <span className="prompt-date">{prompt.promptDate}</span>}
+        </div>
 
         {prompt.tags.length > 0 && (
           <div className="prompt-tags">
