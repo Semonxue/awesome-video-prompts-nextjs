@@ -7,25 +7,24 @@
 name = "awesome-video-prompts-nextjs"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
-pages_build_output_dir = ".open-next/assets"
+main = ".open-next/worker.js"
 
 # ============================================================
 # D1: prompts 元数据存储
-# database_id 在生产 wrangler secret 注入；本地默认占位
+# database_id 从 .dev.vars 的 D1_DATABASE_ID 读；本文件保留生产值
 # ============================================================
 [[d1_databases]]
 binding = "DB"
-database_name = "prompts-db"
-database_id = "REPLACE_WITH_YOUR_D1_ID"
+database_name = "awesomevideoprompts-db"
+database_id = "486ccac9-d364-4db4-b911-d4a420bcbc6c"
 
 # ============================================================
 # R2: 视频/封面图托管
 # 通过自定义域 static.awesomevideoprompts.com 公开访问
-# （bucket_name 待 Phase 3 实装时填入）
 # ============================================================
 [[r2_buckets]]
 binding = "MEDIA"
-bucket_name = "REPLACE_WITH_YOUR_R2_BUCKET"
+bucket_name = "awesome-video-prompts-media"
 
 # ============================================================
 # 环境变量
