@@ -78,7 +78,9 @@
     "tag": "标签",
     "allTags": "全部标签",
     "model": "模型",
-    "allModels": "全部模型"
+    "allModels": "全部模型",
+    "toggleFilters": "切换筛选",
+    "close": "关闭"
   },
   "grid": {
     "page": "第 {page} 页",

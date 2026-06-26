@@ -329,6 +329,13 @@
       gap: 8px;
       flex-wrap: wrap;
     }
+
+    /* 标签 chips 横排（content-tags 容器内） */
+    .content-tags {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
     
     .content-tag {
       display: flex;
@@ -404,10 +411,23 @@
       color: var(--accent-primary);
     }
     
-    /* ===== 瀑布流布局 ===== */
-    .masonry-grid {
-      position: relative;
+    /* ===== 网格布局（5 列 CSS Grid，替代原 masonry） ===== */
+    .prompt-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 16px;
       width: 100%;
+      align-items: start;
+    }
+
+    @media (max-width: 1200px) {
+      .prompt-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+    @media (max-width: 900px) {
+      .prompt-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 640px) {
+      .prompt-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
     }
     
     /* ===== 移动端筛选选择器（默认隐藏，仅在移动端显示） ===== */
@@ -784,21 +804,24 @@
       overflow: hidden;
       box-shadow: var(--shadow-card);
       transition: box-shadow 0.15s;
-      position: absolute;
+      position: relative;
+      width: 100%;
     }
-    
+
     .prompt-card:hover {
-      transform: translateY(-2px);
       box-shadow: 0 4px 20px rgba(26, 25, 24, 0.08);
     }
-    
+
+    /* 封面/视频容器：aspect-ratio 由 PromptCard 注入 --card-aspect (cover 原图 w/h)
+       fallback 16/9 在变量未注入时使用 */
     .prompt-image-wrapper {
       position: relative;
       width: 100%;
+      aspect-ratio: var(--card-aspect, 16 / 9);
       overflow: hidden;
       background: var(--bg-muted);
     }
-    
+
     .model-badge {
       position: absolute;
       top: 12px;
@@ -812,14 +835,92 @@
       color: var(--accent-primary);
       z-index: 10;
     }
-    
+
     .prompt-image {
       width: 100%;
       height: 100%;
       display: block;
       object-fit: cover;
+      transition: opacity 0.3s ease;
     }
-    
+
+    /* hover 视频层：默认透明；wrapper 加 .is-playing 后 opacity:1，无缝替换 cover */
+    .prompt-video-slot {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    .prompt-hover-video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .prompt-image-wrapper:has(.prompt-video-slot.is-playing) .prompt-image {
+      opacity: 0;
+    }
+
+    .prompt-video-slot.is-playing .prompt-hover-video {
+      opacity: 1;
+    }
+
+    /* 视频加载占位：3 个 dot 跳动 */
+    .video-loader {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      z-index: 6;
+      background: rgba(0, 0, 0, 0.25);
+    }
+    .prompt-video-slot.is-loading .video-loader {
+      display: flex;
+    }
+    .video-loader-dot {
+      width: 8px;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.85);
+      border-radius: 50%;
+      animation: loader-bounce 1.2s infinite ease-in-out;
+    }
+    .video-loader-dot:nth-child(2) { animation-delay: 0.15s; }
+    .video-loader-dot:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes loader-bounce {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.6; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+
+    /* 复制反馈 toast：替代 overlay hover-text，更明显 */
+    .prompt-copy-toast {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      padding: 6px 12px;
+      background: var(--accent-primary);
+      color: white;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      z-index: 20;
+      opacity: 0;
+      transform: translateY(-6px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      pointer-events: none;
+    }
+    .prompt-card[data-copied] .prompt-copy-toast {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* hover overlay：纯视觉提示，不拦截 click（pointer-events: none 修复复制失效 bug） */
     .prompt-overlay {
       position: absolute;
       inset: 0;
@@ -829,8 +930,9 @@
       justify-content: center;
       opacity: 0;
       transition: opacity 0.2s;
+      pointer-events: none;
     }
-    
+
     .prompt-card:hover .prompt-overlay {
       opacity: 1;
     }

@@ -78,7 +78,9 @@
     "tag": "タグ",
     "allTags": "すべてのタグ",
     "model": "モデル",
-    "allModels": "すべてのモデル"
+    "allModels": "すべてのモデル",
+    "toggleFilters": "フィルター切替",
+    "close": "閉じる"
   },
   "grid": {
     "page": "{page} ページ",

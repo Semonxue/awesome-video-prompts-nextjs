@@ -1,12 +1,46 @@
-'use client';
-
 /**
  * PromptCardVideo — 卡片 hover 自动播放视频
  *
- * Phase 1 实现：mouseenter/mouseleave 切换 src + play/pause
- * 性能优化：src 设为 data-src，hover 时才设 src（避免 N 个 video 同时下载）
+ * 设计：
+ *   - hover 触发：先取全局视频加载队列槽位（限制同时下载数=2，避免网络阻塞）
+ *     → 设 src → 视频 onCanPlay 移除 loading → onPlaying 加 .is-playing
+ *   - 视频就绪后：父级 wrapper 加 .is-playing → cover fade-out + video fade-in（无缝替换）
+ *   - 离开时：pause + 重置 currentTime + 移除 .is-playing（保留 src 复用）
+ *   - 组件卸载：释放队列槽位
+ *
+ * 队列是模块级单例，所有卡片共享 2 个并发下载槽位。
  */
-import { useRef } from 'react';
+
+import { useEffect, useRef } from 'react';
+
+/** 全局视频加载队列：限制同时下载数，避免 hover 多个卡片时网络拥堵 */
+class VideoLoadQueue {
+  private activeCount = 0;
+  private waiters: Array<() => void> = [];
+
+  constructor(private readonly max: number) {}
+
+  acquire(): Promise<() => void> {
+    if (this.activeCount < this.max) {
+      this.activeCount++;
+      return Promise.resolve(() => this.release());
+    }
+    return new Promise<() => void>((resolve) => {
+      this.waiters.push(() => {
+        this.activeCount++;
+        resolve(() => this.release());
+      });
+    });
+  }
+
+  private release() {
+    this.activeCount = Math.max(0, this.activeCount - 1);
+    const next = this.waiters.shift();
+    if (next) next();
+  }
+}
+
+const videoQueue = new VideoLoadQueue(2);
 
 interface PromptCardVideoProps {
   src: string;
@@ -14,60 +48,78 @@ interface PromptCardVideoProps {
 }
 
 export default function PromptCardVideo({ src, title }: PromptCardVideoProps) {
+  const slotRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const loaderRef = useRef<HTMLDivElement>(null);
+  const releaseRef = useRef<(() => void) | null>(null);
+  const acquiredRef = useRef(false);
 
-  function handleEnter() {
+  async function handleEnter() {
     const v = videoRef.current;
-    if (!v) return;
+    const slot = slotRef.current;
+    if (!v || !slot) return;
+
+    // 1) 取队列槽位（限并发）
+    if (!acquiredRef.current) {
+      releaseRef.current = await videoQueue.acquire();
+      acquiredRef.current = true;
+    }
+
+    // 2) 首次 hover：设 src + 触发下载
     if (!v.src) {
       v.src = src;
       v.load();
-      if (loaderRef.current) loaderRef.current.style.display = 'flex';
+      slot.classList.add('is-loading');
     }
+
+    // 3) play（muted 通常会被允许；失败忽略）
     v.play().catch(() => {
-      // autoplay 失败：忽略（多数浏览器允许 muted video play）
+      /* autoplay 失败：忽略 */
     });
   }
 
   function handleLeave() {
     const v = videoRef.current;
-    if (!v) return;
+    const slot = slotRef.current;
+    if (!v || !slot) return;
     v.pause();
     v.currentTime = 0;
+    slot.classList.remove('is-playing');
+    slot.classList.remove('is-loading');
+    // 保留 src：下次 hover 不再下载
+  }
+
+  function handleCanPlay() {
+    const slot = slotRef.current;
+    if (slot) slot.classList.remove('is-loading');
   }
 
   function handlePlaying() {
-    if (videoRef.current) videoRef.current.style.opacity = '1';
-    if (loaderRef.current) loaderRef.current.style.display = 'none';
+    const slot = slotRef.current;
+    if (slot) slot.classList.add('is-playing');
   }
 
+  // 卸载时释放队列槽位
+  useEffect(() => {
+    return () => {
+      if (releaseRef.current) {
+        releaseRef.current();
+        releaseRef.current = null;
+        acquiredRef.current = false;
+      }
+    };
+  }, []);
+
   return (
-    <>
-      <div
-        ref={loaderRef}
-        style={{
-          display: 'none',
-          position: 'absolute',
-          inset: 0,
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 4,
-          background: 'rgba(0,0,0,0.1)',
-        }}
-      >
-        <span
-          style={{
-            color: 'white',
-            fontWeight: 500,
-            background: 'rgba(0,0,0,0.6)',
-            padding: '4px 8px',
-            borderRadius: 4,
-            fontSize: 12,
-          }}
-        >
-          Loading...
-        </span>
+    <div
+      ref={slotRef}
+      className="prompt-video-slot"
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
+    >
+      <div className="video-loader" aria-hidden="true">
+        <span className="video-loader-dot" />
+        <span className="video-loader-dot" />
+        <span className="video-loader-dot" />
       </div>
       <video
         ref={videoRef}
@@ -76,22 +128,11 @@ export default function PromptCardVideo({ src, title }: PromptCardVideoProps) {
         loop
         playsInline
         muted
-        onMouseEnter={handleEnter}
-        onMouseLeave={handleLeave}
+        preload="none"
+        onCanPlay={handleCanPlay}
         onPlaying={handlePlaying}
         aria-label={title}
-        style={{
-          display: 'none',
-          opacity: 0,
-          position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover',
-          zIndex: 5,
-          transition: 'opacity 0.3s',
-        }}
       />
-    </>
+    </div>
   );
 }

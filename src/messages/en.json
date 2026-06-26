@@ -78,7 +78,9 @@
     "tag": "Tag",
     "allTags": "All tags",
     "model": "Model",
-    "allModels": "All models"
+    "allModels": "All models",
+    "toggleFilters": "Toggle filters",
+    "close": "Close"
   },
   "grid": {
     "page": "Page {page}",

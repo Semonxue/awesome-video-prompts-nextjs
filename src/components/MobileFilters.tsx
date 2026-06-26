@@ -19,7 +19,7 @@ export default function MobileFilters() {
         className="mobile-filter-btn"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-label="Toggle filters"
+        aria-label={t('mobileFilters.toggleFilters')}
         style={{
           background: 'var(--bg-surface)',
           border: '1px solid var(--border-subtle)',

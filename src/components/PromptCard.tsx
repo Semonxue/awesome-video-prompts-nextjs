@@ -1,15 +1,18 @@
-/**
- * PromptCard — 瀑布流卡片
- * Server Component 主结构 + click-to-copy（client handler via useState）
- *
- * 行为：
- *   - 点击卡片：复制 description 到剪贴板 + ✓ Copied! 反馈
- *   - hover：image 保持，video 自动加载并 play（PromptCardVideo）
- *   - 视觉对齐 awesomevideoprompts.com：natural aspect ratio、model badge、tags
- */
 'use client';
 
-import { useState } from 'react';
+/**
+ * PromptCard — 瀑布流卡片（5 列 CSS Grid + natural aspect ratio）
+ *
+ * 行为：
+ *   - 点击任意位置：复制 description 到剪贴板 + ✓ Copied! 反馈
+ *   - hover：cover (img) 显示，视频 (PromptCardVideo) 加载并播放 → 无缝替换
+ *   - 视觉对齐 awesomevideoprompts.com：natural aspect ratio、model badge、tags、author/date
+ *
+ * 数据契约：图片 naturalW/naturalH 在客户端 useEffect 后注入 --card-aspect CSS var，
+ *           .prompt-image-wrapper 继承此 aspect-ratio 实现"比例跟随原图"。
+ */
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import type { PromptCardData } from './types';
@@ -35,15 +38,33 @@ export function PromptCard({ prompt, locale }: Props) {
   const modelAttr = prompt.models.map((m) => m.slug).join(',');
 
   const [copied, setCopied] = useState(false);
+  const [aspect, setAspect] = useState<number | null>(null);
 
-  async function handleCopy(e: React.MouseEvent) {
+  // 读封面图 naturalW/naturalH → 注入 CSS var，让 wrapper 跟随原图比例
+  useEffect(() => {
+    if (!prompt.coverUrl) return;
+    // 重置（locale 切换时 URL 可能变）
+    setAspect(null);
+    const img = new Image();
+    img.onload = () => {
+      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+        setAspect(img.naturalWidth / img.naturalHeight);
+      }
+    };
+    img.onerror = () => {
+      // 加载失败 → fallback 16/9
+      setAspect(16 / 9);
+    };
+    img.src = prompt.coverUrl;
+  }, [prompt.coverUrl]);
+
+  async function handleCopy(e: React.MouseEvent | React.KeyboardEvent) {
     if (!prompt.description) return;
     e.preventDefault();
     e.stopPropagation();
     try {
       await navigator.clipboard.writeText(prompt.description);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      flashCopied();
     } catch {
       // fallback: execCommand
       const ta = document.createElement('textarea');
@@ -54,12 +75,20 @@ export function PromptCard({ prompt, locale }: Props) {
       ta.select();
       try {
         document.execCommand('copy');
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      } catch {}
+        flashCopied();
+      } catch {
+        /* give up */
+      }
       document.body.removeChild(ta);
     }
   }
+
+  function flashCopied() {
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  }
+
+  const cardStyle = aspect ? ({ ['--card-aspect' as string]: aspect } as React.CSSProperties) : undefined;
 
   return (
     <article
@@ -72,11 +101,10 @@ export function PromptCard({ prompt, locale }: Props) {
       role="button"
       tabIndex={0}
       title={t('clickToCopyTitle')}
-      style={{ cursor: 'pointer' }}
+      style={{ ...cardStyle, cursor: 'pointer' }}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          handleCopy(e as unknown as React.MouseEvent);
+          handleCopy(e);
         }
       }}
     >
@@ -102,19 +130,29 @@ export function PromptCard({ prompt, locale }: Props) {
             </Link>
           )}
 
+          {/* 复制反馈 toast（替代 overlay 文字，更明显） */}
+          <div className="prompt-copy-toast" aria-live="polite">
+            {copied ? t('copied') : ''}
+          </div>
+
           {prompt.videoUrl && (
             <PromptCardVideo src={prompt.videoUrl} title={prompt.title} />
           )}
 
-          <div className="prompt-overlay">
-            <span className="hover-text">{copied ? t('copied') : t('hoverHint')}</span>
+          {/* hover 提示层（不拦截 click） */}
+          <div className="prompt-overlay" aria-hidden="true">
+            <span className="hover-text">{t('hoverHint')}</span>
           </div>
         </div>
       )}
 
       <div className="prompt-content">
         <h3 className="prompt-title">
-          <Link href={detailHref} onClick={(e) => e.stopPropagation()} style={{ color: 'inherit', textDecoration: 'none' }}>
+          <Link
+            href={detailHref}
+            onClick={(e) => e.stopPropagation()}
+            style={{ color: 'inherit', textDecoration: 'none' }}
+          >
             {prompt.title}
           </Link>
         </h3>
