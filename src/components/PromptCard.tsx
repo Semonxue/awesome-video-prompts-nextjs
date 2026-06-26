@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * PromptCard — 瀑布流卡片（5 列 CSS Grid + natural aspect ratio）
+ * PromptCard — 瀑布流卡片（CSS Grid + grid-row span）
  *
  * 行为：
  *   - 缩略图 hover → PromptCardVideo 自动加载并播放（无缝替换 cover）
@@ -10,8 +10,11 @@
  *   - hover 缩略图 / hover 提示词文字 → 不同视觉反馈（区分两者）
  *   - 视觉对齐 awesomevideoprompts.com：natural aspect ratio、model badge、tags、author/date
  *
- * 数据契约：图片 naturalW/naturalH 在客户端 useEffect 后注入 --card-aspect CSS var，
- *           .prompt-image-wrapper 继承此 aspect-ratio 实现"比例跟随原图"。
+ * 瀑布流实现：
+ *   - .prompt-grid 用 grid-auto-rows: 10px + grid-auto-flow: dense
+ *   - 每张卡按"图片 natural w/h + 内容区固定高"算出 grid-row span
+ *   - 通过 inline style 注入 --card-rows CSS var（fallback 22 rows）
+ *   - 图片宽/高比由 .prompt-image-wrapper 的 padding-bottom hack 实现（不依赖 grid 宽度）
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -31,6 +34,14 @@ interface Props {
   locale: string;
 }
 
+/** grid-auto-rows 10px + gap 16px → 每 row 实际占 26px（除最后一行） */
+const ROW_HEIGHT = 10;
+const ROW_GAP = 16;
+/** fallback span：约 22*26 = 572px 高（aspect 16:9 + 约 130px content） */
+const DEFAULT_ROWS = 22;
+/** 内容区估算高度（含 title 2 行 / description 2 行 / tags / meta），用于计算总 span */
+const ESTIMATED_CONTENT_HEIGHT = 130;
+
 export function PromptCard({ prompt, locale }: Props) {
   const t = useTranslations('card');
   const detailHref = `/${locale}/prompts/${prompt.slug}`;
@@ -43,10 +54,10 @@ export function PromptCard({ prompt, locale }: Props) {
   const [aspect, setAspect] = useState<number | null>(null);
   const videoRef = useRef<PromptCardVideoHandle>(null);
 
-  // 读封面图 naturalW/naturalH → 注入 CSS var，让 wrapper 跟随原图比例
+  // 读封面图 naturalW/naturalH → 计算 wrapper 的 padding-bottom %
+  // 然后根据当前 grid 列宽 + 内容区高度算出 grid-row span
   useEffect(() => {
     if (!prompt.coverUrl) return;
-    // 重置（locale 切换时 URL 可能变）
     setAspect(null);
     const img = new Image();
     img.onload = () => {
@@ -55,7 +66,6 @@ export function PromptCard({ prompt, locale }: Props) {
       }
     };
     img.onerror = () => {
-      // 加载失败 → fallback 16/9
       setAspect(16 / 9);
     };
     img.src = prompt.coverUrl;
@@ -91,10 +101,52 @@ export function PromptCard({ prompt, locale }: Props) {
     window.setTimeout(() => setCopied(false), 1500);
   }
 
-  const cardStyle = aspect ? ({ ['--card-aspect' as string]: aspect } as React.CSSProperties) : undefined;
+  // 计算 grid-row span: 基于当前实际 .prompt-grid 列宽 + 图片 aspect
+  const cardRef = useRef<HTMLElement>(null);
+  const [rows, setRows] = useState<number>(DEFAULT_ROWS);
+
+  useEffect(() => {
+    if (!aspect || !cardRef.current) return;
+    const grid = cardRef.current.parentElement;
+    if (!grid) return;
+
+    function recalc() {
+      if (!grid || !cardRef.current || !aspect) return;
+      const colW = (grid.getBoundingClientRect().width - ROW_GAP * (getColumnCount() - 1)) / getColumnCount();
+      if (colW <= 0) return;
+      const imgH = colW / aspect;
+      const totalH = imgH + ESTIMATED_CONTENT_HEIGHT;
+      // N rows 实际占 = N * (ROW_HEIGHT + ROW_GAP) - ROW_GAP
+      // totalH = N * (ROW_HEIGHT + ROW_GAP) - ROW_GAP → N = (totalH + ROW_GAP) / (ROW_HEIGHT + ROW_GAP)
+      const nextRows = Math.max(8, Math.ceil((totalH + ROW_GAP) / (ROW_HEIGHT + ROW_GAP)));
+      setRows(nextRows);
+    }
+
+    function getColumnCount(): number {
+      if (!grid) return 5;
+      const w = grid.getBoundingClientRect().width;
+      if (w < 640) return 2;
+      if (w < 900) return 3;
+      if (w < 1200) return 4;
+      return 5;
+    }
+
+    recalc();
+    const ro = new ResizeObserver(recalc);
+    ro.observe(grid);
+    return () => ro.disconnect();
+  }, [aspect]);
+
+  // CSS 变量：--card-aspect（wrapper padding-bottom 用）+ --card-rows（grid-row span 用）
+  const cardStyle: React.CSSProperties = {
+    ...(aspect ? ({ ['--card-aspect' as string]: aspect } as React.CSSProperties) : {}),
+    ['--card-rows' as string]: rows,
+    cursor: 'pointer',
+  };
 
   return (
     <article
+      ref={cardRef}
       className="prompt-card"
       data-tags={tagsAttr}
       data-model={modelAttr}
@@ -104,7 +156,7 @@ export function PromptCard({ prompt, locale }: Props) {
       role="button"
       tabIndex={0}
       title={t('clickToCopyTitle')}
-      style={{ ...cardStyle, cursor: 'pointer' }}
+      style={cardStyle}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           handleCopy(e);
@@ -114,6 +166,7 @@ export function PromptCard({ prompt, locale }: Props) {
       {prompt.coverUrl && (
         <div
           className="prompt-image-wrapper"
+          style={aspect ? { paddingBottom: `${(1 / aspect) * 100}%` } : undefined}
           onMouseEnter={() => {
             videoRef.current?.play();
           }}

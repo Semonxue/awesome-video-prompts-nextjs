@@ -17,13 +17,14 @@ import { Footer } from '@/components/Footer';
 import { GridEngine } from '@/components/GridEngine';
 import { listAllModels, listAllTags, listPrompts } from '@/db/queries';
 import { formatModelName } from '@/lib/format';
-import type { Locale } from '@/i18n/request';
 
 export const revalidate = 3600;
 
+const PAGE_SIZE = 24;
+
 interface Props {
   params: Promise<{ locale: string; model: string }>;
-  searchParams: Promise<{ tag?: string }>;
+  searchParams: Promise<{ tag?: string; page?: string }>;
 }
 
 export async function generateMetadata({ params }: Props) {
@@ -41,25 +42,33 @@ export default async function ModelPage({ params, searchParams }: Props) {
   const t = await getTranslations('model');
   if (!['en', 'zh', 'ja'].includes(locale)) notFound();
 
-  const ll = locale as Locale;
   const modelName = formatModelName(model);
 
-  // 该 model 下的 prompts
-  const result = await listPrompts({ locale: ll, model, tag: sp.tag });
+  // 分页
+  const page = Math.max(1, parseInt(sp.page ?? '1', 10) || 1);
+  const offset = (page - 1) * PAGE_SIZE;
+
+  // 该 model 下的 prompts（不分 locale）
+  const result = await listPrompts({ model, tag: sp.tag, limit: PAGE_SIZE, offset });
   const modelItems = result.items;
 
   // 该 model 下的 tag 分布（来自全集）
-  const allForLocale = await listPrompts({ locale: ll, model });
+  const allForModel = await listPrompts({ model });
   const tagSet = new Map<string, number>();
-  for (const p of allForLocale.items) for (const tag of p.tags) {
+  for (const p of allForModel.items) for (const tag of p.tags) {
     tagSet.set(tag.slug, (tagSet.get(tag.slug) ?? 0) + 1);
   }
   const tagOptions = [...tagSet.entries()]
     .map(([slug, count]) => ({ slug, name: slug, count }))
     .sort((a, b) => b.count - a.count);
 
-  // 全集 modelOptions（顶部 model tabs）
-  const modelOptions = await listAllModels(ll);
+  // 全集 modelOptions（顶部 model tabs，不分 locale）
+  const modelOptions = await listAllModels();
+
+  // 下一页 URL
+  const nextPageUrl = result.hasMore
+    ? `/${locale}/models/${model}/?${buildQs({ ...sp, page: String(page + 1) })}`
+    : null;
 
   return (
     <>
@@ -114,7 +123,14 @@ export default async function ModelPage({ params, searchParams }: Props) {
         </div>
 
         {modelItems.length > 0 ? (
-          <GridEngine items={modelItems} locale={locale} total={result.total} hasMore={result.hasMore} />
+          <GridEngine
+            items={modelItems}
+            locale={locale}
+            total={result.total}
+            hasMore={result.hasMore}
+            nextPageUrl={nextPageUrl}
+            loadingText={t('loadingMore')}
+          />
         ) : (
           <div className="empty-state">
             <p>{t('noPrompts')}</p>
@@ -125,4 +141,13 @@ export default async function ModelPage({ params, searchParams }: Props) {
       <Footer locale={locale} />
     </>
   );
+}
+
+/** 把 searchParams 对象拼成 query string（skip 空值） */
+function buildQs(params: Record<string, string | undefined>): string {
+  const usp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v && v.trim()) usp.set(k, v);
+  }
+  return usp.toString();
 }

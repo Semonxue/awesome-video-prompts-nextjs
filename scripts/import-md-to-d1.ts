@@ -117,7 +117,11 @@ function toR2Url(localPath: string | null): string | null {
 }
 
 function parseAll(mdFiles: string[]): ParsedPrompt[] {
-  const out: ParsedPrompt[] = [];
+  // 内容不分 locale：同一 slug 在 en/zh/ja 目录下可能都存在，按优先级去重
+  // 优先级：en > zh > ja（en 是原始数据）
+  const PRIORITY: Record<string, number> = { en: 0, zh: 1, ja: 2 };
+  const bySlug = new Map<string, ParsedPrompt>();
+
   for (const filePath of mdFiles) {
     const raw = fs.readFileSync(filePath, 'utf8');
     const { data, content } = matter(raw);
@@ -129,9 +133,16 @@ function parseAll(mdFiles: string[]): ParsedPrompt[] {
     if (!slug) continue;
 
     const locale = detectLocale(filePath);
-    out.push({
+    const existing = bySlug.get(slug);
+    const newPrio = PRIORITY[locale] ?? 99;
+    const existPrio = existing ? (PRIORITY[existing.locale] ?? 99) : 99;
+
+    // 同 slug 已存在且优先级更优 → 跳过
+    if (existing && existPrio <= newPrio) continue;
+
+    bySlug.set(slug, {
       slug,
-      locale,
+      locale, // 仅用于调试/统计，写入 D1 不再用
       title: meta.title,
       description: meta.description,
       videoUrl: toR2Url(meta.videoUrl),
@@ -143,7 +154,8 @@ function parseAll(mdFiles: string[]): ParsedPrompt[] {
       models: meta.models,
     });
   }
-  return out;
+
+  return Array.from(bySlug.values());
 }
 
 // ============================================================
@@ -160,9 +172,9 @@ function buildBatchStatements(prompts: ParsedPrompt[]): { sql: string; params: u
   for (const p of prompts) {
     stmts.push({
       sql: `INSERT OR IGNORE INTO prompts
-              (slug, locale, title, description, video_url, cover_url, source_url, author, prompt_date, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-      params: [p.slug, p.locale, p.title, p.description, p.videoUrl, p.coverUrl, p.sourceUrl, p.author, p.promptDate],
+              (slug, title, description, video_url, cover_url, source_url, author, prompt_date, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+      params: [p.slug, p.title, p.description, p.videoUrl, p.coverUrl, p.sourceUrl, p.author, p.promptDate],
     });
 
     for (const tag of p.tags) {
@@ -173,8 +185,8 @@ function buildBatchStatements(prompts: ParsedPrompt[]): { sql: string; params: u
       stmts.push({
         sql: `INSERT OR IGNORE INTO prompt_tags (prompt_id, tag_id)
               SELECT p.id, t.id FROM prompts p, tags t
-              WHERE p.slug = ? AND p.locale = ? AND t.name = ?`,
-        params: [p.slug, p.locale, tag],
+              WHERE p.slug = ? AND t.name = ?`,
+        params: [p.slug, tag],
       });
     }
 
@@ -186,8 +198,8 @@ function buildBatchStatements(prompts: ParsedPrompt[]): { sql: string; params: u
       stmts.push({
         sql: `INSERT OR IGNORE INTO prompt_models (prompt_id, model_id)
               SELECT p.id, m.id FROM prompts p, models m
-              WHERE p.slug = ? AND p.locale = ? AND m.slug = ?`,
-        params: [p.slug, p.locale, model],
+              WHERE p.slug = ? AND m.slug = ?`,
+        params: [p.slug, model],
       });
     }
   }
@@ -199,8 +211,8 @@ function buildBatchSqlInline(prompts: ParsedPrompt[]): string {
   const lines: string[] = [];
   for (const p of prompts) {
     lines.push(`INSERT OR IGNORE INTO prompts
-      (slug, locale, title, description, video_url, cover_url, source_url, author, prompt_date, created_at, updated_at)
-      VALUES (${sqlEscape(p.slug)}, ${sqlEscape(p.locale)}, ${sqlEscape(p.title)},
+      (slug, title, description, video_url, cover_url, source_url, author, prompt_date, created_at, updated_at)
+      VALUES (${sqlEscape(p.slug)}, ${sqlEscape(p.title)},
               ${sqlEscape(p.description)}, ${sqlEscape(p.videoUrl)}, ${sqlEscape(p.coverUrl)},
               ${sqlEscape(p.sourceUrl)}, ${sqlEscape(p.author)}, ${sqlEscape(p.promptDate)},
               datetime('now'), datetime('now'));`);
@@ -208,13 +220,13 @@ function buildBatchSqlInline(prompts: ParsedPrompt[]): string {
       lines.push(`INSERT OR IGNORE INTO tags (name) VALUES (${sqlEscape(tag)});`);
       lines.push(`INSERT OR IGNORE INTO prompt_tags (prompt_id, tag_id)
         SELECT p.id, t.id FROM prompts p, tags t
-        WHERE p.slug = ${sqlEscape(p.slug)} AND p.locale = ${sqlEscape(p.locale)} AND t.name = ${sqlEscape(tag)};`);
+        WHERE p.slug = ${sqlEscape(p.slug)} AND t.name = ${sqlEscape(tag)};`);
     }
     for (const model of p.models) {
       lines.push(`INSERT OR IGNORE INTO models (slug, name) VALUES (${sqlEscape(model)}, ${sqlEscape(model)});`);
       lines.push(`INSERT OR IGNORE INTO prompt_models (prompt_id, model_id)
         SELECT p.id, m.id FROM prompts p, models m
-        WHERE p.slug = ${sqlEscape(p.slug)} AND p.locale = ${sqlEscape(p.locale)} AND m.slug = ${sqlEscape(model)};`);
+        WHERE p.slug = ${sqlEscape(p.slug)} AND m.slug = ${sqlEscape(model)};`);
     }
   }
   return lines.join('\n');

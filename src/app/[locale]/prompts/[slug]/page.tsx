@@ -45,7 +45,7 @@ function splitParagraphs(text: string): string[] {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { locale, slug } = await params;
   if (!['en', 'zh', 'ja'].includes(locale)) return {};
-  const prompt = await getPromptBySlug(locale as 'en' | 'zh' | 'ja', slug);
+  const prompt = await getPromptBySlug(slug);
   if (!prompt) return { title: 'Prompt not found' };
   return {
     title: `${prompt.title} | Awesome Video Prompts`,
@@ -63,12 +63,12 @@ export default async function PromptDetailPage({ params }: Props) {
   const t = await getTranslations('detail');
   if (!['en', 'zh', 'ja'].includes(locale)) notFound();
 
-  const ll = locale as 'en' | 'zh' | 'ja';
-  const prompt = await getPromptBySlug(ll, slug);
+  // 内容不分 locale：slug 全局唯一；locale 仅用于 UI（next-intl）
+  const prompt = await getPromptBySlug(slug);
   if (!prompt) notFound();
 
   // 相关推荐：同 model 优先 + tag 重叠打分，取前 6
-  const allResult = await listPrompts({ locale: ll, limit: 200 });
+  const allResult = await listPrompts({ limit: 200 });
   const related = allResult.items
     .filter((p) => p.slug !== prompt.slug)
     .map((p) => {
@@ -91,8 +91,8 @@ export default async function PromptDetailPage({ params }: Props) {
   const prev = idx > 0 ? sortedByDate[idx - 1] : undefined;
   const next = idx >= 0 && idx < sortedByDate.length - 1 ? sortedByDate[idx + 1] : undefined;
 
-  // Header 数据
-  const [modelOptions, tagOptions] = await Promise.all([listAllModels(ll), listAllTags(ll)]);
+  // Header 数据（不分 locale）
+  const [modelOptions, tagOptions] = await Promise.all([listAllModels(), listAllTags()]);
 
   const paragraphs = splitParagraphs(prompt.description);
 

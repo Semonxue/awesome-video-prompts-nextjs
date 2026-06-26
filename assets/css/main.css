@@ -411,13 +411,15 @@
       color: var(--accent-primary);
     }
     
-    /* ===== 网格布局（5 列 CSS Grid，替代原 masonry） ===== */
+    /* ===== 真瀑布流：CSS Grid + grid-auto-rows + grid-row span ===== */
     .prompt-grid {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
+      grid-auto-rows: 10px;
+      grid-auto-flow: dense;
       gap: 16px;
       width: 100%;
-      align-items: start;
+      align-items: stretch;
     }
 
     @media (max-width: 1200px) {
@@ -428,6 +430,13 @@
     }
     @media (max-width: 640px) {
       .prompt-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    }
+
+    /* prompt-card 默认占 22 rows（约 22*10 + 21*16 = 556px）
+       PromptCard 在 onload 后算出实际 rows 并通过 --card-rows 注入 */
+    .prompt-card {
+      grid-row-end: span var(--card-rows, 22);
+      /* 让图片区域高度 = colW / aspect（不再用 aspect-ratio，由 grid-row 自然撑开）*/
     }
     
     /* ===== 移动端筛选选择器（默认隐藏，仅在移动端显示） ===== */
@@ -812,14 +821,25 @@
       box-shadow: 0 4px 20px rgba(26, 25, 24, 0.08);
     }
 
-    /* 封面/视频容器：aspect-ratio 由 PromptCard 注入 --card-aspect (cover 原图 w/h)
-       fallback 16/9 在变量未注入时使用 */
+    /* 封面/视频容器：aspect-ratio 由 PromptCard 通过 padding-bottom % 实现（瀑布流）
+       --card-aspect 备用（直接设 aspect-ratio 不和 grid-row span 兼容） */
     .prompt-image-wrapper {
       position: relative;
       width: 100%;
-      aspect-ratio: var(--card-aspect, 16 / 9);
+      /* 高度由 inline padding-bottom 决定（基于 --card-aspect 反算百分比） */
+      padding-bottom: calc(100% / var(--card-aspect, 1.778));
       overflow: hidden;
       background: var(--bg-muted);
+    }
+
+    .prompt-image {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+      transition: opacity 0.3s ease;
     }
 
     .model-badge {
@@ -835,14 +855,6 @@
       color: var(--accent-primary);
       text-decoration: none;
       z-index: 10;
-    }
-
-    .prompt-image {
-      width: 100%;
-      height: 100%;
-      display: block;
-      object-fit: cover;
-      transition: opacity 0.3s ease;
     }
 
     /* hover 视频层：默认透明；wrapper 加 .is-playing 后 opacity:1，无缝替换 cover
@@ -873,32 +885,29 @@
       opacity: 1;
     }
 
-    /* 视频加载占位：3 个 dot 跳动 */
+    /* 视频加载占位：极简 — 单 spinner + 极淡背景 */
     .video-loader {
       position: absolute;
       inset: 0;
       display: none;
       align-items: center;
       justify-content: center;
-      gap: 6px;
       z-index: 6;
-      background: rgba(0, 0, 0, 0.25);
+      background: rgba(0, 0, 0, 0.15);
     }
     .prompt-video-slot.is-loading .video-loader {
       display: flex;
     }
     .video-loader-dot {
-      width: 8px;
-      height: 8px;
-      background: rgba(255, 255, 255, 0.85);
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255, 255, 255, 0.25);
+      border-top-color: rgba(255, 255, 255, 0.9);
       border-radius: 50%;
-      animation: loader-bounce 1.2s infinite ease-in-out;
+      animation: loader-spin 0.7s linear infinite;
     }
-    .video-loader-dot:nth-child(2) { animation-delay: 0.15s; }
-    .video-loader-dot:nth-child(3) { animation-delay: 0.3s; }
-    @keyframes loader-bounce {
-      0%, 80%, 100% { transform: scale(0.6); opacity: 0.6; }
-      40% { transform: scale(1); opacity: 1; }
+    @keyframes loader-spin {
+      to { transform: rotate(360deg); }
     }
 
     /* 复制反馈 toast：替代 overlay hover-text，更明显 */
@@ -954,39 +963,46 @@
     }
     
     .prompt-content {
-      padding: 12px 16px;
+      padding: 10px 12px 12px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 6px;
     }
-    
+
     .prompt-title {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
-      line-height: 1.4;
+      line-height: 1.35;
+      margin: 0;
+      /* 标题最多 2 行 */
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
-    
+
     .prompt-title a {
       color: var(--text-primary);
       text-decoration: none;
     }
-    
+
     .prompt-title a:hover {
       color: var(--accent-hover);
     }
-    
+
     .prompt-description {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-secondary);
-      line-height: 1.5;
+      line-height: 1.45;
       cursor: pointer;
       position: relative;
       transition: color 0.2s, opacity 0.5s ease-in-out;
+      margin: 0;
     }
 
     .prompt-description-text {
       display: -webkit-box;
-      -webkit-line-clamp: 4;
+      -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
       overflow: hidden;
       transition: opacity 0.2s ease;
@@ -1022,21 +1038,22 @@
       opacity: 1;
       transform: translate(-50%, -50%) scale(1);
     }
-    
+
     .prompt-tags {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 4px;
     }
-    
+
     .prompt-tag {
       font-size: 10px;
-      padding: 4px 10px;
+      padding: 3px 8px;
       background: var(--bg-muted);
       border-radius: 100px;
       color: var(--text-secondary);
       text-decoration: none;
       transition: background 0.15s, color 0.15s;
+      line-height: 1.4;
     }
 
     .prompt-tag:hover {
@@ -1102,7 +1119,7 @@
       padding: 24px 0;
       margin-top: 24px;
     }
-    
+
     .loading-spinner {
       width: 24px;
       height: 24px;
@@ -1111,14 +1128,39 @@
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
     }
-    
+
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
-    
+
     .loading-text {
       font-size: 14px;
       color: var(--text-tertiary);
+    }
+
+    /* ===== 触底 sentinel + 加载提示 ===== */
+    .grid-sentinel {
+      padding: 32px 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+    }
+    .grid-loading {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-tertiary);
+      font-size: 13px;
+    }
+    .grid-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--border-subtle);
+      border-top-color: var(--accent-primary);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
     }
     
     /* ===== 页脚 ===== */

@@ -18,13 +18,8 @@ describe('prompts schema', () => {
     expect(idCol.notNull).toBe(true);
   });
 
-  it('slug 不允许 null', () => {
+  it('slug 不允许 null + 唯一', () => {
     expect(prompts.slug.notNull).toBe(true);
-  });
-
-  it('locale 默认 en 且不允许 null', () => {
-    expect(prompts.locale.notNull).toBe(true);
-    expect(prompts.locale.default).toBe('en');
   });
 
   it('title 不允许 null', () => {

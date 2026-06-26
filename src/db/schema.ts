@@ -2,7 +2,9 @@
  * Drizzle ORM Schema — Awesome Video Prompts
  *
  * 设计决策（详见 docs/EXECUTION.md）：
- * - tags/models 多对多
+ * - prompts 不分 locale（用户要求内容一致；UI 多语言由 next-intl 处理）
+ * - tags/models 全局唯一（不分 locale）
+ * - slug 唯一：每个 prompt 一条 row
  * - prompt_date / created_at / updated_at 都用 TEXT 存 ISO 8601
  * - 不上 FTS5（CJK 走 LIKE 兜底）
  * - is_draft 用于过滤草稿
@@ -12,8 +14,7 @@ import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
 
 export const prompts = sqliteTable('prompts', {
   id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),
-  slug: text('slug').notNull(),
-  locale: text('locale').notNull().default('en'),
+  slug: text('slug').notNull().unique(),
   title: text('title').notNull(),
   description: text('description').notNull().default(''),
   videoUrl: text('video_url'),

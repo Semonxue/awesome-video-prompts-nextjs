@@ -6,13 +6,13 @@
  *   - 两步法：先查主表（分页），再按 promptIds 批量查 tags/models 拼成 PromptCardData
  *   - ISR 1h 缓存已覆盖性能
  *
+ * 内容不分 locale：UI 多语言由 next-intl 处理，prompt 内容是全局一份
  * 调用方：首页 (page.tsx) / 详情页 ([slug]/page.tsx) / 标签页 / 模型页
  * 部署目标：Cloudflare Workers via OpenNext
  */
 
 import { eq, and, inArray, like, or, sql, desc } from 'drizzle-orm';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
-import type { Locale } from '@/i18n/request';
 import type { PromptCardData, ModelRef, TagRef } from '@/components/types';
 import { getDb } from './index';
 import { prompts, tags, models, promptTags, promptModels } from './schema';
@@ -28,9 +28,9 @@ async function getD1(): Promise<D1Database> {
 
 /**
  * 列表查询参数（首页/标签页/模型页共用）
+ * 内容不分 locale；locale 仅用于 UI（next-intl）
  */
 export interface ListPromptsArgs {
-  locale: Locale;
   /** 标签筛选（slug，可选） */
   tag?: string;
   /** 模型筛选（slug，可选） */
@@ -78,7 +78,7 @@ async function hydratePrompts(
       name: models.name,
     })
     .from(promptModels)
-    .innerJoin(models, eq(promptModels.modelId, models.id))
+    .innerJoin(models, eq(promptModels.promptId, models.id))
     .where(inArray(promptModels.promptId, ids));
 
   // 按 promptId 索引
@@ -113,13 +113,13 @@ async function hydratePrompts(
  * 列表查询 — 首页 / 标签 / 模型 页面入口
  */
 export async function listPrompts(args: ListPromptsArgs): Promise<ListPromptsResult> {
-  const { locale, tag, model, q, limit = 24, offset = 0 } = args;
+  const { tag, model, q, limit = 24, offset = 0 } = args;
 
   const d1 = await getD1();
   const db = getDb(d1);
 
   // WHERE 条件
-  const conditions = [eq(prompts.locale, locale), eq(prompts.isDraft, 0)];
+  const conditions = [eq(prompts.isDraft, 0)];
 
   // 关联筛选：tag / model 通过子查询过滤 promptId
   if (tag) {
@@ -170,19 +170,16 @@ export async function listPrompts(args: ListPromptsArgs): Promise<ListPromptsRes
 }
 
 /**
- * 单条查询 — 详情页入口
+ * 单条查询 — 详情页入口（不分 locale）
  */
-export async function getPromptBySlug(
-  locale: Locale,
-  slug: string,
-): Promise<PromptCardData | null> {
+export async function getPromptBySlug(slug: string): Promise<PromptCardData | null> {
   const d1 = await getD1();
   const db = getDb(d1);
 
   const rows = await db
     .select()
     .from(prompts)
-    .where(and(eq(prompts.locale, locale), eq(prompts.slug, slug), eq(prompts.isDraft, 0)))
+    .where(and(eq(prompts.slug, slug), eq(prompts.isDraft, 0)))
     .limit(1);
 
   if (rows.length === 0) return null;
@@ -191,10 +188,10 @@ export async function getPromptBySlug(
 }
 
 /**
- * 全部 tags — 标签页/筛选器下拉用
+ * 全部 tags — 标签页/筛选器下拉用（全局唯一，不分 locale）
  * 按 count DESC 排序；只统计有 prompt 关联的 tag（避免孤儿）
  */
-export async function listAllTags(locale: Locale): Promise<{ slug: string; name: string; count: number }[]> {
+export async function listAllTags(): Promise<{ slug: string; name: string; count: number }[]> {
   const d1 = await getD1();
   const db = getDb(d1);
 
@@ -205,7 +202,7 @@ export async function listAllTags(locale: Locale): Promise<{ slug: string; name:
     })
     .from(tags)
     .innerJoin(promptTags, eq(promptTags.tagId, tags.id))
-    .innerJoin(prompts, and(eq(prompts.id, promptTags.promptId), eq(prompts.locale, locale), eq(prompts.isDraft, 0)))
+    .innerJoin(prompts, and(eq(prompts.id, promptTags.promptId), eq(prompts.isDraft, 0)))
     .groupBy(tags.name)
     .orderBy(desc(sql`count(${promptTags.promptId})`), tags.name);
 
@@ -213,9 +210,9 @@ export async function listAllTags(locale: Locale): Promise<{ slug: string; name:
 }
 
 /**
- * 全部 models — 模型页用
+ * 全部 models — 模型页用（全局唯一，不分 locale）
  */
-export async function listAllModels(locale: Locale): Promise<{ slug: string; name: string; count: number }[]> {
+export async function listAllModels(): Promise<{ slug: string; name: string; count: number }[]> {
   const d1 = await getD1();
   const db = getDb(d1);
 
@@ -227,7 +224,7 @@ export async function listAllModels(locale: Locale): Promise<{ slug: string; nam
     })
     .from(models)
     .innerJoin(promptModels, eq(promptModels.modelId, models.id))
-    .innerJoin(prompts, and(eq(prompts.id, promptModels.promptId), eq(prompts.locale, locale), eq(prompts.isDraft, 0)))
+    .innerJoin(prompts, and(eq(prompts.id, promptModels.promptId), eq(prompts.isDraft, 0)))
     .groupBy(models.slug, models.name)
     .orderBy(desc(sql`count(${promptModels.promptId})`), models.name);
 

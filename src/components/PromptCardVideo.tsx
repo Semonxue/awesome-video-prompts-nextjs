@@ -129,8 +129,6 @@ const PromptCardVideo = forwardRef<PromptCardVideoHandle, PromptCardVideoProps>(
     <div ref={slotRef} className="prompt-video-slot">
       <div className="video-loader" aria-hidden="true">
         <span className="video-loader-dot" />
-        <span className="video-loader-dot" />
-        <span className="video-loader-dot" />
       </div>
       <video
         ref={videoRef}

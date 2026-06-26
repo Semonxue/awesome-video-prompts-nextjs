@@ -15,7 +15,7 @@ export default async function TagsPage({ params }: TagsPageProps) {
   if (!locales.includes(rawLocale as Locale)) notFound();
 
   const t = await getTranslations();
-  const tags = await listAllTags(rawLocale as Locale);
+  const tags = await listAllTags();
 
   return (
     <div className="main-content">

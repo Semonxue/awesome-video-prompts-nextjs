@@ -15,7 +15,7 @@ export default async function ModelsPage({ params }: ModelsPageProps) {
   if (!locales.includes(rawLocale as Locale)) notFound();
 
   const t = await getTranslations();
-  const models = await listAllModels(rawLocale as Locale);
+  const models = await listAllModels();
 
   return (
     <div className="main-content">

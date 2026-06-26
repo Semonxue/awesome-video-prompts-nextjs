@@ -37,7 +37,7 @@
   },
   "card": {
     "clickToCopyTitle": "Click to copy prompt",
-    "hoverHint": "Click to copy · Hover to play",
+    "hoverHint": "Click to copy",
     "copied": "✓ Copied!",
     "noPrompts": "No prompts found."
   },
@@ -61,7 +61,8 @@
     "promptsFound": "{count} prompts found",
     "all": "All",
     "backToModels": "← Models",
-    "noPrompts": "No prompts found."
+    "noPrompts": "No prompts found.",
+    "loadingMore": "Loading more prompts…"
   },
   "tag": {
     "breadcrumbTags": "Tags",

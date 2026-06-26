@@ -37,7 +37,7 @@
   },
   "card": {
     "clickToCopyTitle": "点击复制提示词",
-    "hoverHint": "点击复制 · 悬停播放预览",
+    "hoverHint": "点击复制",
     "copied": "✓ 已复制！",
     "noPrompts": "未找到提示词"
   },
@@ -61,7 +61,8 @@
     "promptsFound": "共找到 {count} 条提示词",
     "all": "全部",
     "backToModels": "← 模型",
-    "noPrompts": "未找到提示词"
+    "noPrompts": "未找到提示词",
+    "loadingMore": "加载更多提示词…"
   },
   "tag": {
     "breadcrumbTags": "标签",

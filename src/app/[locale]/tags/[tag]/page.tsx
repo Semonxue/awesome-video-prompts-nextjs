@@ -18,8 +18,11 @@ import { listAllModels, listAllTags, listPrompts } from '@/db/queries';
 
 export const revalidate = 3600;
 
+const PAGE_SIZE = 24;
+
 interface Props {
   params: Promise<{ locale: string; tag: string }>;
+  searchParams: Promise<{ page?: string }>;
 }
 
 export async function generateMetadata({ params }: Props) {
@@ -30,15 +33,18 @@ export async function generateMetadata({ params }: Props) {
   };
 }
 
-export default async function TagPage({ params }: Props) {
+export default async function TagPage({ params, searchParams }: Props) {
   const { locale, tag } = await params;
+  const sp = await searchParams;
   const t = await getTranslations('tag');
   if (!['en', 'zh', 'ja'].includes(locale)) notFound();
 
-  const ll = locale as 'en' | 'zh' | 'ja';
+  // 分页
+  const page = Math.max(1, parseInt(sp.page ?? '1', 10) || 1);
+  const offset = (page - 1) * PAGE_SIZE;
 
-  // 该 tag 下的 prompts
-  const result = await listPrompts({ locale: ll, tag });
+  // 该 tag 下的 prompts（不分 locale）
+  const result = await listPrompts({ tag, limit: PAGE_SIZE, offset });
   const tagItems = result.items;
 
   // 该 tag 下的 model 分布
@@ -52,8 +58,13 @@ export default async function TagPage({ params }: Props) {
     .map(([slug, count]) => ({ slug, name: slug, count }))
     .sort((a, b) => b.count - a.count);
 
-  // 全集 tagOptions（顶部 tag tabs）
-  const allTags = await listAllTags(ll);
+  // 全集 tagOptions（顶部 tag tabs，不分 locale）
+  const allTags = await listAllTags();
+
+  // 下一页 URL
+  const nextPageUrl = result.hasMore
+    ? `/${locale}/tags/${tag}/?${buildQs({ ...sp, page: String(page + 1) })}`
+    : null;
 
   return (
     <>
@@ -104,7 +115,14 @@ export default async function TagPage({ params }: Props) {
         </div>
 
         {tagItems.length > 0 ? (
-          <GridEngine items={tagItems} locale={locale} total={result.total} hasMore={result.hasMore} />
+          <GridEngine
+            items={tagItems}
+            locale={locale}
+            total={result.total}
+            hasMore={result.hasMore}
+            nextPageUrl={nextPageUrl}
+            loadingText={t('loadingMore')}
+          />
         ) : (
           <div className="empty-state">
             <p>{t('noPrompts')}</p>
@@ -115,4 +133,12 @@ export default async function TagPage({ params }: Props) {
       <Footer locale={locale} />
     </>
   );
+}
+
+function buildQs(params: Record<string, string | undefined>): string {
+  const usp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v && v.trim()) usp.set(k, v);
+  }
+  return usp.toString();
 }
