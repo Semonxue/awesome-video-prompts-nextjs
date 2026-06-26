@@ -127,8 +127,21 @@
     "loading": "読み込み中...",
     "comingSoon": "近日公開"
   },
+  "about": {
+    "title": "このサイトについて",
+    "intro": "私たちはより良いAI動画プロンプトを集めています。映画的なショットやアクションシーン、クリエイティブなアイデアを探しているなら、ここで見つかります。",
+    "whatWeDo": "我们的活动",
+    "bullet1": "人気のAI動画モデルから精选したプロンプト",
+    "bullet2": "フィルターで分かりやすく整理",
+    "bullet3": "誰でも無料で利用可能",
+    "getInvolved": "参加方法",
+    "getInvolvedText": "素晴らしいプロンプトを持っていますか？是非教えてください！",
+    "githubLabel": "GitHub：",
+    "githubUrl": "https://github.com/Semonxue/awesome-video-prompts",
+    "cta": "一緒にAI動画创作を容易にしましょう！"
+  },
   "pages": {
-    "aboutTitle": "素晴らしい動画プロンプトについて",
+    "aboutTitle": "このサイトについて",
     "aboutDescription": "コミュニティが管理する AI 動画生成プロンプトライブラリ。閲覧、コピー、リミックス。",
     "tagsTitle": "タグで探す",
     "tagsDescription": "テーマとスタイル別にプロンプトを探索。",

@@ -1,18 +1,19 @@
 /**
- * About 占位页
+ * About 页 — 完整三语言内容
  */
 import { getTranslations } from 'next-intl/server';
 import { locales, type Locale } from '@/i18n/request';
 import { notFound } from 'next/navigation';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://awesome-video-prompts-nextjs.semonxue.workers.dev';
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ?? 'https://awesome-video-prompts.semonxue.workers.dev';
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const canonical = `${SITE_URL}/${locale}/about`;
   return {
-    title: 'About Awesome Video Prompts',
-    description: 'A community-curated library of AI video generation prompts. Browse, copy, and remix.',
+    title: 'about.title',
+    description: 'about.intro',
     alternates: {
       canonical,
       languages: {
@@ -34,28 +35,47 @@ export default async function AboutPage({ params }: AboutPageProps) {
   if (!locales.includes(rawLocale as Locale)) notFound();
   const locale = rawLocale as Locale;
 
-  const t = await getTranslations();
+  const t = await getTranslations('about');
 
   return (
-    <div className="main-content" style={{ maxWidth: 720 }}>
-      <h1 style={{ fontSize: 28, fontWeight: 600, marginBottom: 12 }}>
-        {t('pages.aboutTitle')}
-      </h1>
-      <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-        {t('pages.aboutDescription')}
-      </p>
-      <p
-        style={{
-          marginTop: 24,
-          padding: 16,
-          background: 'var(--bg-muted)',
-          borderRadius: 8,
-          fontSize: 13,
-          color: 'var(--text-tertiary)',
-        }}
-      >
-        {t('empty.phaseOneHint')} · locale: {locale}
-      </p>
+    <div className="main-content about-page">
+      {/* Hero */}
+      <section className="about-hero">
+        <h1 className="about-title">{t('title')}</h1>
+        <p className="about-intro">{t('intro')}</p>
+      </section>
+
+      {/* What We Do */}
+      <section className="about-section">
+        <h2 className="about-section-title">{t('whatWeDo')}</h2>
+        <ul className="about-bullets">
+          <li>{t('bullet1')}</li>
+          <li>{t('bullet2')}</li>
+          <li>{t('bullet3')}</li>
+        </ul>
+      </section>
+
+      {/* Get Involved */}
+      <section className="about-section">
+        <h2 className="about-section-title">{t('getInvolved')}</h2>
+        <p className="about-text">{t('getInvolvedText')}</p>
+        <p className="about-github">
+          <span className="about-github-label">{t('githubLabel')}</span>
+          <a
+            href={t('githubUrl')}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="about-github-link"
+          >
+            {t('githubUrl')}
+          </a>
+        </p>
+      </section>
+
+      {/* CTA */}
+      <section className="about-cta">
+        <p className="about-cta-text">{t('cta')}</p>
+      </section>
     </div>
   );
 }

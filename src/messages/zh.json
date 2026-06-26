@@ -127,8 +127,21 @@
     "loading": "加载中...",
     "comingSoon": "即将上线"
   },
+  "about": {
+    "title": "关于我们",
+    "intro": "我们致力于收集优质的 AI 视频生成提示词。无论你在寻找电影级镜头、动作场景还是创意灵感，这里都能找到。",
+    "whatWeDo": "我们做什么",
+    "bullet1": "从热门 AI 视频模型中精选提示词",
+    "bullet2": "通过筛选器轻松浏览",
+    "bullet3": "免费供所有人使用",
+    "getInvolved": "参与方式",
+    "getInvolvedText": "有好的提示词想要分享吗？期待你的参与！",
+    "githubLabel": "GitHub：",
+    "githubUrl": "https://github.com/Semonxue/awesome-video-prompts",
+    "cta": "让我们一起让 AI 视频创作变得更简单！"
+  },
   "pages": {
-    "aboutTitle": "关于精彩视频提示词",
+    "aboutTitle": "关于我们",
     "aboutDescription": "一个社区维护的 AI 视频生成提示词库。浏览、复制、二次创作。",
     "tagsTitle": "按标签浏览",
     "tagsDescription": "按主题和风格探索提示词。",

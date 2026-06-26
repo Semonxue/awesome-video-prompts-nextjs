@@ -127,6 +127,19 @@
     "loading": "Loading...",
     "comingSoon": "Coming soon"
   },
+  "about": {
+    "title": "About Awesome Video Prompts",
+    "intro": "We collect the best AI video generation prompts from across the internet. Whether you're looking for cinematic shots, action sequences, or creative ideas — you'll find inspiration here.",
+    "whatWeDo": "What We Do",
+    "bullet1": "Curated prompts from popular AI video models",
+    "bullet2": "Easy-to-browse collection with filters",
+    "bullet3": "Free for everyone to use",
+    "getInvolved": "Get Involved",
+    "getInvolvedText": "Have great prompts to share? We'd love to hear from you!",
+    "githubLabel": "GitHub:",
+    "githubUrl": "https://github.com/Semonxue/awesome-video-prompts",
+    "cta": "Let's make AI video creation easier together!"
+  },
   "pages": {
     "aboutTitle": "About Awesome Video Prompts",
     "aboutDescription": "A community-curated library of AI video generation prompts. Browse, copy, and remix.",
