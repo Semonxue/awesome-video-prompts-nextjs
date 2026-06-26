@@ -40,11 +40,15 @@
   font-size: 13px;
   color: var(--text-secondary);
   text-decoration: none;
-  padding: 6px 12px;
+  padding: 8px 16px;
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
   transition: all 0.2s;
   white-space: nowrap;
+  /* A11y target-size: >= 44×44px (WCAG 2.5.8) */
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
 }
 .view-all-link:hover {
   color: var(--accent-primary);

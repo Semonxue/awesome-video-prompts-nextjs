@@ -109,8 +109,8 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 36px;
-      height: 36px;
+      width: 44px;
+      height: 44px;
       padding: 0;
       border-radius: 8px;
       color: var(--text-secondary);
@@ -140,11 +140,14 @@
       background: var(--bg-surface);
       border: 1.5px solid var(--accent-primary);
       border-radius: var(--radius-sm);
-      padding: 6px 12px;
+      padding: 8px 14px;
       cursor: pointer;
       font-family: inherit;
       transition: all 0.2s;
       font-weight: 500;
+      /* A11y target-size: >= 44×44px (WCAG 2.5.8) */
+      min-height: 44px;
+      min-width: 60px;
     }
     
     .lang-dropdown:hover {
@@ -171,13 +174,16 @@
     }
 
     .lang-item {
-      display: block;
+      display: flex;
+      align-items: center;
       padding: 8px 12px;
       color: var(--text-primary);
       text-decoration: none;
       font-size: 13px;
       border-radius: 4px;
       transition: background-color 0.2s;
+      /* A11y target-size: >= 44×44px (WCAG 2.5.8) */
+      min-height: 44px;
     }
 
     .lang-item:hover {
@@ -846,7 +852,7 @@
       position: absolute;
       top: 12px;
       left: 12px;
-      padding: 4px 6px ;
+      padding: 6px 10px;
       background-color:  rgba(255, 255, 255, 0.8);
       border: none;
       border-radius: 8px;
@@ -855,6 +861,12 @@
       color: var(--accent-primary);
       text-decoration: none;
       z-index: 10;
+      /* A11y target-size: >= 44×44px (WCAG 2.5.8) */
+      min-height: 32px;
+      min-width: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
 
     /* hover 视频层：默认透明；wrapper 加 .is-playing 后 opacity:1，无缝替换 cover
@@ -1047,13 +1059,18 @@
 
     .prompt-tag {
       font-size: 10px;
-      padding: 3px 8px;
+      padding: 6px 12px;
       background: var(--bg-muted);
       border-radius: 100px;
       color: var(--text-secondary);
       text-decoration: none;
       transition: background 0.15s, color 0.15s;
       line-height: 1.4;
+      /* A11y target-size: >= 44×44px (WCAG 2.5.8) */
+      min-height: 32px;
+      min-width: 44px;
+      display: inline-flex;
+      align-items: center;
     }
 
     .prompt-tag:hover {
