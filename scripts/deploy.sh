@@ -53,9 +53,15 @@ set -a
 source "$PROJECT_DIR/.dev.vars"
 set +a
 
+# 注入版本信息（部署时通过 wrangler --var 传入 Workers 运行时）
+export APP_GIT_SHA="${APP_GIT_SHA:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}"
+export APP_BUILD_DATE="${APP_BUILD_DATE:-$(date "+%Y-%m-%d %H:%M:%S")}"
+export APP_GIT_BRANCH="${APP_GIT_BRANCH:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)}"
+
 info "SITE_URL:    ${NEXT_PUBLIC_SITE_URL:-未设置}"
 info "ACCOUNT_ID:  ${CLOUDFLARE_ACCOUNT_ID:-未设置}"
 info "D1_DB:       ${D1_DATABASE_ID:-未设置}"
+info "VERSION:     v2.0.0 · ${APP_GIT_SHA}"
 
 if [[ -z "${CLOUDFLARE_API_TOKEN:-}" ]]; then
   err "CLOUDFLARE_API_TOKEN 未设置，请检查 .dev.vars"
@@ -105,7 +111,11 @@ if [[ "$DRY_RUN" == "true" ]]; then
 fi
 
 log "Step 4/4 — npx wrangler deploy..."
-DEPLOY_OUTPUT=$(npx wrangler deploy 2>&1)
+  DEPLOY_OUTPUT=$(npx wrangler deploy \
+    --var "APP_GIT_SHA=${APP_GIT_SHA}" \
+    --var "APP_BUILD_DATE=${APP_BUILD_DATE}" \
+    --var "APP_GIT_BRANCH=${APP_GIT_BRANCH}" \
+    2>&1)
 DEPLOY_EXIT=$?
 
 echo "$DEPLOY_OUTPUT"

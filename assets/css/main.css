@@ -1185,8 +1185,23 @@
     }
     
     .footer-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .footer-copyright {
       font-size: 13px;
       color: var(--text-tertiary);
+    }
+
+    .footer-version {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      opacity: 0.6;
+      font-family: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
+      letter-spacing: 0.02em;
     }
     
     .footer-right {
