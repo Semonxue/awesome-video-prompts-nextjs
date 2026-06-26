@@ -1,6 +1,6 @@
 {
   "name": "awesome-video-prompts-nextjs",
-  "version": "0.1.0",
+  "version": "2.0.1",
   "private": true,
   "description": "Next.js 15 + Cloudflare Workers for Awesome Video Prompts",
   "scripts": {

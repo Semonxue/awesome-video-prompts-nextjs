@@ -53,7 +53,8 @@ set -a
 source "$PROJECT_DIR/.dev.vars"
 set +a
 
-# 注入版本信息（部署时通过 wrangler --var 传入 Workers 运行时）
+# 从 package.json 读取版本号（唯一真源）
+export APP_VERSION="${APP_VERSION:-$(node -e "process.stdout.write(require('./package.json').version)")}"
 export APP_GIT_SHA="${APP_GIT_SHA:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}"
 export APP_BUILD_DATE="${APP_BUILD_DATE:-$(date "+%Y-%m-%d %H:%M:%S")}"
 export APP_GIT_BRANCH="${APP_GIT_BRANCH:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)}"
@@ -61,26 +62,34 @@ export APP_GIT_BRANCH="${APP_GIT_BRANCH:-$(git rev-parse --abbrev-ref HEAD 2>/de
 info "SITE_URL:    ${NEXT_PUBLIC_SITE_URL:-未设置}"
 info "ACCOUNT_ID:  ${CLOUDFLARE_ACCOUNT_ID:-未设置}"
 info "D1_DB:       ${D1_DATABASE_ID:-未设置}"
-info "VERSION:     v2.0.0 · ${APP_GIT_SHA}"
+info "VERSION:     v${APP_VERSION} · ${APP_GIT_SHA}"
 
 if [[ -z "${CLOUDFLARE_API_TOKEN:-}" ]]; then
   err "CLOUDFLARE_API_TOKEN 未设置，请检查 .dev.vars"
   exit 1
 fi
 
-# ─── Step 1: type-check ──────────────────────────────
-log "Step 1/4 — type-check..."
+# ─── Step 1: prebuild（生成 version-generated.ts）──────
+log "Step 1/5 — prebuild..."
+if ! node scripts/generate-version.mjs 2>&1; then
+  err "prebuild 失败"
+  exit 1
+fi
+log "prebuild ✓"
+
+# ─── Step 2: type-check ──────────────────────────────
+log "Step 2/5 — type-check..."
 if ! npm run type-check 2>&1; then
   err "type-check 失败，停止部署"
   exit 1
 fi
 log "type-check ✓"
 
-# ─── Step 2: unit tests ──────────────────────────────
+# ─── Step 3: unit tests ──────────────────────────────
 if [[ "$SKIP_TEST" == "true" ]]; then
   warn "跳过 unit tests（--skip-test）"
 else
-  log "Step 2/4 — unit tests..."
+  log "Step 3/5 — unit tests..."
   if ! npm test 2>&1; then
     err "unit tests 失败，停止部署"
     exit 1
@@ -88,30 +97,31 @@ else
   log "unit tests ✓"
 fi
 
-# ─── Step 3: build ────────────────────────────────────
-log "Step 3/4 — npm run build..."
+# ─── Step 4: build ────────────────────────────────────
+log "Step 4/5 — npm run build..."
 if ! npm run build 2>&1; then
-  err "npm run build 失败，停止部署"
+  err "npm run build 失败"
   exit 1
 fi
 log "npm run build ✓"
 
-log "Step 3/4b — npm run build:cf..."
+log "Step 4/5b — npm run build:cf..."
 if ! npm run build:cf 2>&1; then
-  err "npm run build:cf 失败，停止部署"
+  err "npm run build:cf 失败"
   exit 1
 fi
 log "npm run build:cf ✓"
 
-# ─── Step 4: deploy ──────────────────────────────────
+# ─── Step 5: deploy ──────────────────────────────────
 if [[ "$DRY_RUN" == "true" ]]; then
   warn "DRY-RUN 模式，跳过 deploy"
   log "部署流程 dry-run 完成，可以执行了"
   exit 0
 fi
 
-log "Step 4/4 — npx wrangler deploy..."
+log "Step 5/5 — npx wrangler deploy..."
   DEPLOY_OUTPUT=$(npx wrangler deploy \
+    --var "APP_VERSION=${APP_VERSION}" \
     --var "APP_GIT_SHA=${APP_GIT_SHA}" \
     --var "APP_BUILD_DATE=${APP_BUILD_DATE}" \
     --var "APP_GIT_BRANCH=${APP_GIT_BRANCH}" \
@@ -133,7 +143,7 @@ else
   warn "无法从输出中提取 URL，请手动验证"
 fi
 
-# ─── Step 5: 冒烟验证 ────────────────────────────────
+# ─── Step 6: 冒烟验证 ────────────────────────────────
 SMOKE_URL="${DEPLOY_URL:-${NEXT_PUBLIC_SITE_URL}}"
 log "冒烟验证..."
 SMOKE_FAILED=0
