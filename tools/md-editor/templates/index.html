@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown 编辑器（新流程）</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; height: 100vh; overflow: hidden; }
+        :root {
+            --bg-primary: #ffffff; --bg-secondary: #f5f5f5; --bg-tertiary: #e8e8e8;
+            --text-primary: #333333; --text-secondary: #666666; --text-muted: #999999;
+            --border-color: #ddd; --accent-color: #0066cc; --success-color: #28a745; --edited-color: #f59e0b; --error-color: #dc3545; --warning-color: #d97706;
+        }
+        body { background: var(--bg-primary); color: var(--text-primary); }
+        .app-container { display: flex; height: 100vh; }
+
+        /* ===== 左侧文件列表 ===== */
+        .file-list-panel { width: 320px; min-width: 240px; max-width: 50%; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; background: var(--bg-secondary); }
+        .resize-handle { width: 4px; cursor: col-resize; background: transparent; transition: background 0.2s; flex-shrink: 0; }
+        .resize-handle:hover { background: var(--accent-color); }
+        .file-list-header { padding: 10px 12px; border-bottom: 1px solid var(--border-color); background: var(--bg-primary); font-weight: 600; font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .file-list-actions { display: flex; gap: 6px; }
+        .refresh-btn, .cleanup-btn, .load-btn { background: none; border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+        .refresh-btn:hover, .cleanup-btn:hover, .load-btn:hover { background: var(--bg-tertiary); }
+        .cleanup-btn { color: var(--warning-color); border-color: var(--warning-color); }
+        .btn-delete { background: none; border: 1px solid #e53e3e; color: #e53e3e; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+        .btn-delete:hover { background: #fff5f5; }
+        .load-btn { color: var(--accent-color); border-color: var(--accent-color); }
+
+        .tabs { display: flex; border-bottom: 1px solid var(--border-color); background: var(--bg-primary); }
+        .tab { flex: 1; padding: 8px 6px; text-align: center; cursor: pointer; font-size: 11px; color: var(--text-secondary); border-bottom: 2px solid transparent; user-select: none; }
+        .tab:hover { background: var(--bg-tertiary); }
+        .tab.active { color: var(--accent-color); border-bottom-color: var(--accent-color); font-weight: 600; }
+        .tab-count { display: inline-block; background: var(--bg-tertiary); border-radius: 8px; padding: 1px 6px; font-size: 10px; margin-left: 2px; }
+        .tab.active .tab-count { background: var(--accent-color); color: white; }
+
+        .file-items { flex: 1; overflow-y: auto; }
+        .file-item { padding: 8px 12px; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background 0.15s; }
+        .file-item:hover { background: var(--bg-tertiary); }
+        .file-item.active { background: var(--accent-color); color: white; }
+        .file-item.published .file-name::before { content: "✓ "; color: var(--success-color); }
+        .file-item.failed .file-name::before { content: "⚠ "; color: var(--error-color); }
+        .file-item.active.published .file-name::before,
+        .file-item.active.failed .file-name::before { color: white; }
+        .file-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .file-date { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+        .file-item.active .file-date { color: rgba(255,255,255,0.85); }
+        .file-error { font-size: 10px; color: var(--error-color); margin-top: 2px; word-break: break-all; }
+        .file-item.active .file-error { color: rgba(255,255,255,0.95); background: rgba(220,53,69,0.6); padding: 2px 4px; border-radius: 2px; }
+
+        /* ===== 编辑器 ===== */
+        .editor-panel { flex: 1; display: flex; flex-direction: column; min-width: 400px; }
+        .editor-header { padding: 8px 12px; border-bottom: 1px solid var(--border-color); background: var(--bg-primary); display: flex; justify-content: space-between; align-items: center; }
+        .file-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); font-family: monospace; }
+        .file-title .status-badge { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 10px; margin-left: 6px; font-family: -apple-system, sans-serif; }
+        .status-badge.unpublished { background: var(--bg-tertiary); color: var(--text-secondary); }
+        .status-badge.published { background: var(--success-color); color: white; }
+        .status-badge.failed { background: var(--error-color); color: white; }
+        .editor-actions { display: flex; gap: 8px; }
+        .btn { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .btn-primary { background: var(--accent-color); color: white; }
+        .btn-publish { background: var(--success-color); color: white; }
+        .btn-toggle { background: var(--bg-tertiary); border: 1px solid var(--border-color); }
+        .btn-toggle.active { background: var(--accent-color); color: white; border-color: var(--accent-color); }
+        .editor-content { flex: 1; overflow-y: auto; padding: 12px; }
+
+        .form-row { margin-bottom: 10px; }
+        .form-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; display: block; }
+        .form-input { width: 100%; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; background: var(--bg-primary); color: var(--text-primary); }
+        .form-input:focus { outline: none; border-color: var(--accent-color); }
+        .selector-options { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+        .selector-chip { padding: 3px 8px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 12px; font-size: 11px; cursor: pointer; }
+        .selector-chip:hover { border-color: var(--accent-color); }
+        .selector-chip.selected { background: var(--accent-color); color: white; border-color: var(--accent-color); }
+
+        .source-row { display: flex; gap: 8px; align-items: center; }
+        .source-row input[type="text"] { width: 100px; }
+        .source-row input[type="url"] { flex: 1; }
+        .source-btn { padding: 6px 10px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; font-size: 11px; text-decoration: none; }
+        .source-btn:hover { background: var(--border-color); }
+        .source-btn.active { background: var(--accent-color); color: white; border-color: var(--accent-color); }
+
+        .media-preview { display: flex; gap: 8px; margin-top: 8px; }
+        .media-item { flex: 1; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden; }
+        .media-label { font-size: 10px; color: var(--text-muted); padding: 4px 8px; background: var(--bg-tertiary); }
+        .media-content { height: 120px; display: flex; align-items: center; justify-content: center; background: var(--bg-primary); }
+        .media-content img, .media-content video { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .lazy-media { cursor: pointer; color: var(--accent-color); font-size: 12px; padding: 20px; text-align: center; transition: background 0.2s; }
+        .lazy-media:hover { background: var(--bg-tertiary); }
+
+        .source-editor { display: none; flex-direction: column; height: 100%; }
+        .source-editor.active { display: flex; }
+        .source-editor textarea { flex: 1; width: 100%; padding: 12px; border: none; font-family: 'Monaco', 'Menlo', monospace; font-size: 12px; line-height: 1.5; resize: none; background: var(--bg-primary); color: var(--text-primary); }
+
+        .iframe-panel { width: 25%; min-width: 200px; border-left: 1px solid var(--border-color); display: none; flex-direction: column; }
+        .iframe-panel.visible { display: flex; }
+        .iframe-header { padding: 8px 12px; border-bottom: 1px solid var(--border-color); background: var(--bg-secondary); font-size: 11px; color: var(--text-secondary); display: flex; justify-content: space-between; align-items: center; }
+        .iframe-content iframe { width: 100%; height: 100%; border: none; }
+
+        .toast { position: fixed; bottom: 20px; right: 20px; background: var(--success-color); color: white; padding: 10px 16px; border-radius: 4px; font-size: 12px; opacity: 0; transform: translateY(10px); transition: all 0.2s; z-index: 1000; max-width: 400px; word-break: break-all; }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.error { background: var(--error-color); }
+        .toast.warn { background: var(--warning-color); }
+        .empty-state { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); }
+        .desc-textarea { width: 100%; min-height: 250px; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; font-family: 'Monaco', 'Menlo', monospace; font-size: 12px; line-height: 1.5; resize: vertical; background: var(--bg-primary); color: var(--text-primary); }
+
+        /* ===== 模态框 ===== */
+        .modal-mask { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999; align-items: center; justify-content: center; }
+        .modal-mask.show { display: flex; }
+        .modal { background: var(--bg-primary); border-radius: 6px; padding: 20px; min-width: 400px; max-width: 90vw; }
+        .modal-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+        .modal-body { font-size: 13px; line-height: 1.6; margin-bottom: 16px; }
+        .modal-body ul { margin-left: 20px; }
+        .modal-body .ok { color: var(--success-color); }
+        .modal-body .fail { color: var(--error-color); }
+        .modal-body .skip { color: var(--text-muted); }
+        .modal-body .warn { color: var(--warning-color); }
+        .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+        .modal-input { width: 100%; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 13px; }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="file-list-panel">
+            <div class="file-list-header">
+                <span>📁 草稿</span>
+                <div class="file-list-actions">
+                    <button class="load-btn" onclick="showLoadOnline()" title="从线上 D1 加载到草稿">⬇️ 加载线上</button>
+                    <button class="cleanup-btn" onclick="cleanupPublished()" title="清理已发布成功的草稿（先校验 D1）">🧹 清理</button>
+                    <button class="btn btn-delete" onclick="showDeleteOnline()" title="按 slug 直接删除线上 prompt（D1 + R2）">❌ 删除线上</button>
+                    <button class="refresh-btn" onclick="loadFileList()">🔄</button>
+                </div>
+            </div>
+            <div class="tabs">
+                <div class="tab active" data-tab="unpublished" onclick="switchTab('unpublished')">
+                    待编辑 <span class="tab-count" id="cntUnpublished">0</span>
+                </div>
+                <div class="tab" data-tab="published" onclick="switchTab('published')">
+                    已发布 <span class="tab-count" id="cntPublished">0</span>
+                </div>
+                <div class="tab" data-tab="failed" onclick="switchTab('failed')">
+                    失败 <span class="tab-count" id="cntFailed">0</span>
+                </div>
+            </div>
+            <div class="file-items" id="fileItems"><div class="empty-state">加载中...</div></div>
+        </div>
+        <div class="resize-handle" id="resizeHandle"></div>
+
+        <div class="editor-panel">
+            <div class="empty-state" id="emptyState">👈 选择文件</div>
+
+            <div id="formEditor" style="display:none; flex-direction: column; height: 100%;">
+                <div class="editor-header">
+                    <div class="file-title" id="currentFileTitle">-</div>
+                    <div class="editor-actions">
+                        <button class="btn btn-toggle active" id="formToggle" onclick="switchMode('form')">📝</button>
+                        <button class="btn btn-toggle" id="sourceToggle" onclick="switchMode('source')">📄</button>
+                        <button class="btn btn-primary" onclick="saveForm()">💾 保存</button>
+                        <button class="btn btn-publish" id="publishBtn" onclick="publishCurrent()">📤 发布</button>
+                    </div>
+                </div>
+                <div class="editor-content">
+                    <div class="form-row">
+                        <label class="form-label">标题</label>
+                        <input type="text" class="form-input" id="inputTitle">
+                    </div>
+                    <div class="form-row">
+                        <label class="form-label">模型</label>
+                        <div class="selector-options" id="modelSelector"></div>
+                    </div>
+                    <div class="form-row">
+                        <label class="form-label">标签（逗号分隔）</label>
+                        <input type="text" class="form-input" id="inputTags">
+                    </div>
+                    <div class="form-row source-row">
+                        <input type="text" class="form-input" id="inputAuthor" placeholder="作者">
+                        <input type="url" class="form-input" id="inputSourceUrl" placeholder="来源链接">
+                        <button class="source-btn" id="openNewTab" onclick="openInNewTab()" title="新窗口（可拖到分栏）">↗️</button>
+                        <button class="source-btn" id="iframeToggle" onclick="toggleIframe()">🔗</button>
+                    </div>
+                    <div class="form-row">
+                        <label class="form-label">发布日期 (post_date)</label>
+                        <input type="text" class="form-input" id="inputPostDate" placeholder="YYYY-MM-DD">
+                    </div>
+                    <div class="media-preview">
+                        <div class="media-item"><div class="media-label">封面图</div><div class="media-content" id="imagePreview">-</div></div>
+                        <div class="media-item"><div class="media-label">视频</div><div class="media-content" id="videoPreview">-</div></div>
+                    </div>
+                    <div class="form-row" style="margin-top: 12px;">
+                        <label class="form-label">描述内容（无缩进）</label>
+                        <textarea class="desc-textarea" id="inputDescription" placeholder="输入描述..."></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="source-editor" id="sourceEditor">
+                <div class="editor-header">
+                    <div class="file-title" id="sourceFileTitle">-</div>
+                    <div class="editor-actions">
+                        <button class="btn btn-toggle" id="formToggle2" onclick="switchMode('form')">📝</button>
+                        <button class="btn btn-toggle active" id="sourceToggle2" onclick="switchMode('source')">📄</button>
+                        <button class="btn btn-primary" onclick="saveSource()">💾 保存</button>
+                        <button class="btn btn-publish" onclick="publishCurrent()">📤 发布</button>
+                    </div>
+                </div>
+                <textarea id="sourceTextarea" placeholder="原始内容..."></textarea>
+            </div>
+        </div>
+
+        <div class="iframe-panel" id="iframePanel">
+            <div class="iframe-header">
+                <span>来源</span>
+                <button class="source-btn" onclick="toggleIframe()">×</button>
+            </div>
+            <div class="iframe-content"><iframe id="sourceIframe" src="about:blank"></iframe></div>
+        </div>
+    </div>
+
+    <!-- Modal: 加载线上 -->
+    <div class="modal-mask" id="loadOnlineModal">
+        <div class="modal">
+            <div class="modal-title">⬇️ 从线上 D1 加载到草稿</div>
+            <div class="modal-body">
+                <p style="margin-bottom: 8px;">输入线上 prompt 的 slug（kebab-case）。</p>
+                <p style="margin-bottom: 8px;">会写到 <code>content/_drafts/prompts/&lt;YYYY-MM&gt;/&lt;slug&gt;.md</code>，并标记为已发布状态。</p>
+                <input type="text" class="modal-input" id="onlineSlugInput" placeholder="例如：206987039866945601-crocodile-floodgate">
+            </div>
+            <div class="modal-actions">
+                <button class="btn" onclick="hideLoadOnline()">取消</button>
+                <button class="btn btn-primary" onclick="loadOnline()">加载</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: 删除线上 -->
+    <div class="modal-mask" id="deleteOnlineModal">
+        <div class="modal">
+            <div class="modal-title">❌ 删除线上 prompt（批量）</div>
+            <div class="modal-body">
+                <p style="margin-bottom: 8px; color: #e53e3e; font-weight: 600;">⚠️ 危险操作：会从 D1 和 R2 永久删除对应内容，无法恢复！</p>
+                <textarea class="modal-input" id="deleteSlugInput" rows="8" placeholder="一行一个 slug&#10;例如：&#10;python-test&#10;curl-test-publish&#10;my-slug"></textarea>
+            </div>
+            <div class="modal-actions">
+                <button class="btn" onclick="hideDeleteOnline()">取消</button>
+                <button class="btn btn-delete" onclick="deleteOnline()">确认删除</button>
+            </div>
+            <div class="modal-body" id="deleteOnlineResult" style="display:none; padding-top:0;"></div>
+        </div>
+    </div>
+
+    <!-- Modal: 清理结果 -->
+    <div class="modal-mask" id="cleanupModal">
+        <div class="modal">
+            <div class="modal-title">🧹 清理结果</div>
+            <div class="modal-body" id="cleanupResult"></div>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="document.getElementById('cleanupModal').classList.remove('show'); loadFileList();">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        let currentFile = null;
+        let models = {};
+        let selectedModel = '';
+        let iframeVisible = false;
+        let formData = {};
+        let currentRaw = '';
+        let currentStatus = 'unpublished';
+        let mediaRefreshToken = Date.now();
+        let activeTab = 'unpublished';
+        let fileCache = { unpublished: [], published: [], failed: [] };
+
+        const API = '/api';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadFileList();
+            loadMetadata();
+            initResize();
+        });
+
+        function initResize() {
+            const handle = document.getElementById('resizeHandle');
+            const panel = document.querySelector('.file-list-panel');
+            let isResizing = false;
+            handle.addEventListener('mousedown', () => {
+                isResizing = true;
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+            });
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+                const r = document.querySelector('.app-container').getBoundingClientRect();
+                const w = e.clientX - r.left;
+                if (w >= 200 && w <= r.width * 0.5) panel.style.width = w + 'px';
+            });
+            document.addEventListener('mouseup', () => {
+                if (isResizing) {
+                    isResizing = false;
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                }
+            });
+        }
+
+        // ============ 文件列表 ============
+        async function loadFileList() {
+            try {
+                const res = await fetch(`${API}/files`);
+                const data = await res.json();
+                fileCache = data.files || { unpublished: [], published: [], failed: [] };
+                document.getElementById('cntUnpublished').textContent = fileCache.unpublished.length;
+                document.getElementById('cntPublished').textContent = fileCache.published.length;
+                document.getElementById('cntFailed').textContent = fileCache.failed.length;
+                renderFileList();
+            } catch (e) {
+                showToast('加载文件列表失败', true);
+            }
+        }
+
+        function renderFileList() {
+            const files = fileCache[activeTab] || [];
+            const el = document.getElementById('fileItems');
+            if (!files.length) {
+                el.innerHTML = `<div class="empty-state">${activeTab === 'unpublished' ? '无待编辑' : activeTab === 'published' ? '无已发布' : '无失败'}</div>`;
+                return;
+            }
+            el.innerHTML = files.map(f => {
+                const active = currentFile === f.path;
+                const cls = `file-item ${active ? 'active' : ''} ${f.status}`;
+                const meta = [];
+                if (f.published_at) meta.push(`✓ ${f.published_at}`);
+                if (f.published_slug) meta.push(`slug=${f.published_slug}`);
+                if (f.published_error) meta.push(`❌ ${f.published_error.slice(0, 50)}`);
+                return `<div class="${cls}" onclick="openFile('${f.path.replace(/'/g, "\\'")}')">
+                    <div class="file-name" title="${f.name}">${(f.title || f.name).replace(/</g, '&lt;')}</div>
+                    <div class="file-date">${f.date}${meta.length ? ' · ' + meta.join(' · ') : ''}</div>
+                </div>`;
+            }).join('');
+        }
+
+        function switchTab(tab) {
+            activeTab = tab;
+            document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+            renderFileList();
+        }
+
+        // ============ 元数据 ============
+        async function loadMetadata() {
+            try {
+                const res = await fetch(`${API}/metadata?type=models`);
+                models = await res.json();
+                renderModels();
+            } catch (e) {
+                console.error('加载模型失败', e);
+            }
+        }
+
+        function renderModels() {
+            const el = document.getElementById('modelSelector');
+            if (!el) return;
+            el.innerHTML = Object.entries(models).map(([slug, m]) =>
+                `<span class="selector-chip${selectedModel === slug ? ' selected' : ''}" onclick="selectModel('${slug}')">${m.name}</span>`
+            ).join('');
+        }
+
+        function selectModel(slug) {
+            selectedModel = slug;
+            renderModels();
+        }
+
+        // ============ 打开文件 ============
+        async function openFile(filePath) {
+            if (currentFile === filePath) return;
+            const modeForm = document.getElementById('formEditor').style.display === 'flex';
+            currentFile = filePath;
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('formEditor').style.display = 'flex';
+
+            // 高亮
+            document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
+            // 重新渲染（保留 active）
+            const files = fileCache[activeTab] || [];
+            const el = document.getElementById('fileItems');
+            el.innerHTML = files.map(f => {
+                const active = currentFile === f.path;
+                const cls = `file-item ${active ? 'active' : ''} ${f.status}`;
+                const meta = [];
+                if (f.published_at) meta.push(`✓ ${f.published_at}`);
+                if (f.published_slug) meta.push(`slug=${f.published_slug}`);
+                if (f.published_error) meta.push(`❌ ${f.published_error.slice(0, 50)}`);
+                return `<div class="${cls}" onclick="openFile('${f.path.replace(/'/g, "\\'")}')">
+                    <div class="file-name" title="${f.name}">${(f.title || f.name).replace(/</g, '&lt;')}</div>
+                    <div class="file-date">${f.date}${meta.length ? ' · ' + meta.join(' · ') : ''}</div>
+                </div>`;
+            }).join('');
+
+            try {
+                const res = await fetch(`${API}/file?path=${encodeURIComponent(filePath)}`);
+                if (!res.ok) {
+                    showToast('打开文件失败', true);
+                    return;
+                }
+                const data = await res.json();
+                const fm = data.frontmatter || {};
+                currentRaw = data.raw || '';
+                formData = { ...fm };
+                currentStatus = data.status || 'unpublished';
+                mediaRefreshToken = Date.now();
+
+                // 填表
+                document.getElementById('inputTitle').value = fm.title || '';
+                document.getElementById('inputAuthor').value = fm.author || '';
+                document.getElementById('inputSourceUrl').value = fm.source_url || '';
+                document.getElementById('inputPostDate').value = fm.post_date || fm.date || '';
+                let tags = fm.tags;
+                if (Array.isArray(tags)) tags = tags.join(', ');
+                else if (typeof tags !== 'string') tags = '';
+                document.getElementById('inputTags').value = tags;
+
+                if (Array.isArray(fm.models) && fm.models.length > 0) selectedModel = String(fm.models[0]);
+                else if (fm.models) selectedModel = String(fm.models);
+                else selectedModel = '';
+                renderModels();
+
+                // 状态徽章
+                updateStatusBadge(currentStatus);
+                // 发布按钮可用性（已发布的允许重新发布）
+                document.getElementById('publishBtn').disabled = false;
+
+                // 媒体
+                updateMedia(fm);
+
+                // 描述
+                let desc = fm.description || '';
+                if (typeof desc === 'string') {
+                    desc = desc.split('\n').map(line => line.replace(/^\s{2}/, '')).join('\n').trim();
+                }
+                document.getElementById('inputDescription').value = desc;
+
+                document.getElementById('sourceTextarea').value = currentRaw;
+                const titleEl = document.getElementById('currentFileTitle');
+                const titleSrcEl = document.getElementById('sourceFileTitle');
+                titleEl.firstChild.textContent = filePath;
+                titleSrcEl.firstChild.textContent = filePath;
+
+                switchMode(modeForm ? 'form' : 'form');
+            } catch (e) {
+                showToast('加载失败: ' + e.message, true);
+            }
+        }
+
+        function updateStatusBadge(status) {
+            document.querySelectorAll('.status-badge').forEach(b => b.remove());
+            const badge = document.createElement('span');
+            badge.className = `status-badge ${status}`;
+            const text = { unpublished: '待编辑', published: '已发布', failed: '发布失败' }[status] || status;
+            badge.textContent = text;
+            document.getElementById('currentFileTitle').appendChild(badge);
+            document.getElementById('sourceFileTitle').appendChild(badge.cloneNode(true));
+        }
+
+        function updateMedia(fm) {
+            const imgEl = document.getElementById('imagePreview');
+            const vidEl = document.getElementById('videoPreview');
+            let imgPath = fm.image || '';
+            let vidPath = fm.video || '';
+            if (imgPath) {
+                if (!imgPath.startsWith('/')) imgPath = '/' + imgPath;
+                if (!imgPath.startsWith('/media/')) imgPath = '/media' + imgPath;
+                imgPath += `?v=${mediaRefreshToken}`;
+                imgEl.innerHTML = '';
+                const img = document.createElement('img');
+                img.src = imgPath;
+                img.style.maxWidth = '100%'; img.style.maxHeight = '100%';
+                img.onerror = () => imgEl.innerHTML = '加载失败';
+                imgEl.appendChild(img);
+            } else {
+                imgEl.innerHTML = '-';
+            }
+            if (vidPath) {
+                if (!vidPath.startsWith('/')) vidPath = '/' + vidPath;
+                if (!vidPath.startsWith('/media/')) vidPath = '/media' + vidPath;
+                vidPath += `?v=${mediaRefreshToken}`;
+                vidEl.innerHTML = `<div class="lazy-media" onclick="loadMedia(this, '${vidPath}', 'video')">🎬 点击播放</div>`;
+            } else {
+                vidEl.innerHTML = '-';
+            }
+        }
+
+        function loadMedia(el, src, type) {
+            el.innerHTML = '';
+            if (type === 'img') {
+                const img = document.createElement('img');
+                img.src = src; img.style.maxWidth = '100%'; img.style.maxHeight = '100%';
+                img.onerror = () => el.innerHTML = '加载失败';
+                el.appendChild(img);
+            } else {
+                const vid = document.createElement('video');
+                vid.src = src; vid.controls = true; vid.style.maxHeight = '110px'; vid.autoplay = true;
+                vid.onerror = () => el.innerHTML = '加载失败';
+                el.appendChild(vid);
+            }
+        }
+
+        function switchMode(mode) {
+            const formOn = mode === 'form';
+            document.getElementById('formEditor').style.display = formOn ? 'flex' : 'none';
+            document.getElementById('sourceEditor').classList.toggle('active', !formOn);
+            document.getElementById('formToggle').classList.toggle('active', formOn);
+            document.getElementById('sourceToggle').classList.toggle('active', !formOn);
+            document.getElementById('formToggle2').classList.toggle('active', formOn);
+            document.getElementById('sourceToggle2').classList.toggle('active', !formOn);
+        }
+
+        function toggleIframe() {
+            iframeVisible = !iframeVisible;
+            document.getElementById('iframePanel').classList.toggle('visible', iframeVisible);
+            document.getElementById('iframeToggle').classList.toggle('active', iframeVisible);
+            if (iframeVisible) {
+                const url = document.getElementById('inputSourceUrl').value;
+                if (url) document.getElementById('sourceIframe').src = url;
+            }
+        }
+
+        function openInNewTab() {
+            const url = document.getElementById('inputSourceUrl').value;
+            if (url) window.open(url, 'md_editor_source_link');
+        }
+
+        // ============ 保存 ============
+        async function saveForm() {
+            if (!currentFile) return;
+            const title = document.getElementById('inputTitle').value.trim();
+            const author = document.getElementById('inputAuthor').value.trim();
+            const sourceUrl = document.getElementById('inputSourceUrl').value.trim();
+            const tagsStr = document.getElementById('inputTags').value;
+            const desc = document.getElementById('inputDescription').value.trim();
+            const postDate = document.getElementById('inputPostDate').value.trim();
+            const tags = tagsStr.split(',').map(t => t.trim()).filter(Boolean);
+
+            // 推断 pathInfo
+            const m = currentFile.match(/^content\/_drafts\/prompts\/([^/]+)\/([^/]+)\.md$/);
+            if (!m) { showToast('路径无法解析', true); return; }
+            const yearMonth = m[1], slug = m[2];
+
+            const newFm = { ...formData };
+            // 保留 publish 状态字段（不要重置）
+            newFm.title = title;
+            newFm.description = desc;
+            newFm.models = [selectedModel];
+            newFm.tags = tags;
+            newFm.author = author;
+            newFm.source_url = sourceUrl;
+            newFm.post_date = postDate || newFm.post_date || new Date().toISOString().split('T')[0];
+            newFm.image = `/prompts/${yearMonth}/${slug}/cover.jpg`;
+            newFm.video = `/prompts/${yearMonth}/${slug}/video.mp4`;
+            // 兼容老字段
+            newFm.date = newFm.post_date;
+            newFm.draft = true;
+            // 保留 published* 字段（如果有）
+
+            await doSave({ path: currentFile, frontmatter: newFm, body: desc });
+        }
+
+        async function saveSource() {
+            if (!currentFile) return;
+            const content = document.getElementById('sourceTextarea').value;
+            await doSave({ path: currentFile, content });
+        }
+
+        async function doSave(payload) {
+            try {
+                const res = await fetch(`${API}/file`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                if (res.ok) {
+                    const result = await res.json();
+                    showToast('✅ 已保存');
+                    await loadFileList();
+                    // 如果当前 tab 已变（比如保存的草稿变成了 published），切到对应 tab
+                    if (result.status && result.status !== activeTab) {
+                        switchTab(result.status);
+                    }
+                    await openFile(result.path);
+                } else {
+                    showToast('保存失败: ' + (await res.text()), true);
+                }
+            } catch (e) {
+                showToast('保存出错: ' + e.message, true);
+            }
+        }
+
+        // ============ 发布 ============
+        async function publishCurrent() {
+            if (!currentFile) { showToast('请先选择文件', true); return; }
+            if (!confirm(`确定要发布 "${currentFile}" 到线上吗？\n\n说明：会覆盖 R2 媒体文件；D1 按 front matter 提供的字段更新（不提供的不变）；成功后会自动 revalidate 缓存。`)) return;
+
+            const btn = document.getElementById('publishBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ 发布中...';
+
+            try {
+                const res = await fetch(`${API}/publish`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: currentFile }),
+                });
+                const data = await res.json();
+                // 详细错误日志：开发调试用
+                console.group(`📤 publish ${currentFile}`);
+                console.log('response status:', res.status);
+                console.log('response data:', data);
+                if (data.remote_response) {
+                    console.warn('remote (新站 /api/admin/publish) response:', data.remote_response);
+                }
+                if (data.status) {
+                    console.log('upstream HTTP status from 新站:', data.status);
+                }
+                console.groupEnd();
+
+                if (data.success) {
+                    const op = data.operation === 'create' ? '新建' : '更新';
+                    const upc = data.uploaded || {};
+                    showToast(`✅ ${op}成功！上传 cover=${upc.cover} video=${upc.video}`, false);
+                    await loadFileList();
+                    switchTab('published');
+                    await openFile(currentFile);
+                } else {
+                    // 组装详细错误
+                    const errParts = [];
+                    errParts.push(data.error || '未知错误');
+                    if (data.status) errParts.push(`新站 HTTP ${data.status}`);
+                    if (data.remote_response && data.remote_response.error) {
+                        errParts.push(`远端: ${data.remote_response.error}`);
+                    } else if (data.remote_response && data.remote_response.raw) {
+                        errParts.push(`远端原文: ${data.remote_response.raw.slice(0, 200)}`);
+                    }
+                    const fullErr = errParts.join(' | ');
+                    showToast(`❌ 发布失败: ${fullErr}（已记录到 front matter，可在"失败"tab 重试）`, true);
+                    console.error('完整发布错误:', fullErr, data);
+                    await loadFileList();
+                    switchTab('failed');
+                    await openFile(currentFile);
+                }
+            } catch (e) {
+                console.error('publish 请求异常:', e);
+                showToast('发布出错: ' + e.message, true);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📤 发布';
+            }
+        }
+
+        // ============ 清理 ============
+        async function cleanupPublished() {
+            const cnt = fileCache.published.length;
+            if (!cnt) { showToast('没有可清理的已发布草稿'); return; }
+            if (!confirm(`将清理 ${cnt} 个已发布草稿（会先校验 D1，确认存在才会删）。继续？`)) return;
+            try {
+                const res = await fetch(`${API}/cleanup`, { method: 'POST' });
+                const data = await res.json();
+                const resultEl = document.getElementById('cleanupResult');
+                let html = `<p>共 ${data.total} 个候选：</p>`;
+                html += `<p class="ok">✓ 已清理 ${data.deleted.length} 个</p>`;
+                if (data.deleted.length) {
+                    html += '<ul>';
+                    data.deleted.forEach(d => html += `<li class="ok">${d.path}${d.deleted_assets ? ' (+素材)' : ''}</li>`);
+                    html += '</ul>';
+                }
+                if (data.skipped.length) {
+                    html += `<p class="skip">↪ 跳过 ${data.skipped.length} 个（线上不存在或缺凭证）</p><ul>`;
+                    data.skipped.forEach(s => html += `<li class="skip">${s.path}: ${s.reason}</li>`);
+                    html += '</ul>';
+                }
+                if (data.errors.length) {
+                    html += `<p class="fail">✗ 错误 ${data.errors.length} 个</p><ul>`;
+                    data.errors.forEach(e => html += `<li class="fail">${e.path}: ${e.error}</li>`);
+                    html += '</ul>';
+                }
+                resultEl.innerHTML = html;
+                document.getElementById('cleanupModal').classList.add('show');
+            } catch (e) {
+                showToast('清理失败: ' + e.message, true);
+            }
+        }
+
+        // ============ 加载线上 ============
+        function showLoadOnline() {
+            document.getElementById('onlineSlugInput').value = '';
+            document.getElementById('loadOnlineModal').classList.add('show');
+        }
+        function hideLoadOnline() {
+            document.getElementById('loadOnlineModal').classList.remove('show');
+        }
+        async function loadOnline() {
+            const slug = document.getElementById('onlineSlugInput').value.trim();
+            if (!slug) { showToast('请输入 slug', true); return; }
+            try {
+                const res = await fetch(`${API}/load-online`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ slug }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`✅ 已加载到 ${data.path}`);
+                    hideLoadOnline();
+                    await loadFileList();
+                    switchTab('published');
+                    await openFile(data.path);
+                } else {
+                    showToast('加载失败: ' + (data.error || '未知'), true);
+                }
+            } catch (e) {
+                showToast('加载出错: ' + e.message, true);
+            }
+        }
+
+        // ============ 删除线上 ============
+        function showDeleteOnline() {
+            document.getElementById('deleteSlugInput').value = '';
+            document.getElementById('deleteOnlineResult').style.display = 'none';
+            document.getElementById('deleteOnlineModal').classList.add('show');
+        }
+        function hideDeleteOnline() {
+            document.getElementById('deleteOnlineModal').classList.remove('show');
+        }
+        async function deleteOnline() {
+            const raw = document.getElementById('deleteSlugInput').value;
+            // 支持完整 URL（https://.../en/prompts/<slug>）或纯 slug
+            const slugs = raw.split('\n').map(line => {
+                const s = line.trim();
+                if (!s) return '';
+                try {
+                    const u = new URL(s);
+                    // 提取 /en/prompts/<slug> 中的 slug
+                    const m = u.pathname.match(/\/prompts\/(.+)/);
+                    return m ? m[1] : s;
+                } catch {
+                    return s; // 纯 slug 原样返回
+                }
+            }).filter(Boolean);
+            if (!slugs.length) { showToast('请输入至少一个 slug', true); return; }
+            if (!confirm(`确定要删除 ${slugs.length} 个线上 prompt 吗？此操作不可恢复！`)) return;
+            const resultEl = document.getElementById('deleteOnlineResult');
+            resultEl.style.display = 'block';
+            resultEl.innerHTML = '<p>删除中...</p>';
+            const results = { ok: 0, fail: 0, items: [] };
+            for (const slug of slugs) {
+                try {
+                    const res = await fetch(`${API}/delete-online`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ slug }),
+                    });
+                    const data = await res.json();
+                    if (data.ok) {
+                        results.ok++;
+                        results.items.push({ slug, status: 'ok', detail: data.deleted });
+                    } else if (res.status === 404 || (data.error && data.error.includes('不存在'))) {
+                        // 404 或"不存在"视为成功（说明已删或本来就没有）
+                        results.ok++;
+                        results.items.push({ slug, status: 'not_found', error: data.error });
+                    } else {
+                        results.fail++;
+                        results.items.push({ slug, status: 'fail', error: data.error });
+                    }
+                } catch (e) {
+                    results.fail++;
+                    results.items.push({ slug, status: 'fail', error: e.message });
+                }
+            }
+            let html = `<p><b>完成：</b>✓ ${results.ok} 个 &nbsp; ✗ ${results.fail} 个</p>`;
+            html += '<ul style="max-height:300px;overflow-y:auto;">';
+            for (const item of results.items) {
+                if (item.status === 'ok') {
+                    const d = item.detail;
+                    html += `<li class="ok">✓ ${item.slug} — D1:${d.d1?'✓':'✗'} cover:${d.r2.cover?'✓':'✗'} video:${d.r2.video?'✓':'✗'}</li>`;
+                } else if (item.status === 'not_found') {
+                    html += `<li class="warn">↪ ${item.slug}: ${item.error}（线上已无此记录）</li>`;
+                } else {
+                    html += `<li class="fail">✗ ${item.slug}: ${item.error}</li>`;
+                }
+            }
+            html += '</ul>';
+            resultEl.innerHTML = html;
+            await loadFileList();
+        }
+
+        // ============ 工具 ============
+        function showToast(msg, isError = false, isWarn = false) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = 'toast' + (isError ? ' error' : isWarn ? ' warn' : '') + ' show';
+            clearTimeout(showToast._tid);
+            showToast._tid = setTimeout(() => t.classList.remove('show'), isError ? 5000 : 2500);
+        }
+    </script>
+</body>
+</html>

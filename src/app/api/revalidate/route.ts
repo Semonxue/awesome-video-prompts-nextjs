@@ -14,16 +14,37 @@
  * 注意：
  *   - OpenNext on Workers 的 revalidatePath() 作用于 Next.js ISR 缓存层
  *   - 配合 CF Cache Rules（边缘 1h TTL）实现完整缓存刷新链路
+ *
+ * ⚠️ Secret 读取必须用 ctx.env，不能用 process.env：
+ *   OpenNext 的 populateProcessEnv 只把 typeof value === "string" 的项塞进 process.env，
+ *   但 CF 的 secret 是 wrapper 对象（非 string），所以 process.env.REVALIDATE_SECRET 在
+ *   Workers 运行时永远是 undefined。必须从 ctx.env 直接读，兼容 wrapper.toString()。
  */
 import { revalidatePath } from 'next/cache';
 import { type NextRequest, NextResponse } from 'next/server';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 
-const REVALIDATE_SECRET = process.env.REVALIDATE_SECRET ?? '';
+/** 统一从 ctx.env 读 CF Secret，尝试多种命名变体（Dashboard 可能用 kebab-case 或 SNAKE_CASE） */
+async function getSecret(...names: string[]): Promise<string> {
+  const ctx = await getCloudflareContext({ async: true });
+  const env = ctx.env as unknown as Record<string, unknown>;
+  for (const name of names) {
+    const v = env[name];
+    if (v === undefined || v === null) continue;
+    if (typeof v === 'string' && v.length > 0) return v;
+    if (typeof v === 'function') {
+      const s = String(v());
+      if (!s.startsWith('[')) return s;
+    }
+  }
+  return '';
+}
 
 export async function POST(req: NextRequest) {
   const secret = req.nextUrl.searchParams.get('secret');
   const path = req.nextUrl.searchParams.get('path') ?? '/en';
 
+  const REVALIDATE_SECRET = await getSecret('REVALIDATE_SECRET', 'revalidate-secret');
   if (!secret || secret !== REVALIDATE_SECRET) {
     return NextResponse.json({ error: 'Invalid or missing secret' }, { status: 401 });
   }

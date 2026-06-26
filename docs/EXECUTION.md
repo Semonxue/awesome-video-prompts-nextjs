@@ -1,8 +1,8 @@
 # Awesome Video Prompts (Next.js) — 执行母版
 
-> 状态：**Phase 4 UAT 进行中 — Lighthouse Perf 优化阶段**（preconnect ✅ / LCP fetchpriority ✅ / ISR revalidate ✅ / SEO ✅ / e2e 9/9 ✅ / A11y target-size ✅ / CF Cache Rules 待手动配 / Lighthouse Perf 待验证）
+> 状态：**Phase 4 + Phase 5 编辑工作流完成**（preconnect ✅ / LCP fetchpriority ✅ / ISR revalidate ✅ / SEO ✅ / e2e 9/9 ✅ / A11y target-size ✅ / md-editor 新流程 ✅ / 草稿 → D1 + R2 直传 ✅）
 > 仓库：`awesome-video-prompts-nextjs`（独立仓库）
-> 最后更新：2026-06-27（P0 全部完成，提交 d11df26）
+> 最后更新：2026-06-27（md-editor 直传新站完成，老 Hugo 仓库退役）
 > 在线：`https://awesome-video-prompts-nextjs.semonxue.workers.dev`（en/zh/ja 三语言，全量数据已上线）
 > 性能基线：**Perf 71 / A11y 93 / SEO 100 / BP 100**（详见 §17）
 
@@ -300,6 +300,33 @@ CREATE TABLE prompt_models (prompt_id, model_id, PRIMARY KEY (prompt_id, model_i
 - ☐ 老 URL 301 规则部署（`/zh-cn/...` → `/zh/...` 等）
 - ☐ **不在本项目做**（由 CF Dashboard 配路由 + DNS）
 
+### Phase 5.5：内容编辑工作流（已完成 2026-06-27）
+- ✅ md-editor 迁到新项目 `tools/md-editor/`
+- ✅ LLM 抓取指令 `tools/dl-x-videos.md` 重写（适配 D1 + R2）
+- ✅ `/api/admin/publish`：multipart → D1 部分字段 upsert + R2 覆盖 + revalidate
+- ✅ `/api/admin/list-prompt`：从 D1 拉线上 prompt 到草稿
+- ✅ md-editor 状态 tab：待编辑 / 已发布 / 失败
+- ✅ md-editor 一键清理已发布草稿（调 D1 二次校验）
+- ✅ 老 Hugo 仓库退役
+- ☐ `wrangler secret put admin-secret --name awesome-video-prompts-nextjs`（首次部署后手动）
+- ☐ 监控发布失败率（CF Analytics）
+
+#### 编辑流程速查
+
+```
+LLM 抓 X → content/_drafts/prompts/<YYYY-MM>/<slug>.md
+       ↓
+md-editor 编辑（点 📤 发布）
+       ↓
+HTTP POST /api/admin/publish (multipart: slug + frontmatter + cover + video)
+       ↓
+D1 upsert + R2 上传 + revalidate（原子化）
+       ↓
+本地 front matter 加 published: true, published_at, published_slug
+       ↓
+md-editor 切到"已发布" tab → 点 🧹 一键清理 → 调 D1 校验 → 删本地
+```
+
 ---
 
 ## 8. 验收标准
@@ -417,6 +444,13 @@ CREATE TABLE prompt_models (prompt_id, model_id, PRIMARY KEY (prompt_id, model_i
 | 29 | **Infinite scroll 改客户端累积 + JSON API**（取代 v0.5 的 router.push 触底跳页） | 保留 router.push / 用 RSC streaming partial reload | 用户实测反馈"整页跳转与预期差距大"——v0.5 实现虽 URL 跟着变但仍是整页 SSR，体验差；客户端累积是真 infinite scroll 标准做法；首屏仍 SSR（保 SEO + ISR），后续 JSON 增量拉取（深页 SEO 价值低可接受）；URL 不变，滚动自然延续 | 2026-06-26 |
 | 30 | **Infinite scroll API endpoint 走 CDN 缓存（s-maxage=3600, swr=86400）** | 走 Worker 内部 cache / 不缓存 | 同 SSR 页同源缓存策略：1h 命中零 D1 调用，stale-while-revalidate 后台刷新；首次冷启 + 高频翻页用户体验最佳 | 2026-06-26 |
 | 31 | **新增 grid.loadingMore 翻译键**（en/zh/ja） | 让 GridEngine 复用 model.loadingMore | model.loadingMore 与 grid.loadingMore 语义虽相似但 i18n 命名空间需严格对齐；分两个键避免后续扩展（如 grid 单独需要不同文案）影响其他 namespace | 2026-06-26 |
+| 32 | **md-editor 直接 HTTP 调新站 API**（不走 git push / wrangler CLI） | GitHub Actions 同步 / wrangler CLI 本地脚本 | 编辑工作流与 git 解耦；发布即时生效；新站自带 admin 入口为将来 UI 铺路；md-editor UI 直接显示发布状态 | 2026-06-27 |
+| 33 | **草稿 MD 永远在 `_drafts/`，状态用 front matter 区分** | 切换 draft:false 时搬文件夹 | 避免"忘记 git push"或"commit 了但忘了 deploy"的同步问题；md-editor 列表可一目了然看状态 | 2026-06-27 |
+| 34 | **D1 部分字段 upsert（PATCH 语义）** | 全量替换 / 删了重建 | 编辑线上已有 prompt 时不丢失未提供的字段；空 front matter 也能"只更新 description" | 2026-06-27 |
+| 35 | **R2 每次覆盖上传** | 增量 / 检查后跳过 | 幂等简单；重发总是最新；不占额外存储决策 | 2026-06-27 |
+| 36 | **revalidate 立即触发** | 1 分钟 batch | 用户期望"按完发布立刻看到"；当前 IS 重渲染 3 个 locale 路径 < 200ms | 2026-06-27 |
+| 37 | **草稿清理前调 D1 list-prompt 二次校验** | 只看本地 front matter 标记 | 防止"状态写错"导致删了本地但线上其实没生效；容错友好 | 2026-06-27 |
+| 38 | **老 Hugo 仓库 `awesome-video-prompts` 退役**（md-editor + dl-x-videos 迁到新项目 tools/） | 保留老仓库做只读数据源 | 编辑工作流完全在 Next.js 项目内；老仓库 14k+ 文件不再参与日常；MD 内容已全量灌入 D1 | 2026-06-27 |
 
 ---
 

@@ -38,6 +38,8 @@ Thumbs.db
 *~
 .vscode/
 .idea/
+static/_drafts/*
+content/_drafts/*
 
 # ============================================================
 # Project-specific

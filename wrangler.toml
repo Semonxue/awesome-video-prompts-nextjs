@@ -34,8 +34,10 @@ bucket_name = "awesome-video-prompts-media"
 [vars]
 NEXT_PUBLIC_SITE_URL = "https://awesome-video-prompts-nextjs.semonxue.workers.dev"
 NEXT_PUBLIC_R2_PUBLIC_URL = "https://static.awesomevideoprompts.com"
-# REVALIDATE_SECRET 必须通过 wrangler secret set revalidate-secret 设置，不写在此文件
+# REVALIDATE_SECRET 必须通过 wrangler secret put revalidate-secret 设置，不写在此文件
+# ADMIN_SECRET 也必须通过 wrangler secret put admin-secret 设置（md-editor publish 调用）
 # wrangler secret put revalidate-secret --name awesome-video-prompts-nextjs
+# wrangler secret put admin-secret --name awesome-video-prompts-nextjs
 
 # ============================================================
 # 部署环境（dev / staging / production）

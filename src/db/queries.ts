@@ -170,7 +170,12 @@ export async function listPrompts(args: ListPromptsArgs): Promise<ListPromptsRes
   if (q && q.trim()) {
     const kw = `%${q.trim().toLowerCase()}%`;
     conditions.push(
-      or(like(sql`lower(${prompts.title})`, kw), like(sql`lower(${prompts.description})`, kw))!,
+      or(
+        like(sql`lower(${prompts.title})`, kw),
+        like(sql`lower(${prompts.description})`, kw),
+        like(prompts.slug, kw),
+        like(sql`lower(${prompts.author})`, kw),
+      )!,
     );
   }
 
