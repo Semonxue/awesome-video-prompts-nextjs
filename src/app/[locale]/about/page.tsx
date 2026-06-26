@@ -14,10 +14,11 @@ const SITE_URL =
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: 'about' });
   const canonical = `${SITE_URL}/${locale}/about`;
   return {
-    title: 'about.title',
-    description: 'about.intro',
+    title: t('title'),
+    description: t('intro'),
     alternates: {
       canonical,
       languages: {
