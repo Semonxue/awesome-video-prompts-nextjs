@@ -2,16 +2,16 @@
  * PromptCardVideo — 卡片 hover 自动播放视频
  *
  * 设计：
- *   - hover 触发：先取全局视频加载队列槽位（限制同时下载数=2，避免网络阻塞）
- *     → 设 src → 视频 onCanPlay 移除 loading → onPlaying 加 .is-playing
+ *   - hover 监听由父级 PromptCard 负责（直接监听 .prompt-image-wrapper，更可靠），
+ *     本组件通过 forwardRef 暴露 imperative API（play / pause）供父级调用
+ *   - 父级 hover 进入 → play（设 src + load + play，自动处理队列并发）
+ *   - 父级 hover 离开 → pause + 重置 currentTime + 移除 .is-playing（保留 src 复用）+ 释放队列槽位
  *   - 视频就绪后：父级 wrapper 加 .is-playing → cover fade-out + video fade-in（无缝替换）
- *   - 离开时：pause + 重置 currentTime + 移除 .is-playing（保留 src 复用）
- *   - 组件卸载：释放队列槽位
  *
  * 队列是模块级单例，所有卡片共享 2 个并发下载槽位。
  */
 
-import { useEffect, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 
 /** 全局视频加载队列：限制同时下载数，避免 hover 多个卡片时网络拥堵 */
 class VideoLoadQueue {
@@ -42,18 +42,26 @@ class VideoLoadQueue {
 
 const videoQueue = new VideoLoadQueue(2);
 
+export interface PromptCardVideoHandle {
+  play: () => Promise<void>;
+  pause: () => void;
+}
+
 interface PromptCardVideoProps {
   src: string;
   title: string;
 }
 
-export default function PromptCardVideo({ src, title }: PromptCardVideoProps) {
+const PromptCardVideo = forwardRef<PromptCardVideoHandle, PromptCardVideoProps>(function PromptCardVideo(
+  { src, title },
+  ref,
+) {
   const slotRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const releaseRef = useRef<(() => void) | null>(null);
   const acquiredRef = useRef(false);
 
-  async function handleEnter() {
+  async function play() {
     const v = videoRef.current;
     const slot = slotRef.current;
     if (!v || !slot) return;
@@ -77,7 +85,7 @@ export default function PromptCardVideo({ src, title }: PromptCardVideoProps) {
     });
   }
 
-  function handleLeave() {
+  function pause() {
     const v = videoRef.current;
     const slot = slotRef.current;
     if (!v || !slot) return;
@@ -86,7 +94,26 @@ export default function PromptCardVideo({ src, title }: PromptCardVideoProps) {
     slot.classList.remove('is-playing');
     slot.classList.remove('is-loading');
     // 保留 src：下次 hover 不再下载
+    // 释放队列槽位
+    if (releaseRef.current) {
+      releaseRef.current();
+      releaseRef.current = null;
+      acquiredRef.current = false;
+    }
   }
+
+  useImperativeHandle(ref, () => ({ play, pause }), []);
+
+  // 卸载时释放队列槽位（如果还在 hover 中）
+  useEffect(() => {
+    return () => {
+      if (releaseRef.current) {
+        releaseRef.current();
+        releaseRef.current = null;
+        acquiredRef.current = false;
+      }
+    };
+  }, []);
 
   function handleCanPlay() {
     const slot = slotRef.current;
@@ -98,24 +125,8 @@ export default function PromptCardVideo({ src, title }: PromptCardVideoProps) {
     if (slot) slot.classList.add('is-playing');
   }
 
-  // 卸载时释放队列槽位
-  useEffect(() => {
-    return () => {
-      if (releaseRef.current) {
-        releaseRef.current();
-        releaseRef.current = null;
-        acquiredRef.current = false;
-      }
-    };
-  }, []);
-
   return (
-    <div
-      ref={slotRef}
-      className="prompt-video-slot"
-      onMouseEnter={handleEnter}
-      onMouseLeave={handleLeave}
-    >
+    <div ref={slotRef} className="prompt-video-slot">
       <div className="video-loader" aria-hidden="true">
         <span className="video-loader-dot" />
         <span className="video-loader-dot" />
@@ -135,4 +146,6 @@ export default function PromptCardVideo({ src, title }: PromptCardVideoProps) {
       />
     </div>
   );
-}
+});
+
+export default PromptCardVideo;

@@ -833,6 +833,7 @@
       font-size: 10px;
       font-weight: 500;
       color: var(--accent-primary);
+      text-decoration: none;
       z-index: 10;
     }
 
@@ -844,7 +845,9 @@
       transition: opacity 0.3s ease;
     }
 
-    /* hover 视频层：默认透明；wrapper 加 .is-playing 后 opacity:1，无缝替换 cover */
+    /* hover 视频层：默认透明；wrapper 加 .is-playing 后 opacity:1，无缝替换 cover
+       hover 监听由父级 .prompt-image-wrapper 负责（更可靠：直接监听 mouseEnter/Leave）
+       slot 设 pointer-events: none → click 透传给 img + article.onClick（复制） */
     .prompt-video-slot {
       position: absolute;
       inset: 0;
@@ -920,7 +923,8 @@
       transform: translateY(0);
     }
 
-    /* hover overlay：纯视觉提示，不拦截 click（pointer-events: none 修复复制失效 bug） */
+    /* hover overlay：纯视觉提示，不拦截 click（pointer-events: none 修复复制失效 bug）
+       视频开始播放（.is-playing）后淡出，避免遮挡视频画面 */
     .prompt-overlay {
       position: absolute;
       inset: 0;
@@ -931,10 +935,16 @@
       opacity: 0;
       transition: opacity 0.2s;
       pointer-events: none;
+      z-index: 4;
     }
 
     .prompt-card:hover .prompt-overlay {
       opacity: 1;
+    }
+
+    /* 视频播放中：cover + overlay 都淡出，画面交给 video */
+    .prompt-image-wrapper:has(.prompt-video-slot.is-playing) .prompt-overlay {
+      opacity: 0;
     }
     
     .hover-text {
@@ -982,17 +992,19 @@
       transition: opacity 0.2s ease;
     }
 
+    /* hover 提示"点击复制"——与缩略图黑色 overlay 区分 */
     .prompt-description::after {
-      content: attr(data-hint);
+      content: 'Click to copy';
       position: absolute;
       left: 50%;
       top: 50%;
-      transform: translate(-50%, -50%);
-      padding: 4px 6px;
+      transform: translate(-50%, -50%) scale(0.95);
+      padding: 4px 10px;
       border-radius: 4px;
-      background: #1f2937;
+      background: var(--accent-primary);
       color: #ffffff;
       font-size: 11px;
+      font-weight: 500;
       line-height: 1.2;
       white-space: nowrap;
       opacity: 0;
@@ -1001,14 +1013,14 @@
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
       transition: opacity 0.2s ease, transform 0.2s ease;
     }
-    
+
     .prompt-description:hover {
       color: var(--text-primary);
     }
 
     .prompt-description:hover::after {
       opacity: 1;
-      transform: translate(-50%, -50%) scale(1.02);
+      transform: translate(-50%, -50%) scale(1);
     }
     
     .prompt-tags {
@@ -1023,6 +1035,13 @@
       background: var(--bg-muted);
       border-radius: 100px;
       color: var(--text-secondary);
+      text-decoration: none;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .prompt-tag:hover {
+      background: var(--accent-primary);
+      color: white;
     }
 
     .prompt-meta {
@@ -1052,7 +1071,12 @@
       color: var(--accent-primary);
       font-size: 10px;
       font-weight: 500;
-      text-decoration: underline;
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+
+    .author-name:hover {
+      color: var(--accent-hover);
     }
 
     .prompt-date {

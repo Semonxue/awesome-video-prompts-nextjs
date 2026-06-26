@@ -4,19 +4,21 @@
  * PromptCard — 瀑布流卡片（5 列 CSS Grid + natural aspect ratio）
  *
  * 行为：
- *   - 点击任意位置：复制 description 到剪贴板 + ✓ Copied! 反馈
- *   - hover：cover (img) 显示，视频 (PromptCardVideo) 加载并播放 → 无缝替换
+ *   - 缩略图 hover → PromptCardVideo 自动加载并播放（无缝替换 cover）
+ *   - 缩略图 click 或 提示词文字 click → 复制 description 到剪贴板 + ✓ Copied! 反馈
+ *   - 标题 / model badge / tag click → 跳转（stopPropagation 阻止冒泡）
+ *   - hover 缩略图 / hover 提示词文字 → 不同视觉反馈（区分两者）
  *   - 视觉对齐 awesomevideoprompts.com：natural aspect ratio、model badge、tags、author/date
  *
  * 数据契约：图片 naturalW/naturalH 在客户端 useEffect 后注入 --card-aspect CSS var，
  *           .prompt-image-wrapper 继承此 aspect-ratio 实现"比例跟随原图"。
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import type { PromptCardData } from './types';
-import PromptCardVideo from './PromptCardVideo';
+import PromptCardVideo, { type PromptCardVideoHandle } from './PromptCardVideo';
 
 function truncate(s: string, n: number): string {
   if (!s) return '';
@@ -39,6 +41,7 @@ export function PromptCard({ prompt, locale }: Props) {
 
   const [copied, setCopied] = useState(false);
   const [aspect, setAspect] = useState<number | null>(null);
+  const videoRef = useRef<PromptCardVideoHandle>(null);
 
   // 读封面图 naturalW/naturalH → 注入 CSS var，让 wrapper 跟随原图比例
   useEffect(() => {
@@ -58,10 +61,10 @@ export function PromptCard({ prompt, locale }: Props) {
     img.src = prompt.coverUrl;
   }, [prompt.coverUrl]);
 
-  async function handleCopy(e: React.MouseEvent | React.KeyboardEvent) {
+  async function handleCopy(e?: React.MouseEvent | React.KeyboardEvent) {
     if (!prompt.description) return;
-    e.preventDefault();
-    e.stopPropagation();
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
     try {
       await navigator.clipboard.writeText(prompt.description);
       flashCopied();
@@ -109,7 +112,15 @@ export function PromptCard({ prompt, locale }: Props) {
       }}
     >
       {prompt.coverUrl && (
-        <div className="prompt-image-wrapper">
+        <div
+          className="prompt-image-wrapper"
+          onMouseEnter={() => {
+            videoRef.current?.play();
+          }}
+          onMouseLeave={() => {
+            videoRef.current?.pause();
+          }}
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={prompt.coverUrl}
@@ -136,10 +147,10 @@ export function PromptCard({ prompt, locale }: Props) {
           </div>
 
           {prompt.videoUrl && (
-            <PromptCardVideo src={prompt.videoUrl} title={prompt.title} />
+            <PromptCardVideo ref={videoRef} src={prompt.videoUrl} title={prompt.title} />
           )}
 
-          {/* hover 提示层（不拦截 click） */}
+          {/* hover 提示层（不拦截 click，视频播放时淡出） */}
           <div className="prompt-overlay" aria-hidden="true">
             <span className="hover-text">{t('hoverHint')}</span>
           </div>
@@ -158,7 +169,11 @@ export function PromptCard({ prompt, locale }: Props) {
         </h3>
 
         {prompt.description && (
-          <p className="prompt-description">
+          <p
+            className="prompt-description"
+            onClick={handleCopy}
+            title={t('clickToCopyTitle')}
+          >
             <span className="prompt-description-text">{truncate(prompt.description, 180)}</span>
           </p>
         )}

@@ -176,8 +176,11 @@ body:has(.site-header.header-compact) .main-content {
 }
 
 /* ============================================================
- * search-section 紧凑布局：search 框 max 320px，model tabs flex: 1
+ * search-section 紧凑布局：search 框 max 320px
  * (老站 search 400px 太宽，1200px viewport 容易 wrap)
+ *
+ * 关键：model-tags / content-tags 不再 flex: 1，否则会撑满剩余空间
+ * 导致 .search-row 的 justify-content: center 失效，内容贴左
  * ============================================================ */
 .search-box-wrapper:not(.compact) {
   flex-shrink: 0;
@@ -185,7 +188,7 @@ body:has(.site-header.header-compact) .main-content {
 }
 .model-tags,
 .content-tags {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
 }
 
@@ -212,5 +215,237 @@ body:has(.site-header.header-compact) .main-content {
   .grid-header-links {
     flex-wrap: wrap;
     gap: 8px;
+  }
+}
+
+/* ============================================================
+ * Prompt 详情页 — /[locale]/prompts/[slug]
+ *
+ * 视觉对齐 awesomevideoprompts.com/prompts/[slug]/
+ * 结构：media → H1 → 4 格 meta grid → copy prompt 区块 → related → 上下篇导航
+ * ============================================================ */
+.prompt-detail {
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+/* 视频/封面：max-width 720px 居中，圆角 */
+.prompt-detail__media {
+  margin: 0 auto 32px;
+  max-width: 720px;
+}
+.prompt-detail__video,
+.prompt-detail__cover {
+  display: block;
+  width: 100%;
+  border-radius: 12px;
+  background: var(--bg-muted);
+}
+
+/* H1 title：粗体大字号 */
+.prompt-detail__title {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin: 0 0 24px;
+}
+
+/* 4 格 meta grid：Date / Tags / Models / Source */
+.prompt-detail__meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 32px;
+  padding: 20px 24px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  margin-bottom: 32px;
+}
+.meta-cell {
+  min-width: 0;
+}
+.meta-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 6px;
+}
+.meta-value {
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  word-break: break-word;
+}
+.meta-tags,
+.meta-models {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.meta-link {
+  display: inline-block;
+  font-size: 12px;
+  padding: 4px 10px;
+  background: var(--bg-muted);
+  border-radius: 100px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+.meta-link:hover {
+  background: var(--accent-primary);
+  color: white;
+}
+.meta-link--source {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  color: var(--accent-primary);
+  padding: 4px 0;
+  text-decoration: none;
+}
+.meta-link--source:hover {
+  background: transparent;
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+.meta-ext-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+/* Copy prompt 区块：H2 + CopyButton + paragraph */
+.prompt-detail__copy {
+  margin-bottom: 40px;
+}
+.copy-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.copy-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+.copy-body {
+  padding: 20px 24px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.copy-body:hover {
+  border-color: var(--accent-primary);
+  background: var(--bg-muted);
+}
+.copy-paragraph {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  margin: 0 0 12px;
+  white-space: pre-wrap;
+}
+.copy-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+/* You Might Also Like */
+.prompt-detail__related {
+  margin-bottom: 40px;
+}
+.prompt-detail__related h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 16px;
+}
+
+/* 上下篇导航 */
+.prompt-detail__nav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-subtle);
+}
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s, transform 0.15s;
+  min-width: 0;
+}
+.nav-link:hover {
+  border-color: var(--accent-primary);
+  transform: translateY(-1px);
+}
+.nav-link--next {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+.nav-thumb {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.nav-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.nav-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.nav-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+@media (max-width: 640px) {
+  .prompt-detail__title {
+    font-size: 24px;
+  }
+  .prompt-detail__meta-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .prompt-detail__nav {
+    grid-template-columns: 1fr;
+  }
+  .nav-link--next {
+    flex-direction: row;
+    text-align: left;
   }
 }
