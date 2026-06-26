@@ -87,7 +87,8 @@
     "page": "Page {page}",
     "prev": "← Prev",
     "next": "Next →",
-    "noPrompts": "No prompts found."
+    "noPrompts": "No prompts found.",
+    "loadingMore": "Loading more prompts…"
   },
   "filter": {
     "allModels": "All Models",

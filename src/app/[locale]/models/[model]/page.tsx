@@ -27,12 +27,24 @@ interface Props {
   searchParams: Promise<{ tag?: string; page?: string }>;
 }
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://awesome-video-prompts-nextjs.semonxue.workers.dev';
+
 export async function generateMetadata({ params }: Props) {
   const { locale, model } = await params;
   const name = formatModelName(model);
+  const canonical = `${SITE_URL}/${locale}/models/${model}`;
   return {
     title: `${name} Prompts | Awesome Video Prompts`,
     description: `Browse ${name} video prompts on Awesome Video Prompts`,
+    alternates: {
+      canonical,
+      languages: {
+        en: `${SITE_URL}/en/models/${model}`,
+        zh: `${SITE_URL}/zh/models/${model}`,
+        ja: `${SITE_URL}/ja/models/${model}`,
+        'x-default': `${SITE_URL}/en/models/${model}`,
+      },
+    },
   };
 }
 
@@ -64,11 +76,6 @@ export default async function ModelPage({ params, searchParams }: Props) {
 
   // 全集 modelOptions（顶部 model tabs，不分 locale）
   const modelOptions = await listAllModels();
-
-  // 下一页 URL
-  const nextPageUrl = result.hasMore
-    ? `/${locale}/models/${model}/?${buildQs({ ...sp, page: String(page + 1) })}`
-    : null;
 
   return (
     <>
@@ -124,12 +131,12 @@ export default async function ModelPage({ params, searchParams }: Props) {
 
         {modelItems.length > 0 ? (
           <GridEngine
-            items={modelItems}
-            locale={locale}
+            initialItems={modelItems}
             total={result.total}
-            hasMore={result.hasMore}
-            nextPageUrl={nextPageUrl}
-            loadingText={t('loadingMore')}
+            filters={{ model, tag: sp.tag }}
+            initialPage={page}
+            pageSize={PAGE_SIZE}
+            locale={locale}
           />
         ) : (
           <div className="empty-state">
@@ -141,13 +148,4 @@ export default async function ModelPage({ params, searchParams }: Props) {
       <Footer locale={locale} />
     </>
   );
-}
-
-/** 把 searchParams 对象拼成 query string（skip 空值） */
-function buildQs(params: Record<string, string | undefined>): string {
-  const usp = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) {
-    if (v && v.trim()) usp.set(k, v);
-  }
-  return usp.toString();
 }

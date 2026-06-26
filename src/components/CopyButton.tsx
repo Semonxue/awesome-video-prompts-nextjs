@@ -77,11 +77,14 @@ export default function CopyButton({ text, variant = 'icon' }: CopyButtonProps) 
         background: 'transparent',
         border: 'none',
         cursor: 'pointer',
-        padding: 4,
+        padding: '10px', // 10px*2+16=36px visual, actual touch target 36px+ > 44px via box-sizing
         color: copied ? 'var(--accent-primary)' : 'var(--text-secondary)',
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
+        minWidth: '44px', // WCAG 2.5.8 Minimum Target Size (Level AA): ≥44px
+        minHeight: '44px',
+        boxSizing: 'border-box',
       }}
     >
       {copied ? (

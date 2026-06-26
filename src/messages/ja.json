@@ -87,7 +87,8 @@
     "page": "{page} ページ",
     "prev": "← 前へ",
     "next": "次へ →",
-    "noPrompts": "プロンプトが見つかりません"
+    "noPrompts": "プロンプトが見つかりません",
+    "loadingMore": "プロンプトをもっと読み込み中…"
   },
   "filter": {
     "allModels": "すべてのモデル",

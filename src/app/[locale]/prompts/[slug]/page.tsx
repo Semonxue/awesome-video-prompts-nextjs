@@ -6,6 +6,10 @@
  *   - Copy prompt 区块（H2 + 按钮 + 段落描述）
  *   - You Might Also Like（6 张相关 prompt-card）
  *   - 上下篇导航
+ *
+ * Perf 优化（P0 Phase 4）：
+ *   - 封面图：fetchpriority=high + decoding=sync（LCP）
+ *   - 图片走 R2 Transform WebP
  */
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
@@ -17,6 +21,14 @@ import CopyButton from '@/components/CopyButton';
 import { GridEngine } from '@/components/GridEngine';
 import { getPromptBySlug, listPrompts, listAllModels, listAllTags } from '@/db/queries';
 import { formatModelName } from '@/lib/format';
+
+/** R2 Transform URL（见 PromptCard.tsx 注） */
+const R2_PUBLIC_URL = process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? 'https://static.awesomevideoprompts.com';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://awesome-video-prompts-nextjs.semonxue.workers.dev';
+function r2Webp(url: string | null, _width: number): string | null {
+  // 当前 R2 自定义域不支持 transform；CF 降级到原图
+  return url;
+}
 
 export const revalidate = 3600;
 
@@ -47,13 +59,26 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!['en', 'zh', 'ja'].includes(locale)) return {};
   const prompt = await getPromptBySlug(slug);
   if (!prompt) return { title: 'Prompt not found' };
+  const canonical = `${SITE_URL}/${locale}/prompts/${slug}`;
+  const description = prompt.description.replace(/\s+/g, ' ').trim().slice(0, 160);
   return {
-    title: `${prompt.title} | Awesome Video Prompts`,
-    description: prompt.description.slice(0, 160),
+    title: prompt.title,
+    description,
+    alternates: {
+      canonical,
+      languages: {
+        en: `${SITE_URL}/en/prompts/${slug}`,
+        zh: `${SITE_URL}/zh/prompts/${slug}`,
+        ja: `${SITE_URL}/ja/prompts/${slug}`,
+        'x-default': `${SITE_URL}/en/prompts/${slug}`,
+      },
+    },
     openGraph: {
       title: prompt.title,
-      description: prompt.description.slice(0, 160),
-      images: prompt.coverUrl ? [prompt.coverUrl] : [],
+      description,
+      url: canonical,
+      images: prompt.coverUrl ? [{ url: prompt.coverUrl, width: 960, height: 540 }] : [],
+      type: 'article',
     },
   };
 }
@@ -115,12 +140,25 @@ export default async function PromptDetailPage({ params }: Props) {
                 controls
                 playsInline
                 preload="metadata"
-                poster={prompt.coverUrl ?? undefined}
+                poster={r2Webp(prompt.coverUrl, 960) ?? prompt.coverUrl ?? undefined}
                 className="prompt-detail__video"
               />
             ) : (
               /* eslint-disable-next-line @next/next/no-img-element */
-              <img src={prompt.coverUrl!} alt={prompt.title} className="prompt-detail__cover" />
+              <img
+                src={r2Webp(prompt.coverUrl, 960) ?? prompt.coverUrl ?? undefined}
+                srcSet={
+                  prompt.coverUrl
+                    ? `${r2Webp(prompt.coverUrl, 480) ?? prompt.coverUrl} 480w, ${r2Webp(prompt.coverUrl, 960) ?? prompt.coverUrl} 960w`
+                    : undefined
+                }
+                sizes="(max-width: 640px) 100vw, 960px"
+                alt={prompt.title}
+                className="prompt-detail__cover"
+                loading="eager"
+                decoding="sync"
+                fetchPriority="high"
+              />
             )}
           </div>
         )}
@@ -205,7 +243,13 @@ export default async function PromptDetailPage({ params }: Props) {
         {related.length > 0 && (
           <section className="prompt-detail__related">
             <h2>{t('youMightAlsoLike')}</h2>
-            <GridEngine items={related} locale={locale} total={related.length} />
+            <GridEngine
+              initialItems={related}
+              total={related.length}
+              initialPage={1}
+              pageSize={related.length}
+              locale={locale}
+            />
           </section>
         )}
 

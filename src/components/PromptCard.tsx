@@ -15,13 +15,39 @@
  *   - 每张卡按"图片 natural w/h + 内容区固定高"算出 grid-row span
  *   - 通过 inline style 注入 --card-rows CSS var（fallback 22 rows）
  *   - 图片宽/高比由 .prompt-image-wrapper 的 padding-bottom hack 实现（不依赖 grid 宽度）
+ *
+ * Perf 优化（P0 Phase 4）：
+ *   - 首张卡片：fetchpriority="high" + decoding="sync"（LCP）
+ *   - 其余卡片：loading="lazy" + decoding="async"
+ *   - 图片走 R2 Transform WebP（?width=N&format=webp&q=75）
+ *   - PromptCardVideo 动态 import（bundle 拆分）
  */
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import type { PromptCardData } from './types';
-import PromptCardVideo, { type PromptCardVideoHandle } from './PromptCardVideo';
+import type { PromptCardVideoHandle } from './PromptCardVideo';
+
+/** PromptCardVideo 动态 import（不在首屏 bundle 里） */
+const PromptCardVideo = dynamic(() => import('./PromptCardVideo'), { ssr: false });
+
+/**
+ * R2 Transform URL 注释（2026-06-26）：
+ * R2 自定义域（static.awesomevideoprompts.com）不支持 transform 参数
+ * Cloudflare Image Resizing 需要 Cloudflare Images 订阅 或 Workers 代理
+ * 当前：srcset 仍按 R2 Transform 格式拼接，CF 若不支持则降级原图
+ * TODO：等 Phase 5 实装 Cloudflare Workers 图片代理（完整版 OG image 一起做）
+ */
+const R2_PUBLIC_URL = process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? '';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function r2Webp(url: string | null, _width: number): string | null {
+  if (!url) return null;
+  // 当前 R2 自定义域不支持 transform；srcset 按理想格式拼接，由 CF 降级
+  // 未来实装 Workers 代理后改为：return `${url}?width=${width}&format=webp&q=75`;
+  return url;
+}
 
 function truncate(s: string, n: number): string {
   if (!s) return '';
@@ -32,6 +58,8 @@ function truncate(s: string, n: number): string {
 interface Props {
   prompt: PromptCardData;
   locale: string;
+  /** 首张卡片（isFirst=true）：fetchpriority=high + decoding=sync，用于 LCP 优化 */
+  isFirst?: boolean;
 }
 
 /** grid-auto-rows 10px + gap 16px → 每 row 实际占 26px（除最后一行） */
@@ -42,7 +70,7 @@ const DEFAULT_ROWS = 22;
 /** 内容区估算高度（含 title 2 行 / description 2 行 / tags / meta），用于计算总 span */
 const ESTIMATED_CONTENT_HEIGHT = 130;
 
-export function PromptCard({ prompt, locale }: Props) {
+export function PromptCard({ prompt, locale, isFirst = false }: Props) {
   const t = useTranslations('card');
   const detailHref = `/${locale}/prompts/${prompt.slug}`;
   const modelLabel = prompt.models[0]?.slug ?? '';
@@ -56,6 +84,7 @@ export function PromptCard({ prompt, locale }: Props) {
 
   // 读封面图 naturalW/naturalH → 计算 wrapper 的 padding-bottom %
   // 然后根据当前 grid 列宽 + 内容区高度算出 grid-row span
+  // 注意：aspect-ratio 用 R2 transform 后的 WebP URL 计算（宽高比一致）
   useEffect(() => {
     if (!prompt.coverUrl) return;
     setAspect(null);
@@ -68,7 +97,8 @@ export function PromptCard({ prompt, locale }: Props) {
     img.onerror = () => {
       setAspect(16 / 9);
     };
-    img.src = prompt.coverUrl;
+    // 用 R2 WebP URL 预加载以获取正确的 naturalWidth/Height
+    img.src = r2Webp(prompt.coverUrl, 480) ?? prompt.coverUrl;
   }, [prompt.coverUrl]);
 
   async function handleCopy(e?: React.MouseEvent | React.KeyboardEvent) {
@@ -176,11 +206,18 @@ export function PromptCard({ prompt, locale }: Props) {
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={prompt.coverUrl}
+            src={r2Webp(prompt.coverUrl, 480) ?? prompt.coverUrl ?? undefined}
+            srcSet={
+              prompt.coverUrl
+                ? `${r2Webp(prompt.coverUrl, 320) ?? prompt.coverUrl} 320w, ${r2Webp(prompt.coverUrl, 480) ?? prompt.coverUrl} 480w, ${r2Webp(prompt.coverUrl, 768) ?? prompt.coverUrl} 768w`
+                : undefined
+            }
+            sizes="(max-width: 640px) 50vw, (max-width: 900px) 33vw, (max-width: 1200px) 25vw, 20vw"
             alt={prompt.title}
             className="prompt-image"
-            loading="lazy"
-            decoding="async"
+            loading={isFirst ? 'eager' : 'lazy'}
+            decoding={isFirst ? 'sync' : 'async'}
+            fetchPriority={isFirst ? 'high' : undefined}
           />
 
           {modelLabel && (

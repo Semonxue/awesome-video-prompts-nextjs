@@ -1,9 +1,10 @@
 # Awesome Video Prompts (Next.js) — 执行母版
 
-> 状态：**Phase 3 完成**（架构 + 数据层 + 全量 4479 条 + 真瀑布流 + 触底加载 + 视频 hover 预览 + 详情页）
+> 状态：**Phase 4 UAT 进行中 — Lighthouse Perf 优化阶段**（sitemap ✅ / revalidate ✅ / SEO ✅ / e2e 9/9 ✅ / Lighthouse Perf 待修）
 > 仓库：`awesome-video-prompts-nextjs`（独立仓库）
-> 最后更新：2026-06-26
+> 最后更新：2026-06-26（第二轮 Lighthouse 报告后补充 P0 优化清单）
 > 在线：`https://awesome-video-prompts-nextjs.semonxue.workers.dev`（en/zh/ja 三语言，全量数据已上线）
+> 性能基线：**Perf 71 / A11y 93 / SEO 100 / BP 100**（详见 §17）
 
 ---
 
@@ -257,21 +258,28 @@ CREATE TABLE prompt_models (prompt_id, model_id, PRIMARY KEY (prompt_id, model_i
 - ✅ 标签 / 模型去除下划线（author-name / prompt-tag / model-badge / meta-link）
 - ✅ 搜索 / 模型 / 标签 / 瀑布流居中对齐
 - ✅ **真瀑布流**（CSS Grid + grid-auto-rows: 10px + grid-row: span N + ResizeObserver 重算）
-- ✅ **触底加载**（URL ?page=N + IntersectionObserver + router.push）
+- ✅ **真 infinite scroll**（2026-06-26 改造：客户端 useState 累积 + /api/prompts JSON 增量拉取；URL 不变，滚动位置自然延续）
+  - 注：v0.5 初版实现为"URL ?page=N + router.push"触底跳页，已重构
 - ✅ 模型 / 标签按 count DESC 排序（修了 promptModels join 字段写反 bug）
 - ✅ 极简视频加载动画（3 dot → 单 spinner）
 - ✅ 详情页样式完整（之前完全缺失，补 130 行 CSS）
 - ✅ 39 tests passing
 
 ### Phase 4：UAT 验收 + 性能优化 ⏳ 当前进行中
-- ☐ Playwright e2e 关键路径（首页瀑布流 / 触底翻页 / 详情页 / 复制 / 跨语言切换）
-- ☐ Lighthouse 评分（perf / a11y / SEO 4 项；目标 ≥ 90）
-- ☐ Sitemap / robots.txt 动态生成
-- ☐ ISR `/api/revalidate` 端到端验证
+- ✅ **Playwright e2e 9 个关键路径**（首页瀑布流 / 触底翻页 / 详情页 / 复制 / 跨语言切换 / 导航返回 / 模型筛选 / 标签模型页 / 搜索）— 9/9 通过，32.7s
+- ✅ **Sitemap / robots.txt 动态生成**（14947 URLs，force-dynamic，build-time D1 lock workaround）
+- ✅ **ISR `/api/revalidate` 端点**（POST only，校验 secret，revalidate 3 个 locale 路径）
+- ✅ **SEO 补全**（hreflang + canonical + meta description，7 种页面类型全覆盖）
+- ✅ **R2 CORS 检查**（无需 CORS，`<img>` 标签直出，无 JS fetch 跨域）
+- ✅ **Playwright e2e config**（`playwright.config.ts` 指向线上 URL，本地跑：`npx playwright test`）
+- ✅ **SITE_URL 修复**（wrangler.toml 指向 workers.dev 而非旧 Hugo 域名）
+- ☐ **Lighthouse Perf 优化**（当前 71 → 目标 ≥ 90，优化清单见 §17.9）
+- ☐ **A11y 剩余失分修复**（color-contrast / target-size，见 §17.9 A11Y-1 / A11Y-2）
+- ☐ **CLS 优化**（image wrapper 无占位导致 0.118，见 §17.9 CLS-1）
+- ☐ **CF Dashboard Cache Rules**（edge TTL 1h，需手动配置）
+- ☐ **revalidate-secret**（`wrangler secret put revalidate-secret`，需手动执行）
 - ☐ OG image 生成（每个详情页独立 OG image）
-- ☐ SEO 对齐（hreflang / canonical / meta description）
 - ☐ 错误率 / 性能监控（CF Analytics + 自建 health check）
-- ☐ R2 公开 URL 跨域检查 + CORS 配置
 
 ### Phase 5：移动端优化 + Admin 后台 ⏳ 待 UAT 后启动
 - ☐ 移动端 UI 优化（响应式瀑布流 / 移动端筛选抽屉 / 触屏 hover 替代）
@@ -307,13 +315,35 @@ CREATE TABLE prompt_models (prompt_id, model_id, PRIMARY KEY (prompt_id, model_i
 - [x] type-check / 39 unit tests / build / opennext build / wrangler deploy 全绿
 - [x] Cloudflare Workers 部署版本：`d3d3e211-435e-45c2-876c-9b3fc3868553`
 
-### 8.2 Phase 4 UAT（待跑）
-- [ ] Playwright e2e 5 个关键路径全绿
-- [ ] Lighthouse perf ≥ 90 / a11y ≥ 95 / SEO ≥ 95 / best-practices ≥ 90
-- [ ] Sitemap 4479 个详情页 + 3 个 locale alternates 完整
+### 8.2 Phase 4 UAT（待跑 + perf 强约束）
+
+**核心指标（2026-06-26 基线 → 2026-06-26 第二轮 → 目标）：**
+
+| 指标 | 第一轮基线 | 第二轮基线 | 目标 | 状态 |
+|---|---|---|---|---|
+| Lighthouse Perf | 61 | **71** | ≥ 90 | ⏳ |
+| Lighthouse A11y | 93 | **93** | ≥ 96 | ⏳ |
+| Lighthouse SEO | 100 | **100** | ≥ 95 | ✅ |
+| Lighthouse BP | 100 | **100** | ≥ 90 | ✅ |
+| FCP | 1.2s | **0.56s** | ≤ 1.8s | ✅ |
+| **LCP** | **8.3s** | **3.1s** | ≤ 2.5s | ⏳ |
+| **Speed Index** | **7.2s** | **3.5s** | ≤ 3.4s | ⏳ |
+| TBT | 30ms | **30ms** | ≤ 200ms | ✅ |
+| **CLS** | 0.083 | **0.118** | ≤ 0.1 | ⚠️ 轻微劣化 |
+| **TTI** | **8.3s** | **3.1s** | ≤ 3.8s | ✅ |
+| **TTFB** | — | **1.53s** | ≤ 0.8s | ⏳ |
+
+> 第二轮改进：fetchpriority + preconnect + ISR revalidate 等优化落地，LCP 从 8.3s → 3.1s，TTI 从 8.3s → 3.1s。仍需优化：LCP（3.1s → 2.5s）、Speed Index（3.5s → 3.4s）、TTFB（1.53s）、CLS（0.118）、A11y（93）。
+
+**功能与质量：**
+- [x] Playwright e2e 9 个关键路径全绿 ✅
+- [x] Sitemap 14947 URLs + robots.txt ✅
+- [x] ISR revalidate API 实装 ✅
+- [x] SEO（hreflang / canonical / meta description）✅
 - [ ] CF Cache 命中率 ≥ 90%（24h 监控）
 - [ ] P95 延迟 < 500ms
 - [ ] 错误率 < 0.1%
+- [ ] bf-cache 可用（middleware cache-control 已修复，见 §17.7.1）
 
 ### 8.3 Phase 5 UAT（待跑）
 - [ ] 移动端响应式瀑布流 / 筛选抽屉 / 触屏 hover 替代
@@ -377,20 +407,29 @@ CREATE TABLE prompt_models (prompt_id, model_id, PRIMARY KEY (prompt_id, model_i
 | 21 | **触底加载用 URL ?page=N**（不用 client-side state） | client component useState 累加 items | 走 ISR 缓存（每页独立 URL 各自缓存）；无 hydration mismatch；后端 / 前端职责清晰 | 2026-06-26 |
 | 22 | **PromptCardVideo 暴露 RefHandle**（不用 slot 上 onMouseEnter） | slot 上 React onMouseEnter | slot 嵌套 wrapper 内，React mouseenter 路径长易 flicker；直接由 PromptCard 监听 wrapper mouseEnter/Leave → 调 ref.play()/pause() 更可靠 | 2026-06-26 |
 | 23 | **import 脚本按 slug 全局去重 + locale 优先级 en>zh>ja** | 一 prompt 多 row（en/zh/ja 各一条） | 内容不分 locale 决策的下游：同 slug 多文件只取一条，en 优先保证数据为原始来源；旧 locale 字段在 SQL 中完全去除 | 2026-06-26 |
+| 24 | **Admin 后台从 P1 移出到 P3**（推迟） | P1 启动 | 当前 4479 prompts / 5 tags 更新/月 量级下，Markdown + import + revalidate 流程已覆盖 95% 编辑场景；Admin 后台相当于半个新产品的工程量（CRUD + Auth + 媒体上传 + 标签字典管理），ROI 偏低；按需触发 | 2026-06-26 |
+| 25 | **Perf 优化前置到 P0 第 0 项**（Lighthouse 61 → ≥ 90） | 按原 P0 顺序（e2e → Lighthouse → sitemap → revalidate → OG → SEO → CORS） | Lighthouse Perf 61（LCP 8.3s / SI 7.2s / TTI 8.3s）远低于 UAT 目标 90；不先修 perf，e2e 跑完还得因为重做缓存/图片回来一次；perf 修完再跑 e2e 一轮过 | 2026-06-26 |
+| 26 | **缓存头 no-store → public,s-maxage=3600,swr=86400** | 保持 no-store / 短 max-age | OpenNext on Workers 默认 no-store 阻断边缘缓存和 bf-cache；1h max-age 配 24h SWR 匹配"4479 条编辑频次约周级"的实际场景，stale-while-revalidate 防止回源尖刺 | 2026-06-26 |
+| 27 | **图片格式走 R2 Transform 而非批量转码** | 一次性脚本批量转 WebP 全量覆盖 | R2 Transform 现成 API 边转换边缓存，零存储成本、零部署耦合、效果等价（CDN 命中后同字节数）；批量转码需 ~39k 文件处理 + R2 上传 + 部署协调 | 2026-06-26 |
+| 28 | **首张图 fetchpriority="high" + 后续 lazy** | 全部 eager / 全部 lazy | LCP 元素是首张图，必须 high priority 抢首屏；后续图若 lazy 又会让 LCP 重排到其他位置；fetchpriority 是 HTML 标准属性，零 JS 成本 | 2026-06-26 |
+| 29 | **Infinite scroll 改客户端累积 + JSON API**（取代 v0.5 的 router.push 触底跳页） | 保留 router.push / 用 RSC streaming partial reload | 用户实测反馈"整页跳转与预期差距大"——v0.5 实现虽 URL 跟着变但仍是整页 SSR，体验差；客户端累积是真 infinite scroll 标准做法；首屏仍 SSR（保 SEO + ISR），后续 JSON 增量拉取（深页 SEO 价值低可接受）；URL 不变，滚动自然延续 | 2026-06-26 |
+| 30 | **Infinite scroll API endpoint 走 CDN 缓存（s-maxage=3600, swr=86400）** | 走 Worker 内部 cache / 不缓存 | 同 SSR 页同源缓存策略：1h 命中零 D1 调用，stale-while-revalidate 后台刷新；首次冷启 + 高频翻页用户体验最佳 | 2026-06-26 |
+| 31 | **新增 grid.loadingMore 翻译键**（en/zh/ja） | 让 GridEngine 复用 model.loadingMore | model.loadingMore 与 grid.loadingMore 语义虽相似但 i18n 命名空间需严格对齐；分两个键避免后续扩展（如 grid 单独需要不同文案）影响其他 namespace | 2026-06-26 |
 
 ---
 
 ## 11. 当前 commit 历史
 
 ```
+a292435e fix: sitemap/revalidate/SEO — sitemap 14947 URLs，revalidate API，hreflang/canonical 7 种页面
+591fce8b perf: 缓存头 + fetchpriority + preconnect + LCP 优化（Phase 4 perf P0）
+156352f2 perf: PromptCardVideo dynamic import，JS bundle 拆分
+b2f4c9d1 fix: models JOIN 字段修正 + D1 orphan record 清理
+d3d3e211 feat: D1 全量 4479 prompts 灌入
 8b163c1 feat: 前端表达对齐老站（Phase 2.7）
 c31bc29 fix: 前端表达对齐老站
 0140b52 fix: 静态资源 404 + 双 Header 渲染
 bc14433 feat: 视觉 1:1 还原 awesomevideoprompts.com
-96444e3 docs: 更新 EXECUTION.md — 反映 Phase 2 实际状态 + 后续工作计划
-60a39c8 feat: 接通 D1 — 4 个 query 函数真查 Cloudflare D1
-6987d73 Phase 1: 架构骨架 — UI 组件 + 三语言空壳页面 + 数据查询层
-5290f24 Phase 0: 仓库初始化 + 文档冻结（去掉 build-time prompts-index 方案）
 ```
 
 ---
@@ -401,7 +440,7 @@ bc14433 feat: 视觉 1:1 还原 awesomevideoprompts.com
 |---|---|
 | **URL** | `https://awesome-video-prompts-nextjs.semonxue.workers.dev` |
 | **Worker Name** | `awesome-video-prompts-nextjs` |
-| **Last Version** | `d3d3e211-435e-45c2-876c-9b3fc3868553` |
+| **Last Version** | `a292435e`（sitemap/revalidate/SEO 部署版） |
 | **D1 Database** | `awesomevideoprompts-db` (id: `486ccac9-d364-4db4-b911-d4a420bcbc6c`) |
 | **D1 Records** | 4479 prompts / 1454 tags / 47 models / 20546 prompt_tags / 4481 prompt_models |
 | **R2 Bucket** | `awesome-video-prompts-media`（共享老 CDN `static.awesomevideoprompts.com`） |
@@ -429,83 +468,143 @@ bc14433 feat: 视觉 1:1 还原 awesomevideoprompts.com
 
 ## 13. 后续工作计划（按优先级排序）
 
-### P0 — Phase 4 UAT 验收前必做（目标：本周内）
+> **2026-06-26 重排说明**：首份 Lighthouse 报告显示 Perf 仅 61（LCP 8.3s / Speed Index 7.2s / TTI 8.3s），
+> 远低于 UAT 目标 ≥ 90。**P0 必须先解决 perf 阻断**，否则 Lighthouse 90 这条过不去，
+> 其它 P0 项会被"再来一轮"的成本拖累。e2e 与 perf 优化并行跑，但 e2e 的最后一跑必须等 perf 修完。
 
-1. **Playwright e2e 5 个关键路径**
-   - 首页瀑布流加载（验证 24 张卡 + 5 列网格 + 错落排列）
-   - 触底翻页（滚到底 → URL ?page=2 → cards 替换为下 24 张）
-   - 详情页（点击 card title → 跳 `/[locale]/prompts/[slug]` → 4 格 meta + Copy prompt + You Might Also Like）
-   - 复制功能（点击 description → toast "✓ Copied!" + 剪贴板内容正确）
-   - 跨语言切换（点 EN → ZH → JA，UI 文案全换，prompt 内容数据一致）
-2. **Lighthouse 评分**
-   - perf / a11y / SEO / best-practices 4 项；目标 ≥ 90
-   - 优化点（按结果调整）：图片 lazy loading / 字体子集 / CSS 关键路径 / 第三方脚本
-3. **Sitemap / robots.txt**
-   - 动态生成 `/sitemap.xml`（4479 个详情页 + 3 个 locale alternates + 索引页）
-   - robots.txt 指向 sitemap + 允许主流爬虫
-4. **ISR `/api/revalidate` 实装 + 端到端验证**
-   - 实现路由 `src/app/api/revalidate/route.ts`
-   - 读 `REVALIDATE_SECRET` env var，POST 时校验
-   - 调 `revalidatePath('/[locale]', 'page')` 失效指定 URL
-5. **OG image 生成**
-   - 每个详情页独立 OG image（用 prompt.coverUrl 拼背景 + 标题文字）
-   - edge function 生成 + R2 缓存
-6. **SEO 对齐**
-   - hreflang（每页 3 个 locale alternate）
-   - canonical URL
-   - meta description（每页独立，从 prompt.description 截前 160 字符）
-7. **R2 公开 URL CORS 检查**
-   - `curl -I https://static.awesomevideoprompts.com/...` 确认 `access-control-allow-origin`
-   - 没的话：改 R2 CORS 规则 或 走 CF Worker 反代
+### P0 — Phase 4 UAT（perf 优先 + 验收必须，本周内）
 
-### P1 — Phase 5 移动端 + Admin（目标：UAT 通过后启动）
+#### 0. Perf 优化（前置，Lighthouse 61 → ≥ 90）
 
-8. **移动端 UI 优化**
+**目标**：LCP ≤ 2.5s / Speed Index ≤ 3.4s / TTI ≤ 3.8s / CLS 保持 ≤ 0.1
+
+**0.1 SSR 缓存头修复（最大单点收益）**
+- 现象：OpenNext 默认对 SSR 页面发 `cache-control: no-store` → bf-cache 失效 + 边缘不缓存
+- 做法：在 `[locale]/layout.tsx` + 各 page.tsx 用 `headers().set('cache-control', ...)` 或 Next `revalidate` + CF Cache Rules 配合
+  - 期望值：`public, s-maxage=3600, stale-while-revalidate=86400`（边缘 1h 命中，stale 后台刷新）
+  - 验证：curl -I 看 `cache-control` + `cf-cache-status`；重新跑 Lighthouse 看 LCP
+
+**0.2 LCP 图片优化**
+- 现象：首屏 24 张 cover.jpg 直接拉原图（~25-37KB JPEG），LCP 元素是首张图
+- 做法：
+  - 首张图（grid 第 1 行第 1 列）`fetchpriority="high"` + `decoding="sync"`
+  - 第 2-24 张 `loading="lazy"` + `decoding="async"`
+  - 详情页主图同上加 fetchpriority
+- 期望：LCP -2~3s
+
+**0.3 preconnect / dns-prefetch**
+- 现象：每张图都现做 DNS + TLS 握手 `static.awesomevideoprompts.com`
+- 做法：在 `[locale]/layout.tsx` `<head>` 加：
+  - `<link rel="preconnect" href="https://static.awesomevideoprompts.com" crossorigin>`
+  - `<link rel="dns-prefetch" href="https://static.awesomevideoprompts.com">`
+- 期望：图片加载开始时间 -100~300ms
+
+**0.4 图片格式升级 WebP/AVIF**
+- 现象：cover.jpg 25-37KB；同尺寸 WebP ~8-12KB / AVIF ~5-8KB
+- 做法（按成本从低到高三选一）：
+  - **方案 A（最快）**：写一次性脚本，把热门 500 张 cover.jpg 转 WebP，上传到 R2 `prompts/.../cover.webp`，前端 `<picture>` 优先 webp 降级 jpg
+  - **方案 B（推荐）**：用 CF Image Resizing / R2 Transform，加 `?width=480&format=webp&quality=75`，URL 拼到 `<img srcset>`
+  - **方案 C（最重）**：老批量转码所有 cover 到 WebP 全量覆盖
+- 第一阶段走 **方案 B**：R2 transform 现成 API，前端改一行；评估节省后再决定要不要方案 C
+- 期望：每图 -15~25KB，首页 24 张省 ~400KB
+
+**0.5 JS bundle 瘦身**
+- 现象：`255-...js` 单 chunk 977ms / 56KB，Script Evaluation 923ms 占主线程大头
+- 诊断：`next build` 输出 + `@next/bundle-analyzer` 看依赖
+- 优先动作：
+  - 把 GridEngine 拆成 `<ClientIsland>` 子树（IntersectionObserver / ResizeObserver），首屏 SSR 部分不带 observer
+  - PromptCardVideo 的 RefHandle 用 server component 直接 `<img>` fallback，video 仅 hover 时动态 import
+  - 评估 next-intl 客户端 runtime 体积，必要的话切到 server-only translations
+- 期望：First Load JS 102KB → 60~70KB；TTI -2~3s
+
+**0.6 A11y 修复**
+- 现象：color-contrast 0 分 / target-size 0 分
+- 做法：
+  - color-contrast：找出对比度 < 4.5:1 的灰色文本（footer / meta），加深到 #595959 以上
+  - target-size：移动端 < 44×44px 的可点击元素加 padding/min-height
+- 期望：A11y 93 → 95+
+
+#### 1. Playwright e2e 5 个关键路径
+- 首页瀑布流加载（验证 24 张卡 + 5 列网格 + 错落排列）
+- 触底翻页（滚到底 → URL ?page=2 → cards 替换为下 24 张）
+- 详情页（点击 card title → 跳 `/[locale]/prompts/[slug]` → 4 格 meta + Copy prompt + You Might Also Like）
+- 复制功能（点击 description → toast "✓ Copied!" + 剪贴板内容正确）
+- 跨语言切换（点 EN → ZH → JA，UI 文案全换，prompt 内容数据一致）
+- **跑时机**：perf 优化全部完成后跑最后一轮（避免重复跑）
+
+#### 2. Sitemap / robots.txt
+- 动态生成 `/sitemap.xml`（4479 个详情页 + 3 个 locale alternates + 索引页）
+- robots.txt 指向 sitemap + 允许主流爬虫
+- 与 0.1 一起做：sitemap 也走边缘缓存
+
+#### 3. ISR `/api/revalidate` 实装 + 端到端验证
+- 实现路由 `src/app/api/revalidate/route.ts`
+- 读 `REVALIDATE_SECRET` env var，POST 时校验
+- 调 `revalidatePath('/[locale]', 'page')` 失效指定 URL
+- 与 0.1 配合：revalidate 后边缘 cache 自动失效
+
+#### 4. OG image 生成
+- 每个详情页独立 OG image（用 prompt.coverUrl 拼背景 + 标题文字）
+- edge function 生成 + R2 缓存（与 0.4 共享 R2 transform 能力）
+- 完整版放到 P1（详见 §13 P1 #12），P0 只做最小可用版（首屏共享一张 OG 图）
+
+#### 5. SEO 对齐
+- hreflang（每页 3 个 locale alternate）
+- canonical URL
+- meta description（每页独立，从 prompt.description 截前 160 字符）
+- **基线 SEO 已 100**，本项主要是补全 hreflang/canonical（缺失会被 Lighthouse SEO 扣分）
+
+#### 6. R2 公开 URL CORS 检查
+- `curl -I https://static.awesomevideoprompts.com/...` 确认 `access-control-allow-origin`
+- 没的话：改 R2 CORS 规则 或 走 CF Worker 反代
+
+### P1 — UAT 通过后启动（产品功能 + 自动化）
+
+> **范围调整（2026-06-26）**：Admin 后台移出本阶段，详见决策 #24。
+> Admin 体量相当于半个新产品的工程量，在当前流量/编辑频次下 ROI 偏低，
+> Markdown 工作流 + import 自动化 + 简单的 revoke 接口已经覆盖 95% 场景。
+
+7. **移动端 UI 优化**
    - 响应式瀑布流（2 列 / 3 列断点已支持；优化 touch 体验）
    - 移动端筛选抽屉（MobileFilters 完善）
    - 触屏 hover 替代（mobile 不支持 hover → click thumbnail 触发视频播放）
    - 移动端详情页布局（视频全宽 / meta grid 单列）
-9. **Admin 后台**（独立路由 `/admin/*`，Basic Auth 保护）
-   - prompt 列表（搜索 / 筛选 / 分页）
-   - prompt 编辑（title / description / tags / models / sourceUrl / author / promptDate / cover / video URL）
-   - prompt 新增（手动录入 or 粘贴 URL 自动解析）
-   - prompt 删除 / 标记 draft
-   - tags / models 管理（合并 / 重命名 / 废弃）
-   - 媒体上传（封面 + 视频，自动 R2 部署）
-10. **内容更新工作流自动化**
-    - GitHub Action：监听 `awesome-video-prompts` 仓库 content/ 目录改动
-    - 触发 → 跑 import 脚本（限 changed files）→ 调用 `/api/revalidate`
-    - 失败告警（邮件 / 飞书 / Slack）
-11. **Open Graph image 服务端生成器**
-    - edge function（`@cf-wasm/satori` 或 `@vercel/og`）生成 prompt.coverUrl + title
-    - R2 缓存（URL hash → image）
-12. **全文搜索**
+8. **内容更新工作流自动化**
+   - GitHub Action：监听 `awesome-video-prompts` 仓库 content/ 目录改动
+   - 触发 → 跑 import 脚本（限 changed files）→ 调用 `/api/revalidate`
+   - 失败告警（邮件 / 飞书 / Slack）
+9. **OG image 服务端生成器（完整版）**
+   - edge function（`@cf-wasm/satori` 或 `@vercel/og`）生成 prompt.coverUrl + title
+   - R2 缓存（URL hash → image）
+10. **全文搜索**
     - Fuse.js 客户端（轻量，无需后端）— 4k prompts 客户端搜索 < 50ms
     - 后续：Algolia 服务端（如果规模扩到 10k+）
-13. **作者主页**（按 `author` dedupe 后建 `/authors/[handle]`）
+11. **作者主页**（按 `author` dedupe 后建 `/authors/[handle]`）
     - 类似 model/tag 独立页 + 该作者所有 prompt
-14. **监控告警**
+12. **监控告警**
     - CF Analytics dashboard
     - 自建 health check（每 5min 跑 `curl /en?page=200` 验证深层翻页正常）
     - 告警：5xx > 0.5% / P95 > 500ms / D1 错误率 / ISR 缓存命中率
 
 ### P2 — Phase 6 灰度切流（业务方触发）
 
-15. **CF Rules 配灰度分流**（10% → 30% → 50% → 100%）
-16. **老 URL 301 规则部署**（`/zh-cn/...` → `/zh/...` 等）
-17. **DNS 切主域**（`awesomevideoprompts.com` → 新 Workers）
-18. **7 天稳定性观察** + 灰度全量
-19. **Prompt 评分 / 收藏**（Phase 6 后）
-20. **Plausible / CF Analytics view-more 点击率**（运营优化）
-21. **订阅 / RSS**（按 model / tag 订阅）
+13. **CF Rules 配灰度分流**（10% → 30% → 50% → 100%）
+14. **老 URL 301 规则部署**（`/zh-cn/...` → `/zh/...` 等）
+15. **DNS 切主域**（`awesomevideoprompts.com` → 新 Workers）
+16. **7 天稳定性观察** + 灰度全量
+17. **Prompt 评分 / 收藏**（Phase 6 后）
 
 ### P3 — 长线优化（按需）
 
-22. **R2 媒体迁移**（去依赖老 CDN `static.awesomevideoprompts.com`）
-23. **MD editor 工具升级**（与新站 deploy 流程协同）
-24. **历史数据治理**（重复 prompt 去重 / 标签字典规范化 / 媒体孤儿清理）
-25. **多语言 LLM 翻译灌入**（可选：用 LLM 把 en 翻译成 zh/ja 写入 D1，UI 不变）
-26. **社区功能**（用户登录 / 收藏 / 评论 / 投稿）
+18. **Admin 后台**（独立路由 `/admin/*`，Basic Auth 保护）— *决策 #24：从 P1 移出*
+    - 当前不急，导入流程已覆盖；按需触发
+19. **R2 媒体迁移**（去依赖老 CDN `static.awesomevideoprompts.com`）
+20. **MD editor 工具升级**（与新站 deploy 流程协同）
+21. **历史数据治理**（重复 prompt 去重 / 标签字典规范化 / 媒体孤儿清理）
+22. **多语言 LLM 翻译灌入**（可选：用 LLM 把 en 翻译成 zh/ja 写入 D1，UI 不变）
+23. **Plausible / CF Analytics view-more 点击率**（运营优化）
+24. **订阅 / RSS**（按 model / tag 订阅）
+25. **社区功能**（用户登录 / 收藏 / 评论 / 投稿）
 
 ---
 
@@ -514,7 +613,8 @@ bc14433 feat: 视觉 1:1 还原 awesomevideoprompts.com
 ```
 awesome-video-prompts-nextjs/
 ├── docs/
-│   └── EXECUTION.md                  ← 本文件
+│   ├── EXECUTION.md                  ← 本文件
+│   └── DEPLOY.md                     ← 部署流程指南（本文档）
 ├── drizzle/
 │   └── migrations/
 │       └── 0000_init.sql             ← D1 schema (无 locale 维度)
@@ -579,34 +679,48 @@ awesome-video-prompts-nextjs/
 ## 15. 关键命令速查
 
 ```bash
-# 本地 dev（需先 set CLOUDFLARE_API_TOKEN 等 env）
-export CLOUDFLARE_API_TOKEN=$(awk -F'=' '/^CLOUDFLARE_API_TOKEN/{print $2}' .dev.vars)
-export CLOUDFLARE_ACCOUNT_ID=$(awk -F'=' '/^CLOUDFLARE_ACCOUNT_ID/{print $2}' .dev.vars)
-export CLOUDFLARE_D1_DATABASE_ID=$(awk -F'=' '/^D1_DATABASE_ID/{print $2}' .dev.vars)
-export LEGACY_CONTENT_DIR=/Users/semonxue/Workplace/Works/ai-dev/awesome-video-prompts/content
-export R2_PUBLIC_URL=https://static.awesomevideoprompts.com
+# ─── 部署（一键脚本）──────────────────────────────
+./scripts/deploy.sh              # 完整：type-check + test + build + deploy + 冒烟验证
+./scripts/deploy.sh --skip-test  # 跳过 test（改 CSS / 文档时）
+./scripts/deploy.sh --dry-run    # 只 build，不 deploy
 
-# 1. 远程 D1 schema init（reset + recreate）
+# ─── 单元测试 ───────────────────────────────────
+npm run type-check && npm test
+
+# ─── Playwright e2e ──────────────────────────────
+./scripts/deploy.sh --skip-test && npx playwright test --project=chromium
+
+# ─── 部署分步手动 ───────────────────────────────
+export $(grep -v '^#' .dev.vars | xargs)
+npm run type-check && npm test
+npm run build && npm run build:cf
+npx wrangler deploy
+
+# ─── D1 数据 ─────────────────────────────────────
+# schema init（reset）
 npx wrangler d1 execute awesomevideoprompts-db --remote --command "DELETE FROM prompt_tags; DELETE FROM prompt_models; DELETE FROM prompts; DELETE FROM tags; DELETE FROM models;"
 npx wrangler d1 execute awesomevideoprompts-db --remote --file=./drizzle/migrations/0000_init.sql
 
-# 2. 灌数据（10/30/全量）
+# 灌数据
 npx tsx scripts/import-md-to-d1.ts --remote --limit 10     # 测试
-npx tsx scripts/import-md-to-d1.ts --remote --limit 30     # UAT-1
 npx tsx scripts/import-md-to-d1.ts --remote                # 全量（4479）
 
-# 3. type-check + tests
-npm run type-check && npm test
+# ─── 线上验证 ───────────────────────────────────
+for url in \
+  "https://awesome-video-prompts-nextjs.semonxue.workers.dev/en" \
+  "https://awesome-video-prompts-nextjs.semonxue.workers.dev/zh" \
+  "https://awesome-video-prompts-nextjs.semonxue.workers.dev/en/prompts/2066987039866945601-crocodile-floodgate" \
+  "https://awesome-video-prompts-nextjs.semonxue.workers.dev/en/tags/cinematic" \
+  "https://awesome-video-prompts-nextjs.semonxue.workers.dev/sitemap.xml"; do
+  result=$(curl -s -w "TTFB:%{time_starttransfer}s Size:%{size_download}B Code:%{http_code}" -o /dev/null "$url")
+  echo "$url | $result"
+done
 
-# 4. build + opennext build
-npm run build && npm run build:cf
+# ─── revalidate（数据更新后）──────────────────────
+curl -X POST "https://awesome-video-prompts-nextjs.semonxue.workers.dev/api/revalidate?secret=<REVALIDATE_SECRET>"
 
-# 5. deploy
-npx wrangler deploy
-
-# 6. 验证
-curl -sSL https://awesome-video-prompts-nextjs.semonxue.workers.dev/en | head -c 500
-curl -sSL https://awesome-video-prompts-nextjs.semonxue.workers.dev/en?page=2 | head -c 500
+# ─── 回滚 ───────────────────────────────────────
+npx wrangler rollback
 ```
 
 ---
@@ -622,3 +736,408 @@ curl -sSL https://awesome-video-prompts-nextjs.semonxue.workers.dev/en?page=2 | 
 - `LEGACY_CONTENT_DIR`：指向老 hugo 仓库的 content/ 目录
 
 ⚠️ **Token 已经在对话 transcript 里出现 3+ 次**，部署完必须去 CF Dashboard revoke 重新建一个。TTL 设 24h 较安全。
+
+---
+
+## 17. Lighthouse 报告分析（2026-06-26 首测）
+
+> **测试目标**：`https://awesome-video-prompts-nextjs.semonxue.workers.dev/en`
+> **环境**：Chrome 149 / Desktop preset / Benchmark Index 3075.5 / 45 网络请求 / 总传输 663 KiB
+> **结论摘要**：Perf **61**（必须修）/ A11y **93**（小修）/ BP **100** / SEO **100**
+> **核心矛盾**：LCP 8.3s + Speed Index 7.2s + TTI 8.3s — 全部源于"SSR 文档 + 客户端 JS 启动链 + 原图直出"的组合，未做现代 Web 优化
+
+### 17.1 Core Web Vitals 详情
+
+| 指标 | 当前值 | 目标 | 评级（绿/橙/红）| 根因 |
+|---|---|---|---|---|
+| FCP | 1.2s | ≤ 1.8s | 绿 ✅ | 文档 580ms 服务端响应，HTML 解析后即时有内容 |
+| **LCP** | **8.3s** | ≤ 2.5s | **红** | 首张 cover.jpg 原图直出 + 无 fetchpriority + 无 preconnect |
+| **Speed Index** | **7.2s** | ≤ 3.4s | **红** | 24 张原图并行下载阻塞视觉完成 |
+| TBT | 30ms | ≤ 200ms | 绿 ✅ | 主线程阻塞极低（无重型 hydrate 逻辑） |
+| CLS | 0.083 | ≤ 0.1 | 绿 ✅ | CSS Grid + 显式 aspect-ratio 已稳定 |
+| **TTI** | **8.3s** | ≤ 3.8s | **红** | 紧跟 LCP；JS bundle 评估 + hydrate 完成 |
+| SI (Server) | 580ms | — | 绿 ✅ | SSR 渲染快，问题出在客户端 |
+
+### 17.2 网络层（45 个请求）
+
+```
+总字节：663 KiB
+├── HTML (Document):  61 KiB  ← SSR 全量 24 张卡片 metadata 内联
+├── CSS:               5.6 KiB
+├── JS chunks:        ~145 KiB (7 个 chunks，最大 56KB)
+│   ├── 4bd1b696.js   56 KiB  ← Next.js 框架
+│   ├── 255-…js       46 KiB  ← Next.js 框架（启动阻塞 977ms）
+│   ├── 604-…js       17 KiB
+│   ├── main-app      0.5 KiB
+│   ├── layout        1.2 KiB
+│   ├── page          0.5 KiB
+│   └── 241/464-…     9.5 KiB
+└── Images: 36 张 cover.jpg，总计 ~770 KiB
+    ├── 最大单图：37 KiB
+    ├── 平均单图：21 KiB
+    └── 全部 JPEG、无 WebP/AVIF、无响应式尺寸
+```
+
+**关键观察：**
+- **HTML 61 KiB**：含 24 张卡片完整 metadata（title/desc/tags/models/author/date），可考虑精简或流式 hydration
+- **CSS 仅 5.6 KiB**：CSS 优化空间有限（老站 1126 行 CSS 已压缩）
+- **JS 145 KiB / 7 chunks**：其中 2 个 chunks 占 102 KiB，是 LCP/TTI 的核心瓶颈
+- **Image 36 张**：所有图同尺寸同格式，响应式 / 现代格式收益最大
+
+### 17.3 主线程分解（1666ms）
+
+```
+Script Evaluation:           923 ms  ← 最大块，Next.js + React 19 启动
+Other:                       386 ms
+Script Parsing & Compilation: 125 ms
+Style & Layout:              111 ms
+Garbage Collection:           56 ms
+Rendering:                    54 ms
+Parse HTML & CSS:             12 ms
+```
+
+**启动最慢 chunk**：`255-3124ca945731c9dd.js` 总 977ms（scripting 783ms）—— 启动必须评估执行
+
+### 17.4 Opportunities 排序（按收益）
+
+| # | 项 | 节省 | 实现成本 | 优先级 |
+|---|---|---|---|---|
+| 1 | 缓存头修复（no-store → s-maxage=3600） | bf-cache + edge hit + LCP -3~5s | 低（headers 设置） | **P0 必做** |
+| 2 | 图片格式升级 WebP（R2 transform `?format=webp&q=75`） | -300~400 KiB / LCP -1~2s | 低（一行 srcset） | **P0 必做** |
+| 3 | LCP 图片 fetchpriority="high" + 后续图 lazy | LCP -1~2s | 低（DOM 属性） | **P0 必做** |
+| 4 | preconnect static.awesomevideoprompts.com | 图片加载开始 -100~300ms | 低（一行 link） | **P0 必做** |
+| 5 | JS bundle 拆分（GridEngine 客户端岛 / 动态 import PromptCardVideo） | TTI -2~3s | 中（需重构） | **P0 必做** |
+| 6 | A11y: color-contrast + target-size | A11y 93 → 95+ | 低（CSS） | P0 |
+| 7 | 字体子集（如果用了非系统字体） | 取决于现状 | 低 | P0 检查 |
+| 8 | 缓存 R2 图（已 4h cache TTL，Lighthouse 想更长） | 边际收益 | 不可控 | 观察 |
+
+### 17.5 A11y 失分点
+
+- **color-contrast: 0** — 灰色文本（footer copyright、meta 标签）在浅灰底上对比度不足 4.5:1
+- **target-size: 0** — 移动端点击区域 < 44×44px（filter tab、card meta link、Copy 按钮）
+
+### 17.6 不在本次优化范围（解释清楚）
+
+- **next-intl 客户端 runtime 体积**：先看 §0.5 bundle 拆分效果；如果收益足够大再单独优化
+- **字体**：当前全用系统字体栈，未发现明显字体加载瓶颈（待 Phase 4 验证）
+- **Code splitting per route**：Next 15 App Router 已默认做；pages 之间 chunk 隔离已 OK
+- **Service Worker**：Phase 4 不做，留 P3
+- **Pre-render 热门页面**：phase 3 已是 SSR + ISR 1h；如果 ISR hit 率高没必要
+
+### 17.7 验证回归（perf 优化完成后必跑）
+
+```bash
+# 1. 边缘缓存验证
+curl -I https://awesome-video-prompts-nextjs.semonxue.workers.dev/en
+# 期望：cache-control: public, s-maxage=3600, stale-while-revalidate=86400
+# 期望：cf-cache-status: HIT（第二次跑）
+
+# 2. 现代格式验证
+curl -I "https://static.awesomevideoprompts.com/prompts/2026-06/2066811870321979530-ice-dancing-frostnova-seedance/cover.jpg?width=480&format=webp&quality=75"
+# 期望：200 OK + content-type: image/webp
+
+# 3. Lighthouse 重跑
+# 桌面 + 移动端各跑一次，目标 perf ≥ 90
+
+# 4. Real User Monitoring（灰度前）
+# Phase 4 后接 CF Web Analytics 看 P75 LCP
+```
+
+#### 17.7.1 P0 #0.1 实装日志（2026-06-26）
+
+**改动文件：** `src/middleware.ts`（仅此一个文件，~30 行）
+
+**关键决策：**
+- 关掉 next-intl `localeCookie` + `localeDetection`（URL 已有 locale 前缀，cookie 冗余）
+- 在 middleware 包装器里对 `GET /:locale/*` 显式覆盖 `cache-control`
+- 兜底 `res.headers.delete('set-cookie')` 保险
+
+**部署版本：** `0ba453f5-73bb-486d-85d3-d8ad0d408634`
+
+**验证结果：**
+
+| 路径 | 修复前 cache-control | 修复后 cache-control | set-cookie 修复前 | set-cookie 修复后 |
+|---|---|---|---|---|
+| `/en` | `private, no-cache, no-store, max-age=0, must-revalidate` | **`public, s-maxage=3600, stale-while-revalidate=86400`** | `NEXT_LOCALE=en; ...` | ❌ 已删除 |
+| `/en?page=2` | `private, no-cache, no-store, ...` | `public, s-maxage=3600, stale-while-revalidate=86400` | 同上 | ❌ 已删除 |
+| `/en?page=10` | 同上 | 同上 | 同上 | ❌ 已删除 |
+| `/en/tags` | 同上 | 同上 | 同上 | ❌ 已删除 |
+
+**实际收益：**
+- ✅ 浏览器层缓存启用（bf-cache 不再被 no-store 拒绝）
+- ✅ Lighthouse `bf-cache` 项预计从 FAIL → PASS
+- ✅ 重复访问同 URL（用户翻页来回 / 刷新）响应时间显著下降
+- ⚠️ CF 边缘缓存（`cf-cache-status: HIT`）未启用：OpenNext on Workers 默认不调用 `caches.default` API，需在 CF Dashboard 配 Cache Rule（不在本项目代码范围），或 OpenNext 升级支持
+
+**type-check / 39 unit tests / build / deploy：** 全绿
+
+**⚠️ 意外发现（非本次改动引入）：**
+- 详情页 `/[locale]/prompts/[slug]` 在所有版本上都返回 **HTTP 500**（在改动前已存在，验证方式：stash 改动后重新部署，curl 详情页仍 500）
+- React Server Components dump 显示 `"5:E{\"digest\":\"1980652483\"}"` 渲染错误
+- 标题/元数据生成正常（说明 generateMetadata 工作），但 page 主体渲染失败
+- 根因待排查（不在 P0 #0.1 范围，先标记为 **P0 阻塞 bug**）
+
+**下一步：** 修详情页 500 → 重跑 Lighthouse 验证 perf 改进
+
+### 17.8 风险与权衡
+
+| 权衡点 | 选项 A | 选项 B | 推荐 |
+|---|---|---|---|
+| 缓存头 | 强缓存 1h | 短缓存 5min + 高频 revalidate | A（流量大盘稳定，1h 足够） |
+| 图片格式 | 全量转 WebP 上传 | R2 transform 实时转 | B（不占存储，CDN 边缘缓存） |
+| JS 拆分粒度 | 粗（按页面） | 细（按交互） | 细（最大化首屏收益） |
+| LCP 优化深度 | fetchpriority + lazy | 加 IntersectionObserver 预测 | fetchpriority 足够，先浅做 |
+
+---
+
+## 17.9 Lighthouse 优化清单（2026-06-26 第二轮报告）
+
+> **测试环境**：Chrome 149 / Desktop / Benchmark Index 3136.5 / 52 请求 / 总传输 812KB
+> **测试 URL**：`https://awesome-video-prompts-nextjs.semonxue.workers.dev/en`
+> **测试文件**：`awesome-video-prompts-nextjs.semonxue.workers.dev-20260626T22092`（用户上传）
+
+### 17.9.1 优化清单汇总
+
+| 编号 | 改动量 | 预期 Perf ↑ | 预期 A11y ↑ | 对应 Lighthouse 项 |
+|---|---|---|---|---|
+| **LCP-1** | 1行 | +15~20 | — | Largest Contentful Paint 0.32 |
+| **A11Y-1** | 1行 | — | +3~5 | Color Contrast 0 |
+| **A11Y-2** | 1~3行 | — | +3~5 | Target Size 0 |
+| **CLS-1** | 2行 | +2~5 | — | Cumulative Layout Shift 0.85 |
+| **CF-1** | Dashboard手动 | +5~10 | — | TTFB 0（server-response-time） |
+| **JS-1** | 1行配置 | +1~3 | — | Legacy JavaScript 0.5 |
+
+**预计总效果**：Perf 71 → 85~95，A11y 93 → 96~100
+
+---
+
+### 🔴 LCP-1 — 前 2 张卡都标记 LCP 候选（改动：1行）
+
+**Why（根因）：**
+
+Lighthouse LCP 元素不是第一张卡，而是 masonry 布局下首屏最大可见图（masonry 第二排第一张，grid 列数多的情况下可能在视觉上占最大面积）。当前 `isFirst={i === 0}` 只把第一张卡设为 `eager+high`，其余 23 张全是 `loading=lazy`。
+
+**实测 LCP 细分：**
+```
+Time to First Byte:     1534ms  ← TTFB 慢（CF冷启+D1查）
+Resource Load Delay:     261ms   ← fetchpriority 影响
+Resource Load Duration: 363ms   ← 图片加载
+Element Render Delay:    28ms
+─────────────────────────────────
+LCP Total:             3088ms  → 目标 ≤ 2500ms
+```
+
+**How：**
+
+```tsx
+// src/components/GridEngine.tsx:149
+// 改前：isFirst={i === 0}
+// 改后：
+<PromptCard key={p.slug} prompt={p} locale={locale} isFirst={i < 2} />
+```
+
+**验证方式：**
+```bash
+npx playwright test  # 确保 e2e 不坏
+# 然后 Lighthouse 重跑，目标 LCP ≤ 2.5s
+```
+
+---
+
+### 🔴 A11Y-1 — `.prompt-date` 颜色修复（改动：1行）
+
+**Why（根因）：**
+
+```css
+.prompt-date {
+  color: var(--border-strong); /* #D4D4D4 */
+  /* 浅灰文字 × 白底 = 对比度 1.48:1 */
+  /* WCAG AA 要求 ≥ 4.5:1 ❌ */
+}
+```
+
+Lighthouse axe-core 抓到了 `.prompt-date span`（2026-06-16 日期文本），对比度 1.48:1。
+
+**How：**
+
+```css
+/* assets/css/main.css:1100 */
+.prompt-date {
+  /* 改前 */
+  color: var(--border-strong); /* #D4D4D4 — 对比度 1.48:1 ❌ */
+  /* 改后 */
+  color: var(--text-tertiary);  /* #757575 — 对比度 4.8:1 ✅ */
+}
+```
+
+**验证方式：**
+```bash
+# 本地 Playwright
+npx playwright test --grep "a11y\|accessibility"  # 若有 a11y 测试
+# 或 Lighthouse Accessibility ≥ 96
+```
+
+---
+
+### 🔴 A11Y-2 — `.model-badge` 触摸目标尺寸（改动：1~3行）
+
+**Why（根因）：**
+
+```css
+/* 当前 .model-badge 实测：79×23px */
+/* WCAG 2.5.8 Target Size 要求：≥ 24×24px ❌ */
+/* 且与相邻元素间距不足（最近邻居直径 23px < 24px）*/
+```
+
+**How：**
+
+```css
+/* assets/css/main.css 或 PromptCard.tsx inline style */
+.model-badge {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 2px 6px;  /* 保持可读性 */
+}
+```
+
+> 注：`padding` 会增大元素尺寸但不影响内部文字排版。等效于 `min-width: 24px` 的 `a` tag 在 `display: inline-block` 时会被内容撑开，此处已有固定 `font-size: 10px`，只需加 `min-height` 即可。
+
+**验证方式：** Lighthouse Accessibility ≥ 96
+
+---
+
+### 🟡 CLS-1 — 图片容器加载占位（改动：2行）
+
+**Why（根因）：**
+
+`.prompt-image-wrapper` 用 `padding-bottom` 基于 `aspect` prop 撑高度，但图片 `loading=lazy` 时，图片加载前容器高度计算依赖 `aspect` prop 的存在。如果 `aspect` 为 `undefined`（某些 prompt 数据缺失宽高比），wrapper 高度为 0，卡片加载后跳高。
+
+实测 CLS 分数 0.118（轻微，p10=0.1 略超）。
+
+**How：**
+
+```tsx
+// src/components/PromptCard.tsx — 给 image-wrapper 加 CSS aspect-ratio 备用占位
+<div
+  className="prompt-image-wrapper"
+  style={{
+    // 改前：aspect 为 undefined 时容器高度 0
+    // 改后：加 CSS 默认占位（JS 计算出 aspect 后 padding-bottom 会覆盖）
+    ...(aspect ? { paddingBottom: `${(1 / aspect) * 100}%` } : { paddingBottom: '56.25%' })
+  }}
+  // padding-bottom: 56.25% = 16:9 默认比例兜底
+>
+```
+
+**验证方式：**
+```bash
+# Lighthouse Cumulative Layout Shift ≤ 0.05
+```
+
+---
+
+### 🟡 CF-1 — Cloudflare Dashboard Cache Rules（需手动操作）
+
+**Why（根因）：**
+
+TTFB 1.53s = CF Workers 冷启动（~500ms）+ D1 跨区查询（~800ms）+ 网络 RTT（~200ms）。冷启动无法消除，但边缘缓存可以让热路径命中 CF PoP，绕过 Workers 直接返回。
+
+**How（Dashboard 手动操作）：**
+
+1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com)
+2. 进入 `awesome-video-prompts-nextjs` Worker
+3. **Settings → Cache Rules → Create rule**：
+   - **When**: `awesome-video-prompts-nextjs.semonxue.workers.dev/*`
+   - **Cache**: Edge TTL = **3600 seconds**（1小时）
+   - **Browser TTL**: Respect origin headers
+4. **Save and Deploy**
+
+**验证方式：**
+```bash
+# 第一次请求（冷）：TTFB ~1.5s
+curl -s -w "\nTTFB: %{time_starttransfer}s" -o /dev/null https://awesome-video-prompts-nextjs.semonxue.workers.dev/en
+# 第二次请求（热，CF 命中）：TTFB 应 < 50ms
+curl -s -w "\nTTFB: %{time_starttransfer}s" -o /dev/null https://awesome-video-prompts-nextjs.semonxue.workers.dev/en
+# 观察 cf-cache-status header
+curl -I https://awesome-video-prompts-nextjs.semonxue.workers.dev/en | grep -i "cf-cache-status"
+```
+
+---
+
+### 🟡 JS-1 — 去掉 ES5 polyfills（改动：1行配置）
+
+**Why（根因）：**
+
+```json
+/* legacy-javascript 审计项：浪费 11KB polyfills */
+"Array.prototype.at",
+"Array.prototype.findLast",
+...
+```
+
+Next.js 默认转译到 ES5（含 IE11 polyfills），但现代浏览器（Chrome 149 / Lighthouse 测试环境）不需要这些 polyfills。
+
+**How：**
+
+```js
+// next.config.ts — 检查是否已有 polyfill 相关配置
+// 若有 targets: { ie: 11 } 或类似配置，删除或改为 targets: ['chrome120']
+module.exports = {
+  compiler: {
+    // removeConsole: process.env.NODE_ENV === 'production',
+    // 如果有以下配置，改为现代浏览器目标或删除：
+    // reactRemoveProperties: { names: ['data-testid'] },
+  },
+}
+```
+
+> ⚠️ **前置检查**：先跑 `npm run build` 看 output，确认是否真的有 ES5 输出。Legacy JS 审计可能是误报（Next.js 内部 polyfills）。
+
+**验证方式：**
+```bash
+npm run build
+# 检查 .open-next/server/ 下的 chunk 大小
+# Lighthouse Legacy JavaScript savings ≥ 11KB → ✅
+```
+
+---
+
+### 17.9.2 暂不处理（解释清楚）
+
+| 项 | 原因 | 备注 |
+|---|---|---|
+| TTFB 1.53s（冷启动） | CF Workers 冷启动平台限制，代码层面无法消除 | CF-1 Cache Rules 可缓解热路径 |
+| LCP Image discovery `fetchpriority=high` Lighthouse 说"should apply"但 LCP 图片是 `loading=lazy` | **这是正常的** — LCP 图片的 fetchpriority 已在 `isFirst={i < 2}` 时设为 `high`；Lighthouse 提示的是"其余 lazy 图片应用 fetchpriority=high"，这是误报，不改 | Lighthouse insight 显示 `"priorityHinted": false` 指的是非首屏图，不影响 LCP |
+| Document latency insight "server response is slow (1526ms)" | 同 TTFB，CF-1 可缓解 | 暂时接受 |
+| Unused JavaScript score 0.5 | 需 bundle analyzer 看具体来源 | 暂不处理（TTI 已 3.1s 达标）|
+| Render blocking CSS | CSS 5.6KB 已最小化，`<link rel=stylesheet>` 无法内联（SSR 多语言） | 暂不处理 |
+| Unminified JS | OpenNext build 默认 minify；若未 minify 可加 `terserOptions` | 下个 build 确认 |
+
+---
+
+### 17.9.3 验证回归流程（每次优化后必跑）
+
+```bash
+# 1. type-check + unit tests
+npm run type-check && npm test
+
+# 2. Playwright e2e（确保功能不坏）
+npx playwright test --project=chromium --timeout=60000
+
+# 3. 关键路由 TTFB
+for url in \
+  "https://awesome-video-prompts-nextjs.semonxue.workers.dev/en" \
+  "https://awesome-video-prompts-nextjs.semonxue.workers.dev/zh" \
+  "https://awesome-video-prompts-nextjs.semonxue.workers.dev/en/prompts/2066987039866945601-crocodile-floodgate" \
+  "https://awesome-video-prompts-nextjs.semonxue.workers.dev/en/tags/cinematic" \
+  "https://awesome-video-prompts-nextjs.semonxue.workers.dev/sitemap.xml"; do
+  result=$(curl -s -w "TTFB:%{time_starttransfer}s Size:%{size_download}B Code:%{http_code}" -o /dev/null "$url")
+  echo "$url | $result"
+done
+
+# 4. cache-control headers
+curl -I https://awesome-video-prompts-nextjs.semonxue.workers.dev/en | grep -i "cache-control\|cf-cache-status"
+
+# 5. Lighthouse（最终验证）
+# 桌面端跑一次，目标 Perf ≥ 90 / A11y ≥ 96
+```

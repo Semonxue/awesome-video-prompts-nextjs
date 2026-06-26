@@ -25,11 +25,23 @@ interface Props {
   searchParams: Promise<{ page?: string }>;
 }
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://awesome-video-prompts-nextjs.semonxue.workers.dev';
+
 export async function generateMetadata({ params }: Props) {
   const { locale, tag } = await params;
+  const canonical = `${SITE_URL}/${locale}/tags/${tag}`;
   return {
     title: `${tag} | Awesome Video Prompts`,
     description: `Browse ${tag} video prompts on Awesome Video Prompts`,
+    alternates: {
+      canonical,
+      languages: {
+        en: `${SITE_URL}/en/tags/${tag}`,
+        zh: `${SITE_URL}/zh/tags/${tag}`,
+        ja: `${SITE_URL}/ja/tags/${tag}`,
+        'x-default': `${SITE_URL}/en/tags/${tag}`,
+      },
+    },
   };
 }
 
@@ -60,11 +72,6 @@ export default async function TagPage({ params, searchParams }: Props) {
 
   // 全集 tagOptions（顶部 tag tabs，不分 locale）
   const allTags = await listAllTags();
-
-  // 下一页 URL
-  const nextPageUrl = result.hasMore
-    ? `/${locale}/tags/${tag}/?${buildQs({ ...sp, page: String(page + 1) })}`
-    : null;
 
   return (
     <>
@@ -116,12 +123,12 @@ export default async function TagPage({ params, searchParams }: Props) {
 
         {tagItems.length > 0 ? (
           <GridEngine
-            items={tagItems}
-            locale={locale}
+            initialItems={tagItems}
             total={result.total}
-            hasMore={result.hasMore}
-            nextPageUrl={nextPageUrl}
-            loadingText={t('loadingMore')}
+            filters={{ tag }}
+            initialPage={page}
+            pageSize={PAGE_SIZE}
+            locale={locale}
           />
         ) : (
           <div className="empty-state">
@@ -133,12 +140,4 @@ export default async function TagPage({ params, searchParams }: Props) {
       <Footer locale={locale} />
     </>
   );
-}
-
-function buildQs(params: Record<string, string | undefined>): string {
-  const usp = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) {
-    if (v && v.trim()) usp.set(k, v);
-  }
-  return usp.toString();
 }

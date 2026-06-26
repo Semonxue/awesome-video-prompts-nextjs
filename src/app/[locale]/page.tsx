@@ -15,6 +15,8 @@ import { Footer } from '@/components/Footer';
 import { GridEngine } from '@/components/GridEngine';
 import Link from 'next/link';
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://awesome-video-prompts-nextjs.semonxue.workers.dev';
+
 interface HomePageProps {
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ tag?: string; model?: string; q?: string; page?: string }>;
@@ -24,6 +26,24 @@ interface HomePageProps {
 export const revalidate = 3600;
 
 const PAGE_SIZE = 24;
+
+export async function generateMetadata({ params }: HomePageProps) {
+  const { locale } = await params;
+  const canonical = `${SITE_URL}/${locale}`;
+  return {
+    title: 'Awesome Video Prompts',
+    description: 'An open-source collection of awesome AI video generation prompts. Browse, copy, and remix.',
+    alternates: {
+      canonical,
+      languages: {
+        en: `${SITE_URL}/en`,
+        zh: `${SITE_URL}/zh`,
+        ja: `${SITE_URL}/ja`,
+        'x-default': `${SITE_URL}/en`,
+      },
+    },
+  };
+}
 
 export default async function HomePage({ params, searchParams }: HomePageProps) {
   const { locale: rawLocale } = await params;
@@ -55,11 +75,6 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
     ? allModels.find((m) => m.slug === sp.model)?.name ?? sp.model
     : null;
   const activeTag = sp.tag ?? null;
-
-  // 下一页 URL（保留现有 search params，仅追加/更新 page）
-  const nextPageUrl = result.hasMore
-    ? `/${locale}?${buildQs({ ...sp, page: String(page + 1) })}`
-    : null;
 
   return (
     <>
@@ -105,25 +120,16 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
         </div>
 
         <GridEngine
-          items={result.items}
-          locale={locale}
+          initialItems={result.items}
           total={result.total}
-          hasMore={result.hasMore}
-          nextPageUrl={nextPageUrl}
-          loadingText={t('loadingMore')}
+          filters={{ tag: sp.tag, model: sp.model, q: sp.q }}
+          initialPage={page}
+          pageSize={PAGE_SIZE}
+          locale={locale}
         />
       </main>
 
       <Footer locale={locale} />
     </>
   );
-}
-
-/** 把 searchParams 对象拼成 query string（自动 skip 空值 + 处理 page） */
-function buildQs(params: Record<string, string | undefined>): string {
-  const usp = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) {
-    if (v && v.trim()) usp.set(k, v);
-  }
-  return usp.toString();
 }

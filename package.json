@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:cf": "opennextjs-cloudflare build",
+    "prebuild:cf": "node scripts/copy-wrapper.mjs",
+    "build:cf": "npm run prebuild:cf && opennextjs-cloudflare build",
     "preview": "opennextjs-cloudflare preview",
     "deploy": "npm run build:cf && wrangler deploy",
     "lint": "next lint",

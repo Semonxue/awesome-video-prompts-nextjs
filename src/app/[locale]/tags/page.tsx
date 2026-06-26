@@ -6,8 +6,28 @@ import { locales, type Locale } from '@/i18n/request';
 import { notFound } from 'next/navigation';
 import { listAllTags } from '@/db/queries';
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://awesome-video-prompts-nextjs.semonxue.workers.dev';
+
 interface TagsPageProps {
   params: Promise<{ locale: string }>;
+}
+
+export async function generateMetadata({ params }: TagsPageProps) {
+  const { locale } = await params;
+  const canonical = `${SITE_URL}/${locale}/tags`;
+  return {
+    title: 'Browse by tag',
+    description: 'Explore prompts organized by topic and style.',
+    alternates: {
+      canonical,
+      languages: {
+        en: `${SITE_URL}/en/tags`,
+        zh: `${SITE_URL}/zh/tags`,
+        ja: `${SITE_URL}/ja/tags`,
+        'x-default': `${SITE_URL}/en/tags`,
+      },
+    },
+  };
 }
 
 export default async function TagsPage({ params }: TagsPageProps) {

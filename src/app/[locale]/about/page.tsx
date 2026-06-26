@@ -5,6 +5,26 @@ import { getTranslations } from 'next-intl/server';
 import { locales, type Locale } from '@/i18n/request';
 import { notFound } from 'next/navigation';
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://awesome-video-prompts-nextjs.semonxue.workers.dev';
+
+export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params;
+  const canonical = `${SITE_URL}/${locale}/about`;
+  return {
+    title: 'About Awesome Video Prompts',
+    description: 'A community-curated library of AI video generation prompts. Browse, copy, and remix.',
+    alternates: {
+      canonical,
+      languages: {
+        en: `${SITE_URL}/en/about`,
+        zh: `${SITE_URL}/zh/about`,
+        ja: `${SITE_URL}/ja/about`,
+        'x-default': `${SITE_URL}/en/about`,
+      },
+    },
+  };
+}
+
 interface AboutPageProps {
   params: Promise<{ locale: string }>;
 }

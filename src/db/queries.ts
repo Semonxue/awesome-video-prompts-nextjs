@@ -1,4 +1,18 @@
 /**
+ * 轻量查询：仅取 slug + updatedAt（sitemap 等场景用，不 hydrate tags/models）
+ */
+export async function listAllSlugsForSitemap(): Promise<Array<{ slug: string; updatedAt: string }>> {
+  const d1 = await getD1();
+  const db = getDb(d1);
+  const rows = await db
+    .select({ slug: prompts.slug, updatedAt: prompts.updatedAt })
+    .from(prompts)
+    .where(eq(prompts.isDraft, 0))
+    .orderBy(desc(prompts.promptDate));
+  return rows;
+}
+
+/**
  * 数据查询层（Page → DB 边界）
  *
  * 实现：在 Cloudflare Workers 运行时通过 getCloudflareContext() 拿 D1 binding
@@ -50,6 +64,13 @@ export interface ListPromptsResult {
 
 /**
  * 内部：从 DB 行组装成 PromptCardData（批量预查 tags/models 后拼装）
+ *
+ * 实现：D1 单 query 的 SQL variables 上限实测 ~461（不是 SQL 默认的 999）
+ *       详情页 listPrompts({ limit: 200 }) + Drizzle inArray 会展开成 ~461 个变量 → 500
+ * 修法：对 ids 分批 chunk，每批独立 query 后合并
+ *       - chunk = 100：实测安全（< 200 变量 + 关联列引用 < 461 阈值）
+ *       - round-trip 数 = ceil(N / 100)；100 条 prompt = 1 次；200 条 = 2 次
+ *       - 4479 条 tag/model 关联进单 prompt 的 hydrate 不触发（单条走单 query）
  */
 async function hydratePrompts(
   rows: Array<typeof prompts.$inferSelect>,
@@ -60,26 +81,34 @@ async function hydratePrompts(
   const db = getDb(d1);
   const ids = rows.map((r) => r.id);
 
-  // 批量查 tags
-  const tagRows = await db
-    .select({
-      promptId: promptTags.promptId,
-      slug: tags.name,
-    })
-    .from(promptTags)
-    .innerJoin(tags, eq(promptTags.tagId, tags.id))
-    .where(inArray(promptTags.promptId, ids));
+  const CHUNK = 100;
+  const tagRows: Array<{ promptId: number; slug: string }> = [];
+  const modelRows: Array<{ promptId: number; slug: string; name: string }> = [];
 
-  // 批量查 models（带 name 字段）
-  const modelRows = await db
-    .select({
-      promptId: promptModels.promptId,
-      slug: models.slug,
-      name: models.name,
-    })
-    .from(promptModels)
-    .innerJoin(models, eq(promptModels.promptId, models.id))
-    .where(inArray(promptModels.promptId, ids));
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const idChunk = ids.slice(i, i + CHUNK);
+
+    const tagChunk = await db
+      .select({
+        promptId: promptTags.promptId,
+        slug: tags.name,
+      })
+      .from(promptTags)
+      .innerJoin(tags, eq(promptTags.tagId, tags.id))
+      .where(inArray(promptTags.promptId, idChunk));
+    tagRows.push(...tagChunk);
+
+    const modelChunk = await db
+      .select({
+        promptId: promptModels.promptId,
+        slug: models.slug,
+        name: models.name,
+      })
+      .from(promptModels)
+      .innerJoin(models, eq(promptModels.modelId, models.id))
+      .where(inArray(promptModels.promptId, idChunk));
+    modelRows.push(...modelChunk);
+  }
 
   // 按 promptId 索引
   const tagsByPromptId = new Map<number, TagRef[]>();
