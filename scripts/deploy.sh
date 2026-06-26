@@ -128,7 +128,7 @@ SMOKE_URL="${DEPLOY_URL:-${NEXT_PUBLIC_SITE_URL}}"
 log "冒烟验证..."
 SMOKE_FAILED=0
 
-for path in \
+  for path in \
   "/en" \
   "/zh" \
   "/ja" \
@@ -137,7 +137,7 @@ for path in \
   "/sitemap.xml"; do
 
   FULL_URL="${SMOKE_URL}${path}"
-  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$FULL_URL" --max-time 10 2>/dev/null || echo "000")
+  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$FULL_URL" --max-time 10 2>&1 | tail -1)
 
   if [[ "$HTTP_CODE" == "200" ]]; then
     info "✓ $HTTP_CODE $path"
