@@ -1,0 +1,1367 @@
+# 标签多语言定义
+# 标签slug使用英文，存储在front matter中
+# 显示时根据当前语言选择对应翻译
+
+dreamy:
+  en: dreamy
+  zh-cn: 梦幻
+  description_en: "Dream-like atmosphere with soft focus and ethereal quality"
+  description_zh-cn: "梦幻氛围，带有柔焦和空灵质感"
+
+nature:
+  en: nature
+  zh-cn: 自然
+  description_en: "Natural landscapes, flora, and wildlife"
+  description_zh-cn: "自然景观、植物和野生动物"
+
+cinematic:
+  en: cinematic
+  zh-cn: 电影感
+  description_en: "Movie-like composition, lighting, and color grading"
+  description_zh-cn: "电影般的构图、光影和调色"
+
+portrait:
+  en: portrait
+  zh-cn: 人像
+  description_en: "Character-focused imagery with emphasis on expression"
+  description_zh-cn: "以人物为主，注重表情刻画"
+
+landscape:
+  en: landscape
+  zh-cn: 风景
+  description_en: "Wide scenic views and environmental shots"
+  description_zh-cn: "广阔的风景和环境镜头"
+
+abstract:
+  en: abstract
+  zh-cn: 抽象
+  description_en: "Non-representational forms, colors, and patterns"
+  description_zh-cn: "非具象的形态、色彩和图案"
+
+minimalist:
+  en: minimalist
+  zh-cn: 极简
+  description_en: "Clean, simple compositions with minimal elements"
+  description_zh-cn: "简洁的构图，元素精简"
+
+vintage:
+  en: vintage
+  zh-cn: 复古
+  description_en: "Retro aesthetic with nostalgic qualities"
+  description_zh-cn: "复古美学，带有怀旧质感"
+
+futuristic:
+  en: futuristic
+  zh-cn: 未来感
+  description_en: "Sci-fi inspired, modern technology aesthetics"
+  description_zh-cn: "科幻灵感，现代科技美学"
+
+dark:
+  en: dark
+  zh-cn: 暗调
+  description_en: "Low-key lighting with moody atmosphere"
+  description_zh-cn: "低调光影，氛围沉郁"
+
+bright:
+  en: bright
+  zh-cn: 明亮
+  description_en: "High-key lighting with cheerful, vibrant tones"
+  description_zh-cn: "高调光影，色调明快活泼"
+
+colorful:
+  en: colorful
+  zh-cn: 多彩
+  description_en: "Rich, saturated colors and vibrant palettes"
+  description_zh-cn: "丰富饱和的色彩和鲜艳的调色板"
+
+monochrome:
+  en: monochrome
+  zh-cn: 单色
+  description_en: "Single color family or black and white"
+  description_zh-cn: "单色系或黑白"
+
+urban:
+  en: urban
+  zh-cn: 城市
+  description_en: "Cityscapes, architecture, and street scenes"
+  description_zh-cn: "城市景观、建筑和街景"
+
+fantasy:
+  en: fantasy
+  zh-cn: 奇幻
+  description_en: "Magical, imaginative, otherworldly scenes"
+  description_zh-cn: "魔幻、想象、超现实场景"
+
+realistic:
+  en: realistic
+  zh-cn: 写实
+  description_en: "Photorealistic, true-to-life representation"
+  description_zh-cn: "照片级真实，忠实于现实"
+
+3d:
+  en: 3d
+  zh-cn: 3D
+  description_en: "Three-dimensional rendered imagery"
+  description_zh-cn: "三维渲染图像"
+
+anime:
+  en: anime
+  zh-cn: 动漫
+  description_en: "Japanese animation inspired art style"
+  description_zh-cn: "日式动画风格"
+
+watercolor:
+  en: watercolor
+  zh-cn: 水彩
+  description_en: "Watercolor painting aesthetic with fluid washes"
+  description_zh-cn: "水彩画美学，带有流畅的晕染效果"
+
+oil_painting:
+  en: oil painting
+  zh-cn: 油画
+  description_en: "Oil painting texture and brushwork style"
+  description_zh-cn: "油画质感和笔触风格"
+
+sketch:
+  en: sketch
+  zh-cn: 素描
+  description_en: "Hand-drawn, line art, or pencil sketch look"
+  description_zh-cn: "手绘、线稿或铅笔素描风格"
+
+night:
+  en: night
+  zh-cn: 夜晚
+  description_en: "Nighttime scenes with artificial lighting"
+  description_zh-cn: "夜间场景，人工照明"
+
+sunset:
+  en: sunset
+  zh-cn: 日落
+  description_en: "Golden hour, sunset, twilight atmospheres"
+  description_zh-cn: "黄金时刻、日落、黄昏氛围"
+
+macro:
+  en: macro
+  zh-cn: 微距
+  description_en: "Close-up, detailed views of small subjects"
+  description_zh-cn: "特写，小物体的细致画面"
+
+aerial:
+  en: aerial
+  zh-cn: 航拍
+  description_en: "Bird's eye view, drone photography perspective"
+  description_zh-cn: "鸟瞰视角，无人机摄影角度"
+
+underwater:
+  en: underwater
+  zh-cn: 水下
+  description_en: "Submerged scenes, aquatic environments"
+  description_zh-cn: "水下场景，水生环境"
+
+motion_blur:
+  en: motion blur
+  zh-cn: 动态模糊
+  description_en: "Sense of movement through motion blur effect"
+  description_zh-cn: "通过动态模糊效果表现运动感"
+
+bokeh:
+  en: bokeh
+  zh-cn: 散景
+  description_en: "Aesthetic blur in out-of-focus areas"
+  description_zh-cn: "焦外区域的艺术化模糊效果"
+
+silhouette:
+  en: silhouette
+  zh-cn: 剪影
+  description_en: "Dark shapes against bright backgrounds"
+  description_zh-cn: "明亮背景下的深色轮廓"
+
+double_exposure:
+  en: double exposure
+  zh-cn: 双重曝光
+  description_en: "Overlay of multiple images for artistic effect"
+  description_zh-cn: "多张图像叠加的艺术效果"
+
+low_poly:
+  en: low poly
+  zh-cn: 低多边形
+  description_en: "Low polygon 3D geometric style"
+  description_zh-cn: "低多边形3D几何风格"
+
+pixel_art:
+  en: pixel art
+  zh-cn: 像素艺术
+  description_en: "Retro pixelated digital art style"
+  description_zh-cn: "复古像素化数字艺术风格"
+
+fpv:
+  en: fpv
+  zh-cn: 第一人称视角
+  description_en: "First-person view, immersive perspective"
+  description_zh-cn: "第一人称视角，沉浸式视角"
+
+forest:
+  en: forest
+  zh-cn: 森林
+  description_en: "Wooded areas, trees, and forest environments"
+  description_zh-cn: "林地、树木和森林环境"
+
+military:
+  en: military
+  zh-cn: 军事
+  description_en: "Military themes, soldiers, and tactical operations"
+  description_zh-cn: "军事主题、士兵和战术行动"
+
+tracking:
+  en: tracking
+  zh-cn: 跟踪
+  description_en: "Following or tracking movement in shots"
+  description_zh-cn: "镜头跟随或跟踪运动"
+
+car:
+  en: car
+  zh-cn: 汽车
+  description_en: "Automobiles and vehicle-focused scenes"
+  description_zh-cn: "汽车和以车辆为主的场景"
+
+mountain:
+  en: mountain
+  zh-cn: 山
+  description_en: "Mountain landscapes and high-altitude scenes"
+  description_zh-cn: "山地景观和高海拔场景"
+
+pov:
+  en: pov
+  zh-cn: POV
+  description_en: "Point of view shots from character's perspective"
+  description_zh-cn: "从人物视角的镜头"
+
+honeybee:
+  en: honeybee
+  zh-cn: 蜜蜂
+  description_en: "Honeybees and bee-related imagery"
+  description_zh-cn: "蜜蜂和与蜜蜂相关的图像"
+
+rally:
+  en: rally
+  zh-cn: 拉力赛
+  description_en: "Rally racing and motorsport events"
+  description_zh-cn: "拉力赛和赛车运动"
+
+driver:
+  en: driver
+  zh-cn: 司机
+  description_en: "Drivers and piloting scenes"
+  description_zh-cn: "司机和驾驶场景"
+
+racing:
+  en: racing
+  zh-cn: 赛车
+  description_en: "Racing and high-speed action"
+  description_zh-cn: "赛车和高速度动作"
+
+transitions:
+  en: transitions
+  zh-cn: 转场
+  description_en: "Scene transitions and camera movements"
+  description_zh-cn: "场景转场和镜头移动"
+
+alley:
+  en: alley
+  zh-cn: 小巷
+  description_en: "Narrow streets and alleyways"
+  description_zh-cn: "狭窄街道和小巷"
+
+hallway:
+  en: hallway
+  zh-cn: 走廊
+  description_en: "Indoor corridors and passageways"
+  description_zh-cn: "室内走廊和通道"
+
+tunnel:
+  en: tunnel
+  zh-cn: 隧道
+  description_en: "Tunnels and underground passages"
+  description_zh-cn: "隧道和地下通道"
+
+multi-shot:
+  en: multi-shot
+  zh-cn: 多镜头
+  description_en: "Multiple camera angles and shots"
+  description_zh-cn: "多角度和多镜头"
+
+snow:
+  en: snow
+  zh-cn: 雪景
+  description_en: "Snow-covered landscapes and winter scenes"
+  description_zh-cn: "雪覆盖的景观和冬季场景"
+
+ice:
+  en: ice
+  zh-cn: 冰川
+  description_en: "Ice formations, glaciers, and frozen landscapes"
+  description_zh-cn: "冰层、冰川和冰冻景观"
+
+thunder:
+  en: thunder
+  zh-cn: 雷暴
+  description_en: "Thunderstorms and stormy weather"
+  description_zh-cn: "雷暴和暴风雨天气"
+
+lightning:
+  en: lightning
+  zh-cn: 闪电
+  description_en: "Lightning strikes and electrical phenomena"
+  description_zh-cn: "闪电和电气现象"
+
+desert:
+  en: desert
+  zh-cn: 沙漠
+  description_en: "Desert landscapes, sand dunes, and arid environments"
+  description_zh-cn: "沙漠景观、沙丘和干旱环境"
+
+documentary:
+  en: documentary
+  zh-cn: 纪录片
+  description_en: "Documentary-style cinematography and realistic storytelling"
+  description_zh-cn: "纪录片风格的电影摄影和真实叙事"
+
+cyberpunk:
+  en: cyberpunk
+  zh-cn: 赛博朋克
+  description_en: "Futuristic, high-tech low-life dystopian aesthetics"
+  description_zh-cn: "未来主义、高科技低生活反乌托邦美学"
+animal:
+  en: animal
+  zh-cn: 动物
+  description_en: "Animals and creature imagery"
+  description_zh-cn: "动物和生物图像"
+space:
+  en: space
+  zh-cn: 太空
+  description_en: "Space, cosmos, and astronomical scenes"
+  description_zh-cn: "太空、宇宙和天文场景"
+star_wars:
+  en: star_wars
+  zh-cn: 星球大战
+  description_en: "Star Wars universe and related themes"
+  description_zh-cn: "星球大战宇宙及相关主题"
+samurai:
+  en: samurai
+  zh-cn: 武士
+  description_en: "Samurai warriors and Japanese feudal culture"
+  description_zh-cn: "武士战士和日本封建文化"
+cherry_blossom:
+  en: cherry_blossom
+  zh-cn: 樱花
+  description_en: "Cherry blossom trees and spring scenery"
+  description_zh-cn: "樱花树和春季风景"
+sci-fi:
+  en: sci-fi
+  zh-cn: 科幻
+  description_en: "Science fiction themes and futuristic concepts"
+  description_zh-cn: "科幻主题和未来概念"
+alien:
+  en: alien
+  zh-cn: 外星人
+  description_en: "Extraterrestrial beings and alien life forms"
+  description_zh-cn: "外星生物和外星生命形式"
+comparison:
+  en: comparison
+  zh-cn: 对比
+  description_en: "Side-by-side comparisons of different models or styles"
+  description_zh-cn: "不同模型或风格的并排对比"
+
+humor:
+  en: humor
+  zh-cn: 幽默
+  description_en: "Humorous and comedic content"
+  description_zh-cn: "幽默和喜剧内容"
+
+martial_arts:
+  en: martial arts
+  zh-cn: 武术
+  description_en: "Martial arts and combat scenes"
+  description_zh-cn: "武术和战斗场景"
+
+horror:
+  en: horror
+  zh-cn: 恐怖
+  description_en: "Horror and scary themes"
+  description_zh-cn: "恐怖和可怕主题"
+
+dance:
+  en: dance
+  zh-cn: 舞蹈
+  description_en: "Dance and choreography"
+  description_zh-cn: "舞蹈和编排"
+
+sports:
+  en: sports
+  zh-cn: 体育
+  description_en: "Sports and athletic activities"
+  description_zh-cn: "体育和竞技活动"
+
+surfing:
+  en: surfing
+  zh-cn: 冲浪
+  description_en: "Surfing and ocean water sports"
+  description_zh-cn: "冲浪和海上运动"
+
+drama:
+  en: drama
+  zh-cn: 戏剧
+  description_en: "Dramatic and theatrical content"
+  description_zh-cn: "戏剧和戏剧性内容"
+
+action:
+  en: action
+  zh-cn: 动作
+  description_en: "Intense action scenes, stunts, and dynamic movement"
+  description_zh-cn: "激烈的动作场景、特技和动态运动"
+
+drone:
+  en: drone
+  zh-cn: 无人机
+  description_en: "Drone camera shots and aerial perspectives"
+  description_zh-cn: "无人机拍摄和航拍视角"
+
+surreal:
+  en: surreal
+  zh-cn: 超现实
+  description_en: "Surreal, dream-like scenes with impossible or fantastical elements"
+  description_zh-cn: "超现实、梦幻般的场景，具有不可能或奇幻元素"
+
+cozy:
+  en: cozy
+  zh-cn: 温馨
+  description_en: "Warm, comfortable, inviting atmosphere"
+  description_zh-cn: "温暖、舒适、令人愉悦的氛围"
+
+morning:
+  en: morning
+  zh-cn: 早晨
+  description_en: "Morning time, sunrise, early day scenes"
+  description_zh-cn: "早晨时间、日出、早间场景"
+
+war:
+  en: war
+  zh-cn: 战争
+  description_en: "War scenes, battles, and military themes"
+  description_zh-cn: "战争场景、战斗和军事主题"
+
+battlefield:
+  en: battlefield
+  zh-cn: 战场
+  description_en: "Battlefield environments and combat zones"
+  description_zh-cn: "战场环境和战斗区域"
+
+warrior:
+  en: warrior
+  zh-cn: 武士
+  description_en: "Warrior characters and combat scenes"
+  description_zh-cn: "武士人物和战斗场景"
+
+dystopian:
+  en: dystopian
+  zh-cn: 反乌托邦
+  description_en: "Dystopian futures and bleak societies"
+  description_zh-cn: "反乌托邦未来和凄凉社会"
+
+article:
+  en: article
+  zh-cn: 文章
+  description_en: "Articles and written content"
+  description_zh-cn: "文章和书面内容"
+
+hover:
+  en: hover
+  zh-cn: 悬停
+  description_en: "Hover effects and floating scenes"
+  description_zh-cn: "悬停效果和浮动场景"
+
+advertisement:
+  en: advertisement
+  zh-cn: 广告
+  description_en: "Commercial and promotional content"
+  description_zh-cn: "商业和推广内容"
+
+chase:
+  en: chase
+  zh-cn: 追逐
+  description_en: "Chase scenes and pursuit action"
+  description_zh-cn: "追逐场景和追击动作"
+
+comedy:
+  en: comedy
+  zh-cn: 喜剧
+  description_en: "Comedic and humorous scenes"
+  description_zh-cn: "喜剧和幽默场景"
+
+adventure:
+  en: adventure
+  zh-cn: 冒险
+  description_en: "Adventure and exploration themes"
+  description_zh-cn: "冒险和探索主题"
+
+romantic:
+  en: romantic
+  zh-cn: 浪漫
+  description_en: "Romantic and love-themed content"
+  description_zh-cn: "浪漫和爱情主题内容"
+
+vlog:
+  en: vlog
+  zh-cn: 视频日志
+  description_en: "Vlog style, casual video diary format"
+  description_zh-cn: "视频日志风格，随意的视频日记格式"
+
+explosion:
+  en: explosion
+  zh-cn: 爆炸
+  description_en: "Explosions and pyrotechnic effects"
+  description_zh-cn: "爆炸和烟火特效"
+
+lo-fi:
+  en: lo-fi
+  zh-cn: 低保真
+  description_en: "Lo-fi aesthetic, melancholic and nostalgic mood"
+  description_zh-cn: "低保真美学，忧郁和怀旧氛围"
+
+rain:
+  en: rain
+  zh-cn: 雨
+  description_en: "Rainy weather and wet scenes"
+  description_zh-cn: "雨天和潮湿场景"
+
+360:
+  en: 360
+  zh-cn: 360度
+  description_en: "360-degree panoramic views and tiny planet effects"
+  description_zh-cn: "360度全景视图和小行星效果"
+
+fish:
+  en: fish
+  zh-cn: 鱼类
+  description_en: "Fish and marine life"
+  description_zh-cn: "鱼类和海洋生物"
+
+eastern:
+  en: eastern
+  zh-cn: 东方
+  description_en: "Eastern aesthetics, Asian cultural elements"
+  description_zh-cn: "东方美学，亚洲文化元素"
+
+ocean:
+  en: ocean
+  zh-cn: 海洋
+  description_en: "Ocean, sea, and maritime scenes"
+  description_zh-cn: "海洋、大海和海事场景"
+
+mind-bending:
+  en: mind-bending
+  zh-cn: 烧脑
+  description_en: "Mind-bending, reality-warping visuals"
+  description_zh-cn: "烧脑、扭曲现实的视觉效果"
+
+kaiju:
+  en: kaiju
+  zh-cn: 巨兽
+  description_en: "Giant monsters and kaiju creatures"
+  description_zh-cn: "巨型怪物和怪兽"
+
+fashion:
+  en: fashion
+  zh-cn: 时尚
+  description_en: "Fashion and high-end clothing aesthetics"
+  description_zh-cn: "时尚和高端服装美学"
+
+twist:
+  en: twist
+  zh-cn: 反转
+  description_en: "Plot twists and surprising revelations"
+  description_zh-cn: "剧情反转和惊人揭示"
+
+martial-arts:
+  en: martial arts
+  zh-cn: 武术
+  description_en: "Martial arts and hand-to-hand combat"
+  description_zh-cn: "武术和徒手格斗"
+
+catwalk:
+  en: catwalk
+  zh-cn: 时装秀
+  description_en: "Fashion runway and catwalk scenes"
+  description_zh-cn: "时装秀和T台场景"
+
+slow-motion:
+  en: slow motion
+  zh-cn: 慢动作
+  description_en: "Slow motion and high frame rate effects"
+  description_zh-cn: "慢动作和高帧率效果"
+
+luxury:
+  en: luxury
+  zh-cn: 奢华
+  description_en: "Luxury and high-end aesthetics"
+  description_zh-cn: "奢华和高端美学"
+
+motogp:
+  en: motogp
+  zh-cn: 摩托GP
+  description_en: "MotoGP racing and motorcycle sports"
+  description_zh-cn: "摩托GP赛车和摩托车运动"
+
+robot:
+  en: robot
+  zh-cn: 机器人
+  description_en: "Robots and mechanical beings"
+  description_zh-cn: "机器人和机械生物"
+
+combat:
+  en: combat
+  zh-cn: 战斗
+  description_en: "Combat and fighting scenes"
+  description_zh-cn: "战斗和格斗场景"
+
+arena:
+  en: arena
+  zh-cn: 竞技场
+  description_en: "Arena and stadium environments"
+  description_zh-cn: "竞技场和体育场环境"
+
+transformation:
+  en: transformation
+  zh-cn: 变形
+  description_en: "Transformation and metamorphosis"
+  description_zh-cn: "变形和蜕变"
+
+art:
+  en: art
+  zh-cn: 艺术
+  description_en: "Artistic and creative content"
+  description_zh-cn: "艺术和创意内容"
+
+historical:
+  en: historical
+  zh-cn: 历史
+  description_en: "Historical and period settings"
+  description_zh-cn: "历史和时代背景"
+
+sword:
+  en: sword
+  zh-cn: 剑
+  description_en: "Swords and bladed weapons"
+  description_zh-cn: "剑和刀刃武器"
+
+mystery:
+  en: mystery
+  zh-cn: 悬疑
+  description_en: "Mystery and suspense themes"
+  description_zh-cn: "悬疑和紧张主题"
+
+romance:
+  en: romance
+  zh-cn: 浪漫
+  description_en: "Romance and love stories"
+  description_zh-cn: "浪漫和爱情故事"
+
+train:
+  en: train
+  zh-cn: 火车
+  description_en: "Trains and railway scenes"
+  description_zh-cn: "火车和铁路场景"
+
+hamster:
+  en: hamster
+  zh-cn: 仓鼠
+  description_en: "Hamsters and small rodents"
+  description_zh-cn: "仓鼠和小型啮齿动物"
+
+donut:
+  en: donut
+  zh-cn: 甜甜圈
+  description_en: "Donuts and sweet treats"
+  description_zh-cn: "甜甜圈和甜点"
+
+f1:
+  en: F1
+  zh-cn: F1赛车
+  description_en: "Formula 1 racing and motorsport"
+  description_zh-cn: "一级方程式赛车和赛车运动"
+
+k-pop:
+  en: K-pop
+  zh-cn: 韩流
+  description_en: "Korean pop music and culture"
+  description_zh-cn: "韩国流行音乐和文化"
+
+girl-group:
+  en: girl group
+  zh-cn: 女团
+  description_en: "Girl groups and female performers"
+  description_zh-cn: "女子组合和女性表演者"
+
+volcano:
+  en: volcano
+  zh-cn: 火山
+  description_en: "Volcanoes and volcanic activity"
+  description_zh-cn: "火山和火山活动"
+
+eruption:
+  en: eruption
+  zh-cn: 喷发
+  description_en: "Volcanic eruptions and explosions"
+  description_zh-cn: "火山喷发和爆炸"
+
+diner:
+  en: diner
+  zh-cn: 餐厅
+  description_en: "Diners and restaurant settings"
+  description_zh-cn: "餐厅和餐馆场景"
+
+phone:
+  en: phone
+  zh-cn: 电话
+  description_en: "Phones and communication devices"
+  description_zh-cn: "电话和通讯设备"
+
+food:
+  en: food
+  zh-cn: 食物
+  description_en: "Food and culinary content"
+  description_zh-cn: "食物和烹饪内容"
+
+tsunami:
+  en: tsunami
+  zh-cn: 海啸
+  description_en: "Tsunamis and giant waves"
+  description_zh-cn: "海啸和巨浪"
+
+mummy:
+  en: mummy
+  zh-cn: 木乃伊
+  description_en: "Mummies and ancient Egyptian themes"
+  description_zh-cn: "木乃伊和古埃及主题"
+
+temple:
+  en: temple
+  zh-cn: 寺庙
+  description_en: "Temples and sacred buildings"
+  description_zh-cn: "寺庙和神圣建筑"
+
+jellyfish:
+  en: jellyfish
+  zh-cn: 水母
+  description_en: "Jellyfish and marine creatures"
+  description_zh-cn: "水母和海洋生物"
+
+dialogue:
+  en: dialogue
+  zh-cn: 对话
+  description_en: "Dialogue and conversation scenes"
+  description_zh-cn: "对话和交谈场景"
+
+tension:
+  en: tension
+  zh-cn: 紧张
+  description_en: "Tension and suspense atmosphere"
+  description_zh-cn: "紧张和悬疑氛围"
+
+ink:
+  en: ink
+  zh-cn: 水墨
+  description_en: "Ink and traditional painting style"
+  description_zh-cn: "水墨和传统绘画风格"
+
+horse:
+  en: horse
+  zh-cn: 马
+  description_en: "Horses and equestrian scenes"
+  description_zh-cn: "马和马术场景"
+
+submarine:
+  en: submarine
+  zh-cn: 潜艇
+  description_en: "Submarines and underwater vessels"
+  description_zh-cn: "潜艇和水下舰艇"
+
+gravity:
+  en: gravity
+  zh-cn: 重力
+  description_en: "Gravity-defying and physics-bending scenes"
+  description_zh-cn: "反重力和扭曲物理场景"
+
+destruction:
+  en: destruction
+  zh-cn: 毁灭
+  description_en: "Destruction and devastation scenes"
+  description_zh-cn: "毁灭和破坏场景"
+
+truck:
+  en: truck
+  zh-cn: 卡车
+  description_en: "Trucks and heavy vehicles"
+  description_zh-cn: "卡车和重型车辆"
+
+jump:
+  en: jump
+  zh-cn: 跳跃
+  description_en: "Jumping and leaping action"
+  description_zh-cn: "跳跃和飞跃动作"
+
+meta:
+  en: meta
+  zh-cn: 元叙事
+  description_en: "Meta and self-referential content"
+  description_zh-cn: "元叙事和自指内容"
+
+emotional:
+  en: emotional
+  zh-cn: 情感
+  description_en: "Emotional and heartfelt content"
+  description_zh-cn: "情感和感人内容"
+
+visualization:
+  en: visualization
+  zh-cn: 可视化
+  description_en: "Data visualization and abstract graphics"
+  description_zh-cn: "数据可视化和抽象图形"
+
+audio:
+  en: audio
+  zh-cn: 音频
+  description_en: "Audio and sound-related content"
+  description_zh-cn: "音频和声音相关内容"
+
+dinosaur:
+  en: dinosaur
+  zh-cn: 恐龙
+  description_en: "Dinosaurs and prehistoric creatures"
+  description_zh-cn: "恐龙和史前生物"
+
+technology:
+  en: technology
+  zh-cn: 科技
+  description_en: "Technology and digital themes"
+  description_zh-cn: "科技和数字主题"
+
+low-angle:
+  en: low angle
+  zh-cn: 低角度
+  description_en: "Low angle camera shots"
+  description_zh-cn: "低角度镜头"
+
+indoor:
+  en: indoor
+  zh-cn: 室内
+  description_en: "Indoor and interior scenes"
+  description_zh-cn: "室内和内部场景"
+
+duo:
+  en: duo
+  zh-cn: 双人
+  description_en: "Two characters or subjects"
+  description_zh-cn: "两个角色或主体"
+
+animation:
+  en: animation
+  zh-cn: 动画
+  description_en: "Animated and cartoon style"
+  description_zh-cn: "动画和卡通风格"
+
+market:
+  en: market
+  zh-cn: 市场
+  description_en: "Markets and bazaar scenes"
+  description_zh-cn: "市场和集市场景"
+
+nostalgia:
+  en: nostalgia
+  zh-cn: 怀旧
+  description_en: "Nostalgic and sentimental mood"
+  description_zh-cn: "怀旧和感伤氛围"
+
+epic:
+  en: epic
+  zh-cn: 史诗
+  description_en: "Epic and grand scale scenes"
+  description_zh-cn: "史诗和宏大场景"
+
+particles:
+  en: particles
+  zh-cn: 粒子
+  description_en: "Particle effects and floating elements"
+  description_zh-cn: "粒子效果和漂浮元素"
+
+storm:
+  en: storm
+  zh-cn: 风暴
+  description_en: "Storms and severe weather"
+  description_zh-cn: "风暴和恶劣天气"
+
+text:
+  en: text
+  zh-cn: 文字
+  description_en: "Text and typography elements"
+  description_zh-cn: "文字和排版元素"
+
+vfx:
+  en: VFX
+  zh-cn: 视觉特效
+  description_en: "Visual effects and CGI"
+  description_zh-cn: "视觉特效和CGI"
+
+glacier:
+  en: glacier
+  zh-cn: 冰川
+  description_en: "Glaciers and ice formations"
+  description_zh-cn: "冰川和冰层"
+
+pixar:
+  en: Pixar
+  zh-cn: 皮克斯
+  description_en: "Pixar-style animation aesthetic"
+  description_zh-cn: "皮克斯风格动画美学"
+
+hero:
+  en: hero
+  zh-cn: 英雄
+  description_en: "Hero characters and protagonists"
+  description_zh-cn: "英雄角色和主角"
+
+western:
+  en: western
+  zh-cn: 西部
+  description_en: "Western and cowboy themes"
+  description_zh-cn: "西部和牛仔主题"
+
+bmx:
+  en: BMX
+  zh-cn: BMX
+  description_en: "BMX biking and extreme sports"
+  description_zh-cn: "BMX自行车和极限运动"
+
+fire:
+  en: fire
+  zh-cn: 火焰
+  description_en: "Fire and flames"
+  description_zh-cn: "火焰和火光"
+
+mech:
+  en: mech
+  zh-cn: 机甲
+  description_en: "Mech and giant robot machines"
+  description_zh-cn: "机甲和巨型机器人"
+
+cat:
+  en: cat
+  zh-cn: 猫
+  description_en: "Cats and feline animals"
+  description_zh-cn: "猫和猫科动物"
+
+skiing:
+  en: skiing
+  zh-cn: 滑雪
+  description_en: "Skiing and winter sports"
+  description_zh-cn: "滑雪和冬季运动"
+
+water:
+  en: water
+  zh-cn: 水
+  description_en: "Water and aquatic scenes"
+  description_zh-cn: "水和水生场景"
+
+interrogation:
+  en: interrogation
+  zh-cn: 审讯
+  description_en: "Interrogation and questioning scenes"
+  description_zh-cn: "审讯和质问场景"
+
+snowboarding:
+  en: snowboarding
+  zh-cn: 单板滑雪
+  description_en: "Snowboarding and winter sports"
+  description_zh-cn: "单板滑雪和冬季运动"
+
+girl:
+  en: girl
+  zh-cn: 女孩
+  description_en: "Girls and female characters"
+  description_zh-cn: "女孩和女性角色"
+
+group:
+  en: group
+  zh-cn: 团体
+  description_en: "Groups and multiple people"
+  description_zh-cn: "团体和多人"
+
+apocalypse:
+  en: apocalypse
+  zh-cn: 末世
+  description_en: "Apocalyptic and end-of-world themes"
+  description_zh-cn: "末世和世界末日主题"
+
+cathedral:
+  en: cathedral
+  zh-cn: 大教堂
+  description_en: "Cathedrals and grand religious architecture"
+  description_zh-cn: "大教堂和宏伟的宗教建筑"
+
+cosmic:
+  en: cosmic
+  zh-cn: 宇宙
+  description_en: "Cosmic and space-related imagery"
+  description_zh-cn: "宇宙和太空相关图像"
+
+mecha:
+  en: mecha
+  zh-cn: 机甲
+  description_en: "Mecha robots and mechanical warriors"
+  description_zh-cn: "机甲机器人和机械战士"
+
+football:
+  en: football
+  zh-cn: 美式足球
+  description_en: "American football and NFL sports"
+  description_zh-cn: "美式足球和NFL运动"
+
+queen:
+  en: queen
+  zh-cn: 女王
+  description_en: "Queens and royal female characters"
+  description_zh-cn: "女王和皇室女性角色"
+
+medieval:
+  en: medieval
+  zh-cn: 中世纪
+  description_en: "Medieval period and historical settings"
+  description_zh-cn: "中世纪时期和历史背景"
+
+timelapse:
+  en: timelapse
+  zh-cn: 延时摄影
+  description_en: "Timelapse and time-accelerated footage"
+  description_zh-cn: "延时摄影和时间加速镜头"
+
+neon:
+  en: neon
+  zh-cn: 霓虹
+  description_en: "Neon lights and glowing effects"
+  description_zh-cn: "霓虹灯和发光效果"
+
+speeder:
+  en: speeder
+  zh-cn: 飞车
+  description_en: "High-speed vehicles and hovercrafts"
+  description_zh-cn: "高速车辆和悬浮载具"
+
+cliff:
+  en: cliff
+  zh-cn: 悬崖
+  description_en: "Cliffs and steep rock formations"
+  description_zh-cn: "悬崖和陡峭岩石"
+
+waterfall:
+  en: waterfall
+  zh-cn: 瀑布
+  description_en: "Waterfalls and cascading water"
+  description_zh-cn: "瀑布和倾泻的水流"
+
+stadium:
+  en: stadium
+  zh-cn: 体育场
+  description_en: "Stadiums and sports arenas"
+  description_zh-cn: "体育场和竞技场"
+
+dawn:
+  en: dawn
+  zh-cn: 黎明
+  description_en: "Dawn and early morning light"
+  description_zh-cn: "黎明和清晨光线"
+
+city:
+  en: city
+  zh-cn: 城市
+  description_en: "Cityscapes and urban environments"
+  description_zh-cn: "城市景观和城市环境"
+
+image-to-video:
+  en: image-to-video
+  zh-cn: 图生视频
+  description_en: "Converting static images to animated videos"
+  description_zh-cn: "将静态图像转换为动画视频"
+
+nano-banana-pro:
+  en: nano-banana-pro
+  zh-cn: Nano Banana Pro
+  description_en: "Nano Banana Pro image generation model"
+  description_zh-cn: "Nano Banana Pro图像生成模型"
+
+
+prompt-generator:
+  en: prompt-generator
+  zh-cn: 提示词生成器
+  description_en: "Tools and resources for generating AI video prompts"
+  description_zh-cn: "用于生成AI视频提示词的工具和资源"
+
+ip-design:
+  en: ip-design
+  zh-cn: IP设计
+  description_en: "Intellectual property and character design development"
+  description_zh-cn: "知识产权和角色设计开发"
+
+character:
+  en: character
+  zh-cn: 角色
+  description_en: "Character-focused content with emphasis on character design and development"
+  description_zh-cn: "以角色为主的内容，注重角色设计和开发"
+
+combo:
+  en: combo
+  zh-cn: 连击
+  description_en: "Combo sequences and hit chains in fighting games"
+  description_zh-cn: "格斗游戏中的连击序列和命中链"
+
+gaming:
+  en: gaming
+  zh-cn: 游戏
+  description_en: "Video game inspired content and gameplay"
+  description_zh-cn: "电子游戏启发的内容和玩法"
+
+instructional:
+  en: instructional
+  zh-cn: 教学
+  description_en: "Educational or instructional step-by-step content"
+  description_zh-cn: "教育或指导性的分步内容"
+
+automotive:
+  en: automotive
+  zh-cn: 汽车
+  description_en: "Automotive and vehicle related content"
+  description_zh-cn: "汽车和车辆相关内容"
+
+lifestyle:
+  en: lifestyle
+  zh-cn: 生活方式
+  description_en: "Lifestyle and daily activity content"
+  description_zh-cn: "生活方式和日常活动内容"
+
+challenge:
+  en: challenge
+  zh-cn: 挑战
+  description_en: "AI video generation challenge entries and prompts"
+  description_zh-cn: "AI视频生成挑战赛作品和提示词"
+
+beauty:
+  en: beauty
+  zh-cn: 美妆
+  description_en: "Beauty, skincare and makeup content"
+  description_zh-cn: "美妆、护肤和化妆内容"
+
+demo:
+  en: demo
+  zh-cn: 演示
+  description_en: "Product demo or showcase video"
+  description_zh-cn: "产品演示或展示视频"
+
+claude:
+  en: claude
+  zh-cn: Claude
+  description_en: "Anthropic Claude AI assistant"
+  description_zh-cn: "Anthropic Claude AI助手"
+
+creative-tool:
+  en: creative-tool
+  zh-cn: 创意工具
+  description_en: "AI creative tools and platforms"
+  description_zh-cn: "AI创意工具和平台"
+
+multimodal:
+  en: multimodal
+  zh-cn: 多模态
+  description_en: "Multi-modal AI content generation"
+  description_zh-cn: "多模态AI内容生成"
+
+ai-video:
+  en: ai-video
+  zh-cn: AI视频
+  description_en: "AI-generated video content"
+  description_zh-cn: "AI生成的视频内容"
+
+runway:
+  en: runway
+  zh-cn: Runway
+  description_en: "Runway ML video generation platform"
+  description_zh-cn: "Runway ML视频生成平台"
+
+storyboard:
+  en: storyboard
+  zh-cn: 分镜
+  description_en: "Storyboard-style video sequence"
+  description_zh-cn: "分镜头式视频序列"
+tutorial:
+  en: tutorial
+  zh-cn: 教程
+  description_en: "Educational tutorial or technique guide"
+  description_zh-cn: "教育教程或技术指南"
+
+closeup:
+  en: closeup
+  zh-cn: 特写
+  description_en: "Close-up shot with emphasis on details"
+  description_zh-cn: "特写镜头，强调细节"
+
+expression-control:
+  en: expression-control
+  zh-cn: 表情控制
+  description_en: "Facial expression control technique using FACS codes"
+  description_zh-cn: "使用FACS代码控制面部表情的技术"
+
+disaster:
+  en: disaster
+  zh-cn: 灾难
+  description_en: "Disaster and catastrophic event scenes"
+  description_zh-cn: "灾难和灾难性事件场景"
+
+couples:
+  en: couples
+  zh-cn: 情侣
+  description_en: "Romantic couple-focused scenes and relationships"
+  description_zh-cn: "以浪漫情侣为主角的关系场景"
+
+visual-effects:
+  en: visual-effects
+  zh-cn: 视觉效果
+  description_en: "Computer-generated visual effects"
+  description_zh-cn: "计算机生成的视觉效果"
+
+sharks:
+  en: sharks
+  zh-cn: 鲨鱼
+  description_en: "Shark and marine predator content"
+  description_zh-cn: "鲨鱼和海洋捕食者内容"
+
+gaussian-splat:
+  en: gaussian-splat
+  zh-cn: 高斯泼溅
+  description_en: "Gaussian Splat 3D reconstruction and rendering"
+  description_zh-cn: "高斯泼溅3D重建和渲染"
+
+world-model:
+  en: world-model
+  zh-cn: 世界模型
+  description_en: "World model AI capable of understanding physics and causality"
+  description_zh-cn: "理解物理和因果关系的世界模型AI"
+
+motion-graphics:
+  en: motion graphics
+  zh-cn: 动态图形
+  description_en: "Motion graphics and animated visual design"
+  description_zh-cn: "动态图形和动画视觉设计"
+
+e-commerce:
+  en: e-commerce
+  zh-cn: 电商
+  description_en: "E-commerce and online shopping content"
+  description_zh-cn: "电商和在线购物内容"
+
+campaign:
+  en: campaign
+  zh-cn: 广告战役
+  description_en: "Marketing campaign and promotional video"
+  description_zh-cn: "营销广告和推广视频"
+
+panorama:
+  en: panorama
+  zh-cn: 全景
+  description_en: "Panoramic and 360-degree imagery"
+  description_zh-cn: "全景和360度图像"
+product-video:
+  en: product video
+  zh-cn: 产品视频
+  description_en: "Product showcase and commercial video content"
+  description_zh-cn: "产品展示和商业视频内容"
+
+consistent-character:
+  en: consistent character
+  zh-cn: 一致角色
+  description_en: "Character consistency maintained across video frames"
+  description_zh-cn: "角色在视频帧之间保持一致性"
+
+background-change:
+  en: background change
+  zh-cn: 背景变换
+  description_en: "Dynamic or changing background elements"
+  description_zh-cn: "动态或变化的背景元素"
+
+clay-animation:
+  en: clay animation
+  zh-cn: 黏土动画
+  description_en: "Clay animation style with soft, moldable characters"
+  description_zh-cn: "柔软可塑角色的黏土动画风格"
+
+stick-figure:
+  en: stick figure
+  zh-cn: 火柴人
+  description_en: "Stick figure animation with minimal details"
+  description_zh-cn: "细节简洁的火柴人动画"
+
+writing-animation:
+  en: writing animation
+  zh-cn: 书写动画
+  description_en: "Animation of writing or drawing process"
+  description_zh-cn: "书写或绘画过程的动画"
+
+minecraft-style:
+  en: Minecraft style
+  zh-cn: 我的世界风格
+  description_en: "Minecraft block world aesthetic and visual style"
+  description_zh-cn: "我的世界方块世界美学和视觉风格"
+
+photorealistic-subject:
+  en: photorealistic subject
+  zh-cn: 写实主体
+  description_en: "Photorealistic main subject with stylized environment"
+  description_zh-cn: "写实主体配合风格化环境"
+
+style-conversion:
+  en: style conversion
+  zh-cn: 风格转换
+  description_en: "Converting images or videos to different visual styles"
+  description_zh-cn: "将图像或视频转换为不同的视觉风格"
+
+hand-animation:
+  en: hand animation
+  zh-cn: 手部动画
+  description_en: "Animation focused on hand movements"
+  description_zh-cn: "以手部动作为主的动画"
+
+pen-animation:
+  en: pen animation
+  zh-cn: 笔动画
+  description_en: "Animation of pen or drawing tool on surface"
+  description_zh-cn: "笔或绘画工具在表面上的动画"
+cinematic-video:
+  en: cinematic video
+  zh-cn: 电影感视频
+  description_en: "Cinematic video with movie-like quality"
+  description_zh-cn: "具有电影质感的视频"
+
+music:
+  en: music
+  zh-cn: 音乐
+  description_en: "Music and audio-focused content"
+  description_zh-cn: "音乐和音频相关内容"
+
+creative:
+  en: creative
+  zh-cn: 创意
+  description_en: "Creative and artistic content"
+  description_zh-cn: "创意和艺术内容"
+
+tool:
+  en: tool
+  zh-cn: 工具
+  description_en: "Tools and utilities"
+  description_zh-cn: "工具和实用程序"

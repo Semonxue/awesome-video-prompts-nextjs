@@ -17,15 +17,17 @@ import re
 import json
 import shutil
 import sys
+import threading
 import urllib.request
 import urllib.parse
 import urllib.error
 import uuid
+from collections import deque
 from datetime import datetime, timezone
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Deque, Dict, List, Optional, Set, Tuple
 
 import yaml
 
@@ -78,6 +80,7 @@ NEW_SITE_ADMIN_SECRET = _DEV_VARS.get("NEW_SITE_ADMIN_SECRET", "")
 def parse_publish_status(content: str) -> str:
     """
     返回草稿状态：
+      - "queued"      — 已入发布队列（publish_queued_at 有值，未完成）
       - "unpublished" — 还没发过（published: false 或没字段）
       - "published"   — 成功发布过（published: true 且 published_error 为空）
       - "failed"      — 发布失败（published_error 不为空）
@@ -85,13 +88,46 @@ def parse_publish_status(content: str) -> str:
     fm = parse_fm(content)
     if not fm:
         return "unpublished"
-    published = parse_boolish(fm.get("published", False))
+    # queued 优先级最高：标记了就是在队列里
+    if has_publish_queued(fm):
+        return "queued"
     error = fm.get("published_error")
     if error and str(error).strip() and str(error).lower() not in ("null", "none"):
         return "failed"
+    published = parse_boolish(fm.get("published", False))
     if published:
         return "published"
     return "unpublished"
+
+
+def has_publish_queued(fm: Dict[str, Any]) -> bool:
+    """front matter 是否有 publish_queued_at 标记（即在队列里）"""
+    v = fm.get("publish_queued_at")
+    if v is None:
+        return False
+    s = str(v).strip()
+    if not s or s.lower() in ("null", "none"):
+        return False
+    return True
+
+
+def set_publish_queued_in_fm(fm: Dict[str, Any]) -> Dict[str, Any]:
+    """把 md 标记为队列中：写 publish_queued_at，清掉旧的 published/error 状态"""
+    out = dict(fm)
+    out["publish_queued_at"] = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+    out["published"] = False
+    out["published_at"] = None
+    out["published_slug"] = None
+    out["published_error"] = None
+    out["draft"] = True
+    return out
+
+
+def clear_publish_queued_in_fm(fm: Dict[str, Any]) -> Dict[str, Any]:
+    """清掉 publish_queued_at 标记（worker 处理完调用）"""
+    out = dict(fm)
+    out["publish_queued_at"] = None
+    return out
 
 
 def parse_boolish(value: Any) -> bool:
@@ -211,6 +247,249 @@ def update_publish_status_in_fm(
     # draft 字段兼容保留：草稿永远是 true，标记给人看
     out["draft"] = True
     return out
+
+
+# ============================================================
+# 发布队列（内存 deque + 单 worker 线程 + front matter 记账）
+# ============================================================
+_pending_paths: Deque[str] = deque()
+_pending_set: Set[str] = set()  # 去重
+_pending_lock = threading.Lock()
+_pending_event = threading.Event()
+_worker_thread: Optional[threading.Thread] = None
+
+
+def enqueue_publish(rel_path: str) -> bool:
+    """加入队列。如果已经在队列里则跳过（返回 False）。"""
+    with _pending_lock:
+        if rel_path in _pending_set:
+            return False
+        _pending_paths.append(rel_path)
+        _pending_set.add(rel_path)
+    _pending_event.set()
+    return True
+
+
+def dequeue_publish() -> Optional[str]:
+    """从队列里取一个 path（取不到返回 None）。"""
+    with _pending_lock:
+        if not _pending_paths:
+            return None
+        path = _pending_paths.popleft()
+        _pending_set.discard(path)
+    return path
+
+
+def queue_snapshot() -> List[str]:
+    """当前队列里所有 path（快照，仅供查询）"""
+    with _pending_lock:
+        return list(_pending_paths)
+
+
+def count_fs_queued() -> int:
+    """统计文件系统上还在队列里（publish_queued_at 有值）的 md 数量"""
+    if not DRAFT_CONTENT_DIR.exists():
+        return 0
+    count = 0
+    for mf in DRAFT_CONTENT_DIR.rglob("*.md"):
+        try:
+            content = mf.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        fm = parse_fm(content)
+        if has_publish_queued(fm):
+            count += 1
+    return count
+
+
+# ============================================================
+# 发布核心（handler 和 worker 共用）
+# ============================================================
+def _to_jsonable(v: Any) -> Any:
+    """yaml 解析出来的 datetime/date 转 ISO 字符串（避免 json.dumps TypeError）"""
+    if v is None or isinstance(v, (str, int, float, bool)):
+        return v
+    if isinstance(v, datetime):
+        return v.isoformat()
+    try:
+        import datetime as _dt
+        if isinstance(v, _dt.date):
+            return v.isoformat()
+    except Exception:
+        pass
+    if isinstance(v, list):
+        return [_to_jsonable(x) for x in v]
+    return str(v)
+
+
+def publish_one(rel_path: str) -> Dict[str, Any]:
+    """
+    执行一次发布（读 md → 构造 multipart → 调新站 → 写 front matter 状态）。
+    返回 dict 含 success/error/operation/slug/uploaded 等。
+    worker 和 handle_publish 都调这个函数；区别是 worker 不阻塞 HTTP 请求。
+    """
+    full = (PROJECT_ROOT / rel_path).resolve()
+    try:
+        full.relative_to(DRAFT_CONTENT_DIR)
+    except ValueError:
+        return {"success": False, "error": f"file not in drafts dir: {rel_path}"}
+    if not full.exists():
+        return {"success": False, "error": f"file not found: {rel_path}"}
+    info = get_prompt_path_info(full)
+    if not info:
+        return {"success": False, "error": f"invalid path layout: {rel_path}"}
+    year_month, slug = info
+
+    try:
+        content = full.read_text(encoding="utf-8")
+        fm = parse_fm(content)
+    except Exception as e:
+        return {"success": False, "error": f"read failed: {e}"}
+
+    # 构造 multipart 字段
+    fm_payload = {
+        "title": _to_jsonable(fm.get("title")),
+        "description": _to_jsonable(fm.get("description")),
+        "author": _to_jsonable(fm.get("author")),
+        "source_url": _to_jsonable(fm.get("source_url")),
+        "post_date": _to_jsonable(fm.get("post_date") or fm.get("date")),
+        "tags": _to_jsonable(fm.get("tags")) if isinstance(fm.get("tags"), list) else None,
+        "models": _to_jsonable(fm.get("models")) if isinstance(fm.get("models"), list) else None,
+    }
+    fm_payload = {k: v for k, v in fm_payload.items() if v is not None}
+
+    fields = {
+        "slug": slug,
+        "frontmatter": json.dumps(fm_payload, ensure_ascii=False),
+    }
+
+    files: Dict[str, Tuple[str, bytes, str]] = {}
+    asset_dir = get_asset_dir(year_month, slug)
+    cover_path = asset_dir / "cover.jpg"
+    video_path = asset_dir / "video.mp4"
+    if cover_path.exists():
+        files["cover"] = ("cover.jpg", cover_path.read_bytes(), "image/jpeg")
+    if video_path.exists():
+        files["video"] = ("video.mp4", video_path.read_bytes(), "video/mp4")
+
+    # 调新站
+    status, resp_text = http_multipart_post(
+        NEW_SITE_PUBLISH_URL, fields, files, NEW_SITE_ADMIN_SECRET
+    )
+    try:
+        resp = json.loads(resp_text)
+    except Exception:
+        resp = {"raw": resp_text}
+
+    success = status == 200 and resp.get("ok") is True
+    parts = content.split("---", 2)
+    body_text = parts[2].lstrip() if len(parts) >= 3 else ""
+
+    if success:
+        new_fm = update_publish_status_in_fm(
+            fm,
+            success=True,
+            published_at=datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
+            published_slug=resp.get("slug", slug),
+        )
+    else:
+        err_msg = (resp.get("error") if isinstance(resp, dict) else None) or f"HTTP {status}"
+        new_fm = update_publish_status_in_fm(fm, success=False, error=err_msg)
+    # 清掉队列标记
+    new_fm = clear_publish_queued_in_fm(new_fm)
+    new_content = build_markdown_content(new_fm, body_text)
+    try:
+        # 原子写
+        tmp = full.with_suffix(full.suffix + f".tmp.{uuid.uuid4().hex[:8]}")
+        tmp.write_text(new_content, encoding="utf-8")
+        tmp.replace(full)
+    except Exception as e:
+        return {"success": success, "warning": f"online updated but local status write failed: {e}"}
+
+    if success:
+        return {
+            "success": True,
+            "operation": resp.get("operation"),
+            "slug": resp.get("slug"),
+            "uploaded": resp.get("uploaded"),
+            "revalidated": resp.get("revalidated"),
+        }
+    return {
+        "success": False,
+        "error": (resp.get("error") if isinstance(resp, dict) else None) or f"HTTP {status}",
+        "status": status,
+        "remote_response": resp,
+    }
+
+
+def _mark_failed_in_fm(rel_path: str, error_msg: str) -> None:
+    """worker 兜底：把异常路径的 md 标记成 failed 状态（写 published_error + 清 publish_queued_at）"""
+    full = (PROJECT_ROOT / rel_path).resolve()
+    if not full.exists():
+        return
+    try:
+        content = full.read_text(encoding="utf-8")
+        fm = parse_fm(content)
+        parts = content.split("---", 2)
+        body_text = parts[2].lstrip() if len(parts) >= 3 else ""
+        new_fm = update_publish_status_in_fm(fm, success=False, error=f"Worker exception: {error_msg}")
+        new_fm = clear_publish_queued_in_fm(new_fm)
+        new_content = build_markdown_content(new_fm, body_text)
+        tmp = full.with_suffix(full.suffix + f".tmp.{uuid.uuid4().hex[:8]}")
+        tmp.write_text(new_content, encoding="utf-8")
+        tmp.replace(full)
+    except Exception as e:
+        print(f"[worker] mark failed error for {rel_path}: {e}")
+
+
+def worker_loop() -> None:
+    """单 worker 线程：阻塞等 Event 信号，循环处理队列；启动时扫 md 做 crash recovery"""
+    print("[worker] 启动，开始 crash recovery 扫描...")
+    recovered = 0
+    if DRAFT_CONTENT_DIR.exists():
+        for mf in sorted(DRAFT_CONTENT_DIR.rglob("*.md")):
+            try:
+                content = mf.read_text(encoding="utf-8")
+            except Exception:
+                continue
+            fm = parse_fm(content)
+            if has_publish_queued(fm):
+                rel = str(mf.relative_to(PROJECT_ROOT))
+                if enqueue_publish(rel):
+                    recovered += 1
+    if recovered:
+        print(f"[worker] crash recovery: 恢复 {recovered} 个队列中的 md")
+    else:
+        print("[worker] crash recovery: 无遗留任务")
+
+    print("[worker] 主循环开始")
+    while True:
+        _pending_event.wait()
+        _pending_event.clear()
+        while True:
+            path = dequeue_publish()
+            if path is None:
+                break
+            print(f"[worker] 处理 {path}")
+            try:
+                result = publish_one(path)
+                if result.get("success"):
+                    print(f"[worker] ✅ {path} → slug={result.get('slug')}")
+                else:
+                    print(f"[worker] ❌ {path} → {result.get('error')}")
+            except Exception as e:
+                print(f"[worker] ⚠ {path} 抛异常: {e}")
+                _mark_failed_in_fm(path, str(e))
+    print("[worker] 主循环结束（不应该到这里）")
+
+
+def start_worker() -> None:
+    """启动 worker 守护线程（重复调用安全）"""
+    global _worker_thread
+    if _worker_thread is not None and _worker_thread.is_alive():
+        return
+    _worker_thread = threading.Thread(target=worker_loop, daemon=True, name="md-editor-publish-worker")
+    _worker_thread.start()
 
 
 # ============================================================
@@ -336,6 +615,8 @@ class EditorHandler(SimpleHTTPRequestHandler):
             self.handle_media(path[7:])
         elif path == "/api/files":
             self.handle_list_files()
+        elif path == "/api/queue":
+            self.handle_queue()
         elif path == "/api/metadata":
             self.handle_metadata(query.get("type", [""])[0])
         elif path == "/api/file":
@@ -439,7 +720,7 @@ class EditorHandler(SimpleHTTPRequestHandler):
     # -------------------- 文件列表（按状态分类） --------------------
     def handle_list_files(self):
         files_by_status: Dict[str, List[Dict[str, Any]]] = {
-            "unpublished": [],
+            "unpublished": [],   # 包含 queued（极简：queued 也待编辑）
             "published": [],
             "failed": [],
         }
@@ -452,16 +733,20 @@ class EditorHandler(SimpleHTTPRequestHandler):
                 status = parse_publish_status(content)
                 fm = parse_fm(content)
                 stat = mf.stat()
-                files_by_status[status].append({
+                item = {
                     "path": str(mf.relative_to(PROJECT_ROOT)),
                     "name": mf.name,
                     "date": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
                     "status": status,
+                    "in_queue": has_publish_queued(fm),
                     "published_at": get_published_at(fm),
                     "published_slug": get_published_slug(fm),
                     "published_error": get_published_error(fm),
                     "title": fm.get("title", ""),
-                })
+                }
+                # queued 文件归到 unpublished tab（极简：不单独建 tab）
+                bucket = "unpublished" if status == "queued" else status
+                files_by_status[bucket].append(item)
         # 各自按时间倒序
         for k in files_by_status:
             files_by_status[k].sort(key=lambda x: x["date"], reverse=True)
@@ -590,7 +875,7 @@ class EditorHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self.send_error(500, str(e))
 
-    # -------------------- 发布 --------------------
+    # -------------------- 发布（异步：只入队，立刻返回） --------------------
     def handle_publish(self):
         if not NEW_SITE_ADMIN_SECRET:
             self.send_json({"success": False, "error": "NEW_SITE_ADMIN_SECRET not configured in .dev.vars"}, 500)
@@ -620,9 +905,8 @@ class EditorHandler(SimpleHTTPRequestHandler):
         if not info:
             self.send_json({"success": False, "error": "invalid path layout"}, 400)
             return
-        year_month, slug = info
 
-        # 读 front matter
+        # 读 front matter → 写 publish_queued_at → 入内存队列
         try:
             content = full.read_text(encoding="utf-8")
             fm = parse_fm(content)
@@ -630,105 +914,35 @@ class EditorHandler(SimpleHTTPRequestHandler):
             self.send_json({"success": False, "error": f"read failed: {e}"}, 500)
             return
 
-        # 构造 multipart 字段（处理 date 对象）
-        def to_jsonable(v):
-            if v is None or isinstance(v, (str, int, float, bool)):
-                return v
-            if isinstance(v, (datetime,)):
-                return v.isoformat()
-            try:
-                # yaml 解析的 date 对象（没有时间）
-                import datetime as _dt
-                if isinstance(v, _dt.date):
-                    return v.isoformat()
-            except Exception:
-                pass
-            if isinstance(v, list):
-                return [to_jsonable(x) for x in v]
-            return str(v)
-
-        fm_payload = {
-            "title": to_jsonable(fm.get("title")),
-            "description": to_jsonable(fm.get("description")),
-            "author": to_jsonable(fm.get("author")),
-            "source_url": to_jsonable(fm.get("source_url")),
-            "post_date": to_jsonable(fm.get("post_date") or fm.get("date")),
-            "tags": to_jsonable(fm.get("tags")) if isinstance(fm.get("tags"), list) else None,
-            "models": to_jsonable(fm.get("models")) if isinstance(fm.get("models"), list) else None,
-        }
-        # 清掉 None 字段
-        fm_payload = {k: v for k, v in fm_payload.items() if v is not None}
-
-        fields = {
-            "slug": slug,
-            "frontmatter": json.dumps(fm_payload, ensure_ascii=False),
-        }
-
-        # 找素材
-        files: Dict[str, Tuple[str, bytes, str]] = {}
-        asset_dir = get_asset_dir(year_month, slug)
-        cover_path = asset_dir / "cover.jpg"
-        video_path = asset_dir / "video.mp4"
-        if cover_path.exists():
-            files["cover"] = ("cover.jpg", cover_path.read_bytes(), "image/jpeg")
-        if video_path.exists():
-            files["video"] = ("video.mp4", video_path.read_bytes(), "video/mp4")
-
-        # 调新站 API
-        status, resp_text = http_multipart_post(
-            NEW_SITE_PUBLISH_URL, fields, files, NEW_SITE_ADMIN_SECRET
-        )
+        parts = content.split("---", 2)
+        body_text = parts[2].lstrip() if len(parts) >= 3 else ""
+        new_fm = set_publish_queued_in_fm(fm)
+        new_content = build_markdown_content(new_fm, body_text)
         try:
-            resp = json.loads(resp_text)
-        except Exception:
-            resp = {"raw": resp_text}
+            # 原子写
+            tmp = full.with_suffix(full.suffix + f".tmp.{uuid.uuid4().hex[:8]}")
+            tmp.write_text(new_content, encoding="utf-8")
+            tmp.replace(full)
+        except Exception as e:
+            self.send_json({"success": False, "error": f"write failed: {e}"}, 500)
+            return
 
-        success = status == 200 and resp.get("ok") is True
-        if success:
-            # 更新 front matter 状态字段
-            new_fm = update_publish_status_in_fm(
-                fm,
-                success=True,
-                published_at=datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
-                published_slug=resp.get("slug", slug),
-            )
-            # 取 body
-            parts = content.split("---", 2)
-            body_text = parts[2].lstrip() if len(parts) >= 3 else ""
-            new_content = build_markdown_content(new_fm, body_text)
-            try:
-                full.write_text(new_content, encoding="utf-8")
-            except Exception as e:
-                # 线上成功但本地写失败：返回成功但提示
-                return self.send_json({
-                    "success": True,
-                    "warning": f"online updated but local status write failed: {e}",
-                    "remote_response": resp,
-                })
-            return self.send_json({
-                "success": True,
-                "operation": resp.get("operation"),
-                "slug": resp.get("slug"),
-                "uploaded": resp.get("uploaded"),
-                "revalidated": resp.get("revalidated"),
-            })
-        else:
-            # 失败：记录错误到 front matter
-            err_msg = resp.get("error") or f"HTTP {status}"
-            new_fm = update_publish_status_in_fm(fm, success=False, error=err_msg)
-            parts = content.split("---", 2)
-            body_text = parts[2].lstrip() if len(parts) >= 3 else ""
-            new_content = build_markdown_content(new_fm, body_text)
-            try:
-                full.write_text(new_content, encoding="utf-8")
-            except Exception:
-                pass
-            return self.send_json({
-                "success": False,
-                "error": err_msg,
-                "status": status,
-                "remote_response": resp,
-            }, 200)  # 200 让前端处理（不是 transport 错误）
+        enqueued = enqueue_publish(rel_path)
+
+        self.send_json({
+            "success": True,
+            "queued": True,
+            "already_queued": not enqueued,
+            "path": rel_path,
+        })
+
+    # -------------------- 队列状态查询 --------------------
+    def handle_queue(self):
+        """前端轮询用：返回内存队列 + fs 上还在队列里的 md 数量"""
+        self.send_json({
+            "queue_size": len(queue_snapshot()),   # 内存队列（含正在处理的）
+            "fs_queued_count": count_fs_queued(),  # fs 上有 publish_queued_at 的（兜底）
+        })
 
     # -------------------- 清理已发布草稿 --------------------
     def handle_cleanup(self):
@@ -1013,11 +1227,14 @@ def _verify_new_site() -> bool:
 def run_server(port: int = 3000):
     DRAFT_CONTENT_DIR.mkdir(parents=True, exist_ok=True)
     DRAFT_STATIC_DIR.mkdir(parents=True, exist_ok=True)
+    # 启动后台 publish worker（crash recovery + 队列消费）
+    start_worker()
     print(f"🚀 Markdown 编辑器（新流程）启动 http://localhost:{port}")
     print(f"   项目根: {PROJECT_ROOT}")
     print(f"   草稿目录: {DRAFT_CONTENT_DIR}")
     print(f"   Publish URL: {NEW_SITE_PUBLISH_URL}")
     print(f"   Admin Secret: {'✓ configured' if NEW_SITE_ADMIN_SECRET else '✗ MISSING (set NEW_SITE_ADMIN_SECRET in .dev.vars)'}")
+    print(f"   发布队列：内存 deque + 单 worker 线程（崩溃后重启自动恢复）")
     _verify_new_site()
     server = HTTPServer(("localhost", port), EditorHandler)
     try:

@@ -57,10 +57,17 @@
         .status-badge.unpublished { background: var(--bg-tertiary); color: var(--text-secondary); }
         .status-badge.published { background: var(--success-color); color: white; }
         .status-badge.failed { background: var(--error-color); color: white; }
+        .queue-badge { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 10px; margin-left: 4px; background: var(--accent-color); color: white; font-family: -apple-system, sans-serif; animation: queue-pulse 1.5s infinite; }
+        .queue-badge[hidden] { display: none; }
+        @keyframes queue-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+        .file-item .file-name::before.queue-icon { content: "⏳ "; color: var(--accent-color); }
         .editor-actions { display: flex; gap: 8px; }
         .btn { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
         .btn-primary { background: var(--accent-color); color: white; }
         .btn-publish { background: var(--success-color); color: white; }
+        .btn-danger { background: #e53e3e; color: white; }
+        .btn-danger:hover { background: #c53030; }
+        .btn-danger:disabled { background: #e8a0a0; cursor: not-allowed; }
         .btn-toggle { background: var(--bg-tertiary); border: 1px solid var(--border-color); }
         .btn-toggle.active { background: var(--accent-color); color: white; border-color: var(--accent-color); }
         .editor-content { flex: 1; overflow-y: auto; padding: 12px; }
@@ -69,10 +76,15 @@
         .form-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; display: block; }
         .form-input { width: 100%; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; background: var(--bg-primary); color: var(--text-primary); }
         .form-input:focus { outline: none; border-color: var(--accent-color); }
-        .selector-options { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+        .selector-options { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
         .selector-chip { padding: 3px 8px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 12px; font-size: 11px; cursor: pointer; }
         .selector-chip:hover { border-color: var(--accent-color); }
         .selector-chip.selected { background: var(--accent-color); color: white; border-color: var(--accent-color); }
+        .model-radio { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: 1px solid var(--border-color); border-radius: 12px; font-size: 11px; cursor: pointer; background: var(--bg-tertiary); user-select: none; }
+        .model-radio:hover { border-color: var(--accent-color); }
+        .model-radio input { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; }
+        .model-radio.checked { background: var(--accent-color); color: white; border-color: var(--accent-color); }
+        .model-radio.none-option { font-style: italic; opacity: 0.7; }
 
         .source-row { display: flex; gap: 8px; align-items: center; }
         .source-row input[type="text"] { width: 100px; }
@@ -134,7 +146,7 @@
             </div>
             <div class="tabs">
                 <div class="tab active" data-tab="unpublished" onclick="switchTab('unpublished')">
-                    待编辑 <span class="tab-count" id="cntUnpublished">0</span>
+                    待编辑 <span class="tab-count" id="cntUnpublished">0</span><span class="queue-badge" id="queueBadge" hidden>·⏳<span id="queueN">0</span></span>
                 </div>
                 <div class="tab" data-tab="published" onclick="switchTab('published')">
                     已发布 <span class="tab-count" id="cntPublished">0</span>
@@ -158,6 +170,7 @@
                         <button class="btn btn-toggle" id="sourceToggle" onclick="switchMode('source')">📄</button>
                         <button class="btn btn-primary" onclick="saveForm()">💾 保存</button>
                         <button class="btn btn-publish" id="publishBtn" onclick="publishCurrent()">📤 发布</button>
+                        <button class="btn btn-danger" id="deleteBtn" onclick="deleteCurrent()" title="删除本地草稿 MD + 素材目录（不影响线上）">🗑️ 删除</button>
                     </div>
                 </div>
                 <div class="editor-content">
@@ -202,6 +215,7 @@
                         <button class="btn btn-toggle active" id="sourceToggle2" onclick="switchMode('source')">📄</button>
                         <button class="btn btn-primary" onclick="saveSource()">💾 保存</button>
                         <button class="btn btn-publish" onclick="publishCurrent()">📤 发布</button>
+                        <button class="btn btn-danger" onclick="deleteCurrent()" title="删除本地草稿 MD + 素材目录（不影响线上）">🗑️ 删除</button>
                     </div>
                 </div>
                 <textarea id="sourceTextarea" placeholder="原始内容..."></textarea>
@@ -335,8 +349,9 @@
                 if (f.published_at) meta.push(`✓ ${f.published_at}`);
                 if (f.published_slug) meta.push(`slug=${f.published_slug}`);
                 if (f.published_error) meta.push(`❌ ${f.published_error.slice(0, 50)}`);
+                const queuePrefix = f.in_queue ? '<span class="queue-icon">⏳ </span>' : '';
                 return `<div class="${cls}" onclick="openFile('${f.path.replace(/'/g, "\\'")}')">
-                    <div class="file-name" title="${f.name}">${(f.title || f.name).replace(/</g, '&lt;')}</div>
+                    <div class="file-name" title="${f.name}">${queuePrefix}${(f.title || f.name).replace(/</g, '&lt;')}</div>
                     <div class="file-date">${f.date}${meta.length ? ' · ' + meta.join(' · ') : ''}</div>
                 </div>`;
             }).join('');
@@ -362,9 +377,19 @@
         function renderModels() {
             const el = document.getElementById('modelSelector');
             if (!el) return;
-            el.innerHTML = Object.entries(models).map(([slug, m]) =>
-                `<span class="selector-chip${selectedModel === slug ? ' selected' : ''}" onclick="selectModel('${slug}')">${m.name}</span>`
-            ).join('');
+            const entries = Object.entries(models);
+            // 第一项加"无"选项（兼容 fm 里完全没有 model 字段的情况）
+            const noneOption = `<label class="model-radio none-option${!selectedModel ? ' checked' : ''}">
+                <input type="radio" name="modelRadio" value=""${!selectedModel ? ' checked' : ''} onchange="selectModel('')">—
+            </label>`;
+            const radios = entries.map(([slug, m]) => {
+                const checked = selectedModel === slug ? 'checked' : '';
+                const cls = checked ? ' checked' : '';
+                return `<label class="model-radio${cls}">
+                    <input type="radio" name="modelRadio" value="${slug}"${checked ? ' checked' : ''} onchange="selectModel('${slug}')">${m.name}
+                </label>`;
+            }).join('');
+            el.innerHTML = noneOption + radios;
         }
 
         function selectModel(slug) {
@@ -392,8 +417,9 @@
                 if (f.published_at) meta.push(`✓ ${f.published_at}`);
                 if (f.published_slug) meta.push(`slug=${f.published_slug}`);
                 if (f.published_error) meta.push(`❌ ${f.published_error.slice(0, 50)}`);
+                const queuePrefix = f.in_queue ? '<span class="queue-icon">⏳ </span>' : '';
                 return `<div class="${cls}" onclick="openFile('${f.path.replace(/'/g, "\\'")}')">
-                    <div class="file-name" title="${f.name}">${(f.title || f.name).replace(/</g, '&lt;')}</div>
+                    <div class="file-name" title="${f.name}">${queuePrefix}${(f.title || f.name).replace(/</g, '&lt;')}</div>
                     <div class="file-date">${f.date}${meta.length ? ' · ' + meta.join(' · ') : ''}</div>
                 </div>`;
             }).join('');
@@ -422,7 +448,8 @@
                 document.getElementById('inputTags').value = tags;
 
                 if (Array.isArray(fm.models) && fm.models.length > 0) selectedModel = String(fm.models[0]);
-                else if (fm.models) selectedModel = String(fm.models);
+                else if (typeof fm.models === 'string' && fm.models) selectedModel = fm.models;
+                else if (typeof fm.model === 'string' && fm.model) selectedModel = fm.model;
                 else selectedModel = '';
                 renderModels();
 
@@ -551,7 +578,14 @@
             // 保留 publish 状态字段（不要重置）
             newFm.title = title;
             newFm.description = desc;
-            newFm.models = [selectedModel];
+            // 统一用 models 数组；选"无"时完全删除字段
+            if (selectedModel) {
+                newFm.models = [selectedModel];
+            } else {
+                delete newFm.models;
+            }
+            // 清理老的单数 model 字段（避免下次读取时再误用）
+            delete newFm.model;
             newFm.tags = tags;
             newFm.author = author;
             newFm.source_url = sourceUrl;
@@ -596,14 +630,19 @@
             }
         }
 
-        // ============ 发布 ============
+        // ============ 发布（异步：即入队即跳下一个） ============
         async function publishCurrent() {
             if (!currentFile) { showToast('请先选择文件', true); return; }
-            if (!confirm(`确定要发布 "${currentFile}" 到线上吗？\n\n说明：会覆盖 R2 媒体文件；D1 按 front matter 提供的字段更新（不提供的不变）；成功后会自动 revalidate 缓存。`)) return;
+            if (!confirm(`把 "${currentFile}" 加入发布队列？\n\n说明：后台单 worker 串行处理（覆盖 R2 + D1 upsert + revalidate）。前台会立即跳到下一个待编辑项，发布结果会写回 front matter（在"已发布"/"失败"tab 查看）。`)) return;
 
-            const btn = document.getElementById('publishBtn');
-            btn.disabled = true;
-            btn.textContent = '⏳ 发布中...';
+            // 记录当前文件在待编辑列表中的位置（入队后用来打开下一个）
+            const unpublishedFiles = fileCache.unpublished || [];
+            const currentIdx = unpublishedFiles.findIndex(f => f.path === currentFile);
+
+            // 立刻乐观更新：本地把这个文件标记成 in_queue（不等服务端响应）
+            const target = unpublishedFiles.find(f => f.path === currentFile);
+            if (target) target.in_queue = true;
+            renderFileList();
 
             try {
                 const res = await fetch(`${API}/publish`, {
@@ -612,49 +651,151 @@
                     body: JSON.stringify({ path: currentFile }),
                 });
                 const data = await res.json();
-                // 详细错误日志：开发调试用
-                console.group(`📤 publish ${currentFile}`);
-                console.log('response status:', res.status);
-                console.log('response data:', data);
-                if (data.remote_response) {
-                    console.warn('remote (新站 /api/admin/publish) response:', data.remote_response);
+                if (!data.success) {
+                    // 入队失败（极少见：权限/路径错误）
+                    if (target) target.in_queue = false;
+                    renderFileList();
+                    showToast(`❌ 入队失败: ${data.error || '未知错误'}`, true);
+                    return;
                 }
-                if (data.status) {
-                    console.log('upstream HTTP status from 新站:', data.status);
-                }
-                console.groupEnd();
-
-                if (data.success) {
-                    const op = data.operation === 'create' ? '新建' : '更新';
-                    const upc = data.uploaded || {};
-                    showToast(`✅ ${op}成功！上传 cover=${upc.cover} video=${upc.video}`, false);
-                    await loadFileList();
-                    switchTab('published');
-                    await openFile(currentFile);
+                if (data.already_queued) {
+                    showToast(`📋 "${currentFile}" 已在队列中`, false);
                 } else {
-                    // 组装详细错误
-                    const errParts = [];
-                    errParts.push(data.error || '未知错误');
-                    if (data.status) errParts.push(`新站 HTTP ${data.status}`);
-                    if (data.remote_response && data.remote_response.error) {
-                        errParts.push(`远端: ${data.remote_response.error}`);
-                    } else if (data.remote_response && data.remote_response.raw) {
-                        errParts.push(`远端原文: ${data.remote_response.raw.slice(0, 200)}`);
-                    }
-                    const fullErr = errParts.join(' | ');
-                    showToast(`❌ 发布失败: ${fullErr}（已记录到 front matter，可在"失败"tab 重试）`, true);
-                    console.error('完整发布错误:', fullErr, data);
-                    await loadFileList();
-                    switchTab('failed');
-                    await openFile(currentFile);
+                    showToast(`✅ "${currentFile}" 已加入队列`, false);
+                }
+                // 立刻刷队列角标 + 跳下一个
+                refreshQueue();
+                switchTab('unpublished');
+                const newUnpublished = fileCache.unpublished || [];
+                if (newUnpublished.length > 0) {
+                    let nextIdx = currentIdx >= 0 ? currentIdx : 0;
+                    if (nextIdx >= newUnpublished.length) nextIdx = newUnpublished.length - 1;
+                    if (nextIdx < 0) nextIdx = 0;
+                    await openFile(newUnpublished[nextIdx].path);
+                } else {
+                    clearEditor();
+                    showToast('🎉 当前 tab 已无文件');
                 }
             } catch (e) {
                 console.error('publish 请求异常:', e);
+                if (target) target.in_queue = false;
+                renderFileList();
                 showToast('发布出错: ' + e.message, true);
-            } finally {
-                btn.disabled = false;
-                btn.textContent = '📤 发布';
             }
+        }
+
+        // ============ 队列状态轮询 ============
+        async function refreshQueue() {
+            try {
+                const res = await fetch(`${API}/queue`);
+                const data = await res.json();
+                const n = data.fs_queued_count || 0;
+                const badge = document.getElementById('queueBadge');
+                const numEl = document.getElementById('queueN');
+                if (n > 0) {
+                    numEl.textContent = n;
+                    badge.hidden = false;
+                } else {
+                    badge.hidden = true;
+                }
+            } catch (e) {
+                // 静默失败，下一轮继续
+            }
+        }
+
+        // ============ 文件列表刷新（带去抖） ============
+        let _loadFileListTimer = null;
+        function scheduleLoadFileList() {
+            if (_loadFileListTimer) clearTimeout(_loadFileListTimer);
+            _loadFileListTimer = setTimeout(() => { _loadFileListTimer = null; loadFileList(); refreshQueue(); }, 800);
+        }
+
+        // 启动时拉一次，然后每 2s 轮询（队列进度可视化）
+        refreshQueue();
+        setInterval(() => { refreshQueue(); scheduleLoadFileList(); }, 2000);
+
+        // ============ 删除当前草稿（本地 MD + 素材目录） ============
+        async function deleteCurrent() {
+            if (!currentFile) { showToast('请先选择文件', true); return; }
+
+            // 记录位置（删除后打开当前 tab 中的下一个）
+            const currentFiles = fileCache[activeTab] || [];
+            const currentIdx = currentFiles.findIndex(f => f.path === currentFile);
+
+            const statusHint = currentStatus === 'published'
+                ? '\n\n⚠️ 注意：这只会删除本地草稿，线上 prompt 仍存在！\n如需删除线上内容，请用顶部「❌ 删除线上」按钮。'
+                : '';
+            const fileTitle = (formData && formData.title) ? formData.title : currentFile;
+            if (!confirm(`确定要删除「${fileTitle}」吗？\n\n路径：${currentFile}\n会同时删除对应的素材目录（封面、视频等）。\n此操作不可恢复！${statusHint}`)) return;
+
+            const publishBtn = document.getElementById('publishBtn');
+            const delBtn = document.getElementById('deleteBtn');
+            publishBtn.disabled = true;
+            if (delBtn) delBtn.disabled = true;
+            const originalDelText = delBtn ? delBtn.textContent : '🗑️ 删除';
+            if (delBtn) delBtn.textContent = '⏳ 删除中...';
+
+            try {
+                const res = await fetch(`${API}/file`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: currentFile }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(data.deleted_assets ? '✅ 已删除（含素材）' : '✅ 已删除', false);
+                    await loadFileList();
+                    // 打开当前 tab 中的下一个文件
+                    const newFiles = fileCache[activeTab] || [];
+                    if (newFiles.length > 0 && currentIdx !== -1) {
+                        let nextIdx = currentIdx;
+                        if (nextIdx >= newFiles.length) nextIdx = newFiles.length - 1;
+                        if (nextIdx < 0) nextIdx = 0;
+                        await openFile(newFiles[nextIdx].path);
+                    } else {
+                        clearEditor();
+                    }
+                } else {
+                    showToast('删除失败: ' + (data.error || '未知错误'), true);
+                }
+            } catch (e) {
+                console.error('delete 请求异常:', e);
+                showToast('删除出错: ' + e.message, true);
+            } finally {
+                publishBtn.disabled = false;
+                if (delBtn) {
+                    delBtn.disabled = false;
+                    delBtn.textContent = originalDelText;
+                }
+            }
+        }
+
+        // ============ 清空编辑器状态 ============
+        function clearEditor() {
+            currentFile = null;
+            formData = {};
+            currentRaw = '';
+            currentStatus = 'unpublished';
+            selectedModel = '';
+            document.getElementById('formEditor').style.display = 'none';
+            document.getElementById('sourceEditor').classList.remove('active');
+            document.getElementById('emptyState').style.display = 'flex';
+            // 清掉所有高亮
+            document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
+            // 清空表单
+            ['inputTitle', 'inputAuthor', 'inputSourceUrl', 'inputTags', 'inputPostDate', 'inputDescription'].forEach(id => {
+                document.getElementById(id).value = '';
+            });
+            document.getElementById('sourceTextarea').value = '';
+            document.getElementById('imagePreview').innerHTML = '-';
+            document.getElementById('videoPreview').innerHTML = '-';
+            // 标题（firstChild 是文本节点）
+            const titleEl = document.getElementById('currentFileTitle');
+            const titleSrcEl = document.getElementById('sourceFileTitle');
+            if (titleEl.firstChild) titleEl.firstChild.textContent = '-';
+            if (titleSrcEl.firstChild) titleSrcEl.firstChild.textContent = '-';
+            document.querySelectorAll('.status-badge').forEach(b => b.remove());
+            renderModels();
         }
 
         // ============ 清理 ============

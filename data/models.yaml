@@ -1,0 +1,66 @@
+# 模型字典（slug → 显示名）
+#
+# 维护规则：
+#   - slug 用 kebab-case，跟新站 D1 models 表的 slug 对齐
+#   - 放进来的就是 UI 上看到的选项；用户编辑时只能从这里选
+#   - 没在表里的 slug 仍可读（兼容老 md），但保存时会被强制改成这里有的值
+#   - 增删后无需重启 md-editor，下次打开文件就生效（前端每次 loadMetadata 重拉）
+#
+# 同步来源：awesome-video-prompts/data/models.yaml（精简为 slug→{name}，对齐 D1 schema）
+
+klingo1:
+  name: Kling O1
+kling26:
+  name: Kling 2.6
+kling3:
+  name: Kling 3.0
+hailuo:
+  name: Hailuo
+veo3:
+  name: Veo 3
+sora:
+  name: Sora
+sora2:
+  name: Sora 2
+ltx23:
+  name: LTX 2.3
+ltxpro:
+  name: LTX Pro
+grok:
+  name: Grok
+ray314:
+  name: Ray 3.14 (Luma)
+lumalabs:
+  name: Luma Labs
+gen45:
+  name: Gen 4.5
+viduq3:
+  name: Vidu Q3
+seedance1.5pro:
+  name: Seedance 1.5 Pro
+seedance2:
+  name: Seedance 2.0
+dreamina:
+  name: Dreamina AI
+hedra:
+  name: Hedra Omnia
+wan26:
+  name: Wan 2.6
+wan27:
+  name: Wan 2.7
+pixverse:
+  name: PixVerse
+wery:
+  name: Wery AI
+happyhorse:
+  name: HAPPYHORSE
+ling26flash:
+  name: Ling 2.6 Flash
+pika:
+  name: Pika
+runway:
+  name: Runway
+geminiomniflash:
+  name: Gemini Omni Flash
+claudefable5:
+  name: Claude Fable 5
