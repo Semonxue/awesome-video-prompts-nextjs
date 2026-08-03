@@ -12,7 +12,7 @@
                                     │
                               npm run build
                               npm run build:cf
-                              npx wrangler deploy
+                              npx wrangler deploy --env=""
                                     │
                               ✅ 线上验证
                                     │
@@ -48,6 +48,24 @@ NEXT_PUBLIC_R2_PUBLIC_URL=https://static.awesomevideoprompts.com
 ```
 
 > ⚠️ **Token 安全**：当前 token 已在对话中出现多次。**每次部署前**去 CF Dashboard revoke 并重建，TTL 设 24h。Token 权限要求：`Account | D1 | Edit` + `Workers Scripts | Edit` + `Account Settings | Read`。
+
+#### GitHub Actions 凭证（必须单独配置）
+
+本地 `.dev.vars` **不会**被上传到 GitHub Actions。请在 GitHub 仓库进入 **Settings → Secrets and variables → Actions → Repository secrets**，创建以下两个 secret（名称区分大小写）：
+
+| Secret | 值 |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token（不是 Global API Key） |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Account ID |
+
+也可以用 GitHub CLI 安全地交互输入（不要把 token 直接写进命令或提交到仓库）：
+
+```bash
+gh secret set CLOUDFLARE_API_TOKEN
+gh secret set CLOUDFLARE_ACCOUNT_ID
+```
+
+配置后，在仓库 **Actions → Deploy to Cloudflare Workers → Run workflow** 手动重跑。工作流会在构建前检查这两个值；缺失时会直接给出明确错误，而不是等到 Wrangler 部署阶段才失败。
 
 ### 0.3 凭证环境变量（本地 dev 时加载）
 
@@ -124,7 +142,7 @@ npm run build
 npm run build:cf
 
 # 3.5 deploy
-npx wrangler deploy
+npx wrangler deploy --env=""
 # 输出示例：
 # Successfully published...
 # https://awesome-video-prompts-nextjs.semonxue.workers.dev
