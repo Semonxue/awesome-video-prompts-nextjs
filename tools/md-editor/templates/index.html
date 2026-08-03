@@ -141,6 +141,7 @@
                     <button class="load-btn" onclick="showLoadOnline()" title="从线上 D1 加载到草稿">⬇️ 加载线上</button>
                     <button class="cleanup-btn" onclick="cleanupPublished()" title="清理已发布成功的草稿（先校验 D1）">🧹 清理</button>
                     <button class="btn btn-delete" onclick="showDeleteOnline()" title="按 slug 直接删除线上 prompt（D1 + R2）">❌ 删除线上</button>
+                    <button class="btn" onclick="showUnpublishOnline()" title="按 slug 下架线上 prompt（is_draft=1，可重新发布恢复）">📥 下架线上</button>
                     <button class="refresh-btn" onclick="loadFileList()">🔄</button>
                 </div>
             </div>
@@ -260,6 +261,23 @@
                 <button class="btn btn-delete" onclick="deleteOnline()">确认删除</button>
             </div>
             <div class="modal-body" id="deleteOnlineResult" style="display:none; padding-top:0;"></div>
+        </div>
+    </div>
+
+    <!-- Modal: 下架线上 -->
+    <div class="modal-mask" id="unpublishOnlineModal">
+        <div class="modal">
+            <div class="modal-title">📥 下架线上 prompt（批量）</div>
+            <div class="modal-body">
+                <p style="margin-bottom: 8px;">下架后详情页 404、首页/标签/模型列表消失（is_draft=1）。</p>
+                <p style="margin-bottom: 8px; color: var(--success-color);">✓ 可恢复：从草稿重新发布即上架。不会删 D1 数据和 R2 媒体。</p>
+                <textarea class="modal-input" id="unpublishSlugInput" rows="8" placeholder="一行一个 slug 或完整 URL"></textarea>
+            </div>
+            <div class="modal-actions">
+                <button class="btn" onclick="hideUnpublishOnline()">取消</button>
+                <button class="btn btn-primary" onclick="unpublishOnline()">确认下架</button>
+            </div>
+            <div class="modal-body" id="unpublishOnlineResult" style="display:none; padding-top:0;"></div>
         </div>
     </div>
 
@@ -490,15 +508,26 @@
             document.getElementById('sourceFileTitle').appendChild(badge.cloneNode(true));
         }
 
+        // 媒体 URL 解析（P0-2.2）：load-online 写入的是 R2 公网绝对 URL → 直接渲染；
+        // 本地相对路径才走 /media/ 代理（代理只服务 static/_drafts 下的本地文件）
+        function resolveMediaUrl(p) {
+            if (/^https?:\/\//i.test(p)) return p;
+            if (!p.startsWith('/')) p = '/' + p;
+            if (!p.startsWith('/media/')) p = '/media' + p;
+            return p;
+        }
+
+        function withCacheBust(u) {
+            return u + (u.includes('?') ? '&' : '?') + 'v=' + mediaRefreshToken;
+        }
+
         function updateMedia(fm) {
             const imgEl = document.getElementById('imagePreview');
             const vidEl = document.getElementById('videoPreview');
             let imgPath = fm.image || '';
             let vidPath = fm.video || '';
             if (imgPath) {
-                if (!imgPath.startsWith('/')) imgPath = '/' + imgPath;
-                if (!imgPath.startsWith('/media/')) imgPath = '/media' + imgPath;
-                imgPath += `?v=${mediaRefreshToken}`;
+                imgPath = withCacheBust(resolveMediaUrl(imgPath));
                 imgEl.innerHTML = '';
                 const img = document.createElement('img');
                 img.src = imgPath;
@@ -509,9 +538,7 @@
                 imgEl.innerHTML = '-';
             }
             if (vidPath) {
-                if (!vidPath.startsWith('/')) vidPath = '/' + vidPath;
-                if (!vidPath.startsWith('/media/')) vidPath = '/media' + vidPath;
-                vidPath += `?v=${mediaRefreshToken}`;
+                vidPath = withCacheBust(resolveMediaUrl(vidPath));
                 vidEl.innerHTML = `<div class="lazy-media" onclick="loadMedia(this, '${vidPath}', 'video')">🎬 点击播放</div>`;
             } else {
                 vidEl.innerHTML = '-';
@@ -590,8 +617,10 @@
             newFm.author = author;
             newFm.source_url = sourceUrl;
             newFm.post_date = postDate || newFm.post_date || new Date().toISOString().split('T')[0];
-            newFm.image = `/prompts/${yearMonth}/${slug}/cover.jpg`;
-            newFm.video = `/prompts/${yearMonth}/${slug}/video.mp4`;
+            // 媒体路径（P0-2.2）：load-online 的草稿媒体是 R2 绝对 URL（本地无文件），
+            // 保留原值以直出预览；否则归一到本地约定路径（/media/ 代理到 static/_drafts）
+            newFm.image = /^https?:\/\//i.test(formData.image || '') ? formData.image : `/prompts/${yearMonth}/${slug}/cover.jpg`;
+            newFm.video = /^https?:\/\//i.test(formData.video || '') ? formData.video : `/prompts/${yearMonth}/${slug}/video.mp4`;
             // 兼容老字段
             newFm.date = newFm.post_date;
             newFm.draft = true;
@@ -923,6 +952,76 @@
                 if (item.status === 'ok') {
                     const d = item.detail;
                     html += `<li class="ok">✓ ${item.slug} — D1:${d.d1?'✓':'✗'} cover:${d.r2.cover?'✓':'✗'} video:${d.r2.video?'✓':'✗'}</li>`;
+                } else if (item.status === 'not_found') {
+                    html += `<li class="warn">↪ ${item.slug}: ${item.error}（线上已无此记录）</li>`;
+                } else {
+                    html += `<li class="fail">✗ ${item.slug}: ${item.error}</li>`;
+                }
+            }
+            html += '</ul>';
+            resultEl.innerHTML = html;
+            await loadFileList();
+        }
+
+        // ============ 下架线上 ============
+        function showUnpublishOnline() {
+            document.getElementById('unpublishSlugInput').value = '';
+            document.getElementById('unpublishOnlineResult').style.display = 'none';
+            document.getElementById('unpublishOnlineModal').classList.add('show');
+        }
+        function hideUnpublishOnline() {
+            document.getElementById('unpublishOnlineModal').classList.remove('show');
+        }
+        async function unpublishOnline() {
+            const raw = document.getElementById('unpublishSlugInput').value;
+            // 支持完整 URL（https://.../en/prompts/<slug>）或纯 slug
+            const slugs = raw.split('\n').map(line => {
+                const s = line.trim();
+                if (!s) return '';
+                try {
+                    const u = new URL(s);
+                    const m = u.pathname.match(/\/prompts\/(.+)/);
+                    return m ? m[1] : s;
+                } catch {
+                    return s; // 纯 slug 原样返回
+                }
+            }).filter(Boolean);
+            if (!slugs.length) { showToast('请输入至少一个 slug', true); return; }
+            if (!confirm(`确定要下架 ${slugs.length} 个线上 prompt 吗？\n（逻辑下架 is_draft=1，可重新发布恢复）`)) return;
+            const resultEl = document.getElementById('unpublishOnlineResult');
+            resultEl.style.display = 'block';
+            resultEl.innerHTML = '<p>下架中...</p>';
+            const results = { ok: 0, fail: 0, items: [] };
+            for (const slug of slugs) {
+                try {
+                    const res = await fetch(`${API}/unpublish-online`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ slug }),
+                    });
+                    const data = await res.json();
+                    if (data.ok) {
+                        results.ok++;
+                        results.items.push({ slug, status: 'ok', changed: data.changed !== false });
+                    } else if (res.status === 404 || (data.error && data.error.includes('不存在'))) {
+                        results.ok++;
+                        results.items.push({ slug, status: 'not_found', error: data.error });
+                    } else {
+                        results.fail++;
+                        results.items.push({ slug, status: 'fail', error: data.error });
+                    }
+                } catch (e) {
+                    results.fail++;
+                    results.items.push({ slug, status: 'fail', error: e.message });
+                }
+            }
+            let html = `<p><b>完成：</b>✓ ${results.ok} 个 &nbsp; ✗ ${results.fail} 个</p>`;
+            html += '<ul style="max-height:300px;overflow-y:auto;">';
+            for (const item of results.items) {
+                if (item.status === 'ok') {
+                    html += item.changed
+                        ? `<li class="ok">✓ ${item.slug} — 已下架（重新发布可恢复）</li>`
+                        : `<li class="skip">↪ ${item.slug} — 已是草稿状态，无需下架</li>`;
                 } else if (item.status === 'not_found') {
                     html += `<li class="warn">↪ ${item.slug}: ${item.error}（线上已无此记录）</li>`;
                 } else {

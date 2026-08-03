@@ -16,6 +16,8 @@
  *
  * 注意：
  *   - R2 删除幂等：key 不存在不算错
+ *   - R2 key 与 post_date 去耦（P0-2.1）：优先从 D1 的 cover_url/video_url
+ *     反解 key，并扫尾 post_date 推导的旧路径（清理历史孤儿对象）
  *   - prompt_tags / prompt_models 由 D1 CASCADE 自动清理
  */
 import { revalidatePath } from 'next/cache';
@@ -24,6 +26,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { getDb } from '@/db';
 import { prompts } from '@/db/schema';
+import { deriveYearMonth, keyFromMediaUrl, R2_KEY_PREFIX } from '@/lib/r2-keys';
 
 // 显式标记使用 schema 里的 import（防止 lint 报 unused）
 void prompts;
@@ -33,7 +36,6 @@ type D1 = CloudflareEnv['DB'];
 /** R2 binding 类型（来自 CloudflareEnv，OpenPlus 内部版本） */
 type R2 = NonNullable<CloudflareEnv['MEDIA']>;
 
-const R2_KEY_PREFIX = 'prompts';
 const R2_PUBLIC = process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? '';
 
 type D1Result = { meta?: { changes?: number; last_row_id?: number } };
@@ -52,15 +54,6 @@ async function getSecret(...names: string[]): Promise<string> {
     }
   }
   return '';
-}
-
-/** 从 prompt_date 提取 YYYY-MM */
-function deriveYearMonth(postDate: string | null | undefined, fallback: string): string {
-  const src = postDate || fallback;
-  const m = String(src).match(/^(\d{4})-(\d{2})/);
-  if (m) return `${m[1]}-${m[2]}`;
-  const now = new Date();
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
 /** 尝试删除 R2 对象（幂等） */
@@ -99,12 +92,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // 3) 拿 ctx（后面 D1/R2 共用）
   const ctx = await getCloudflareContext({ async: true });
 
-  // 4) 查 D1（获取 prompt_date 以便拼 R2 key）
+  // 4) 查 D1（获取媒体 URL + prompt_date 以便定位 R2 key）
   const d1: D1 = ctx.env.DB;
   if (!d1) return NextResponse.json({ error: 'D1 binding missing' }, { status: 500 });
   const db = getDb(d1);
   const row = await db
-    .select({ id: prompts.id, promptDate: prompts.promptDate })
+    .select({
+      id: prompts.id,
+      promptDate: prompts.promptDate,
+      coverUrl: prompts.coverUrl,
+      videoUrl: prompts.videoUrl,
+    })
     .from(prompts)
     .where(eq(prompts.slug, slug))
     .get();
@@ -113,17 +111,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const yearMonth = deriveYearMonth(row.promptDate ?? null, '');
-  const coverKey = `${R2_KEY_PREFIX}/${yearMonth}/${slug}/cover.jpg`;
-  const videoKey = `${R2_KEY_PREFIX}/${yearMonth}/${slug}/video.mp4`;
+  // R2 key 候选集（P0-2.1 去耦）：优先从 D1 cover_url/video_url 反解，
+  // 再带上 post_date 推导的旧路径扫尾（历史孤儿对象也一并清掉）
+  const yearMonth = deriveYearMonth(row.promptDate ?? null);
+  const coverKeys = new Set<string>([`${R2_KEY_PREFIX}/${yearMonth}/${slug}/cover.jpg`]);
+  const videoKeys = new Set<string>([`${R2_KEY_PREFIX}/${yearMonth}/${slug}/video.mp4`]);
+  const coverKeyFromUrl = keyFromMediaUrl(row.coverUrl, slug);
+  const videoKeyFromUrl = keyFromMediaUrl(row.videoUrl, slug);
+  if (coverKeyFromUrl) coverKeys.add(coverKeyFromUrl);
+  if (videoKeyFromUrl) videoKeys.add(videoKeyFromUrl);
 
   // 5) 删除 R2（幂等，失败不中断）
   const r2: R2 = ctx.env.MEDIA;
   let r2CoverDeleted = false;
   let r2VideoDeleted = false;
   if (r2) {
-    r2CoverDeleted = await deleteR2Key(r2, coverKey);
-    r2VideoDeleted = await deleteR2Key(r2, videoKey);
+    const coverResults = await Promise.all([...coverKeys].map((k) => deleteR2Key(r2, k)));
+    const videoResults = await Promise.all([...videoKeys].map((k) => deleteR2Key(r2, k)));
+    r2CoverDeleted = coverResults.every(Boolean);
+    r2VideoDeleted = videoResults.every(Boolean);
   }
 
   // 6) 删除 D1（cascade 自动清理 prompt_tags / prompt_models）

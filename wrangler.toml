@@ -32,7 +32,7 @@ bucket_name = "awesome-video-prompts-media"
 # 生产环境在 Cloudflare Dashboard 或 wrangler secret 注入
 # ============================================================
 [vars]
-NEXT_PUBLIC_SITE_URL = "https://awesome-video-prompts-nextjs.semonxue.workers.dev"
+NEXT_PUBLIC_SITE_URL = "https://awesomevideoprompts.com"
 NEXT_PUBLIC_R2_PUBLIC_URL = "https://static.awesomevideoprompts.com"
 # REVALIDATE_SECRET 必须通过 wrangler secret put revalidate-secret 设置，不写在此文件
 # ADMIN_SECRET 也必须通过 wrangler secret put admin-secret 设置（md-editor publish 调用）

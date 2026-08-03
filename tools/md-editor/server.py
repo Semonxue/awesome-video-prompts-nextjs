@@ -649,6 +649,8 @@ class EditorHandler(SimpleHTTPRequestHandler):
             self.handle_load_online()
         elif path == "/api/delete-online":
             self.handle_delete_online()
+        elif path == "/api/unpublish-online":
+            self.handle_unpublish_online()
         else:
             self.send_error(404)
 
@@ -1017,7 +1019,9 @@ class EditorHandler(SimpleHTTPRequestHandler):
         """
         body: { slug: "..." }
         从线上 D1 拉一条 → 写到 _drafts/prompts/<post_date YYYY-MM>/<slug>.md
-        注意：素材 url 走 R2 公网 URL，md-editor 媒体代理能直接拉
+        注意：image/video 写的是 R2 公网绝对 URL（本地不落素材文件）；
+        前端 updateMedia() 识别 http(s):// 直接渲染——/media/ 代理只服务
+        static/_drafts 下的本地文件，不会也无法代理 R2。
         """
         try:
             length = int(self.headers.get("Content-Length", 0))
@@ -1081,7 +1085,7 @@ class EditorHandler(SimpleHTTPRequestHandler):
         content = build_markdown_content(fm, body_text)
         target_path.write_text(content, encoding="utf-8")
 
-        # 媒体代理能直接走 R2 公网 URL（/media/prompts/...），不用本地缓存
+        # 媒体不落本地：fm.image/video 保留 R2 公网 URL，前端直接渲染
         self.send_json({
             "success": True,
             "path": str(target_path.relative_to(PROJECT_ROOT)),
@@ -1112,6 +1116,45 @@ class EditorHandler(SimpleHTTPRequestHandler):
                 "ok": True,
                 "slug": slug,
                 "deleted": resp.get("deleted", {}),
+                "revalidated": resp.get("revalidated", []),
+            })
+        elif status == 404 or (isinstance(resp, dict) and "Not found" in str(resp.get("error", ""))):
+            self.send_json({"ok": False, "error": f"线上不存在「{slug}」"}, 404)
+        elif status == 401:
+            self.send_json({"ok": False, "error": "Unauthorized"}, 401)
+        else:
+            err = (isinstance(resp, dict) and resp.get("error")) or (isinstance(resp, str) and resp) or f"HTTP {status}"
+            self.send_json({"ok": False, "error": err}, status)
+
+    # -------------------- 下架线上 prompt --------------------
+    def handle_unpublish_online(self):
+        """
+        body: { slug: "..." }
+        调新站 /api/admin/unpublish 把 prompt 置为 is_draft=1（逻辑下架，可恢复）。
+        下架后详情页 404、列表消失；恢复方式 = 从草稿重新发布。
+        """
+        if not NEW_SITE_ADMIN_SECRET:
+            self.send_json({"ok": False, "error": "NEW_SITE_ADMIN_SECRET not configured"}, 500)
+            return
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length).decode("utf-8"))
+        except Exception as e:
+            self.send_json({"ok": False, "error": f"bad request: {e}"}, 400)
+            return
+        slug = (body.get("slug") or "").strip()
+        if not slug:
+            self.send_json({"ok": False, "error": "slug is required"}, 400)
+            return
+
+        url = f"{NEW_SITE_PUBLISH_URL.rsplit('/', 1)[0]}/unpublish"
+        status, resp = http_post_json(url, {"slug": slug}, NEW_SITE_ADMIN_SECRET)
+
+        if status == 200 and isinstance(resp, dict) and resp.get("ok") is True:
+            self.send_json({
+                "ok": True,
+                "slug": slug,
+                "changed": resp.get("changed", True),
                 "revalidated": resp.get("revalidated", []),
             })
         elif status == 404 or (isinstance(resp, dict) and "Not found" in str(resp.get("error", ""))):

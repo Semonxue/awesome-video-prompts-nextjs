@@ -275,7 +275,68 @@ npx wrangler rollback --version-id <version-id>
 
 ---
 
-## 8. 常见问题
+## 8. 数据备份与恢复
+
+D1 是 prompt 数据的唯一副本（本地 `content/_drafts` 不入 git、发布清理后会删除），必须有两层备份：
+
+### 8.1 行级自动备份（已内置，无需操作）
+
+`/api/admin/publish` 在 **update**（覆盖已发布 slug）前，自动把旧 row + tags/models 关联 dump 到 R2：
+
+```
+backups/<slug>/<timestamp>.json
+# 例：backups/2066987039866945601-crocodile-floodgate/2026-07-25T02-30-45-123Z.json
+```
+
+- 内容：`{ backed_up_at, reason, prompt: {...row}, tags: [...], models: [...] }`
+- best-effort：备份失败不阻断发布，响应里的 `backup` 字段会带错误信息
+- 发布响应的 `backup.key` 即本次备份路径
+- ⚠️ 备份只含 D1 数据，**不含 R2 媒体字节**（媒体覆盖式 PUT 同 key，无历史）
+
+查看备份：
+
+```bash
+# 列出某 slug 的全部备份
+npx wrangler r2 object list awesome-video-prompts-media --prefix "backups/<slug>/"
+
+# 下载某个备份
+npx wrangler r2 object get "awesome-video-prompts-media/backups/<slug>/<timestamp>.json" --file /tmp/backup.json
+```
+
+### 8.2 全量定期快照（手动，建议每周）
+
+```bash
+# 全量导出 D1（含 schema + 全部数据）
+mkdir -p backups
+npx wrangler d1 export awesomevideoprompts-db --remote \
+  --output "backups/d1-$(date +%Y%m%d-%H%M).sql"
+
+# 建议保留最近 4 份，旧的归档或删除
+ls -t backups/d1-*.sql | tail -n +5 | xargs rm -f
+```
+
+> 建议：每周发布批次完成后跑一次；快照文件不要提交 git（含线上数据），`backups/` 已在 .gitignore 或自行排除。
+
+### 8.3 恢复
+
+**单条恢复（误改/误删某个 prompt）**：从 R2 备份 JSON 取回旧 row 字段，用 md-editor「⬇️ 加载线上」拉回草稿（若 row 还在），或手动按备份内容重建草稿 md 后重新发布。tags/models 关联在备份 JSON 里。
+
+**整库恢复（灾难）**：
+
+```bash
+# 先备份当前状态（防止二次损失）
+npx wrangler d1 export awesomevideoprompts-db --remote --output backups/d1-before-restore.sql
+
+# 用快照恢复（注意：会全量覆盖，谨慎执行）
+npx wrangler d1 execute awesomevideoprompts-db --remote --file backups/d1-YYYYMMDD-HHMM.sql
+
+# 恢复后刷缓存
+curl -X POST "https://awesome-video-prompts-nextjs.semonxue.workers.dev/api/revalidate?secret=<REVALIDATE_SECRET>"
+```
+
+---
+
+## 9. 常见问题
 
 ### Q: `wrangler deploy` 报 `CLOUDFLARE_API_TOKEN` 权限不足
 
@@ -331,7 +392,7 @@ echo $BASE_URL  # 应该等于 https://awesome-video-prompts-nextjs.semonxue.wor
 
 ---
 
-## 9. 快速命令速查
+## 10. 快速命令速查
 
 ```bash
 # 一键部署（推荐）

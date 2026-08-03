@@ -1,0 +1,11 @@
+import { chromium } from 'playwright';
+const browser = await chromium.launch({ headless: true });
+const page = await browser.newPage({ viewport: { width: 1024, height: 1024 } });
+const errs = [];
+page.on('pageerror', e => errs.push('pageerror: ' + e.message));
+page.on('console', m => { if (m.type() === 'error') errs.push('console: ' + m.text()); });
+await page.goto('http://127.0.0.1:8765/index.html', { waitUntil: 'networkidle', timeout: 30000 });
+await page.waitForTimeout(2500);
+await page.screenshot({ path: '/tmp/niji-render/render.png', fullPage: false });
+console.log('errors:', errs.length ? errs.join('\n  ') : '(none)');
+await browser.close();

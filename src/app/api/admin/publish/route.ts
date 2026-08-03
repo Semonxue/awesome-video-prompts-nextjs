@@ -6,11 +6,16 @@
  *
  * 行为决策（详见 EXECUTION.md）：
  * - 每次都覆盖 R2 对象（PUT 同 key，覆盖语义，幂等）
+ * - R2 key 与 post_date 去耦（P0-2.1）：slug 已存在且 D1 已有媒体 URL 时，
+ *   从 URL 反解 key 覆盖同一路径——编辑 post_date 重传媒体不会产生孤儿对象
  * - D1 部分字段更新（PATCH 语义）：不提供的字段不擦除
- *   例：只上传 front matter 不带 cover → 不重新上传 R2 媒体
+ *   例：只上传 front matter 不带 cover → 不重新上传 R2 媒体，D1 媒体 URL 保持原值
  *       只上传 cover 不带 description → 不动 description
  * - 发布后立即 revalidate（用户期望立即看到）
  * - is_draft 始终写 0（这里的"草稿"指本地 MD 文件，不在 D1 里）
+ * - 发布前自动备份（3.4）：update 前把旧 row + tags/models 关联 dump 到
+ *   R2 `backups/<slug>/<timestamp>.json`（best-effort，失败不阻断发布，响应里带 backup 字段）
+ *   注意：备份只含 D1 数据，不含 R2 媒体字节（媒体覆盖式 PUT 同 key，无历史）
  *
  * 请求：
  *   POST /api/admin/publish
@@ -38,6 +43,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { getDb } from '@/db';
 import { prompts, tags, models, promptTags, promptModels } from '@/db/schema';
+import { deriveYearMonth, keyFromMediaUrl, R2_KEY_PREFIX } from '@/lib/r2-keys';
 
 // 显式标记使用 schema 里的 import（防止 lint 报 unused）
 void prompts; void tags; void models; void promptTags; void promptModels;
@@ -47,7 +53,6 @@ type D1 = CloudflareEnv['DB'];
 /** R2 binding 类型（来自 CloudflareEnv，OpenNext 内部版本） */
 type R2 = NonNullable<CloudflareEnv['MEDIA']>;
 
-const R2_KEY_PREFIX = 'prompts';
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB 单文件上限（视频够用）
 
 /** 统一从 ctx.env 读 CF Secret，尝试多种命名变体（Dashboard 可能用 kebab-case 或 SNAKE_CASE） */
@@ -83,6 +88,8 @@ interface PublishResult {
   uploaded: { cover: boolean; video: boolean };
   revalidated: string[];
   promptId: number;
+  /** 3.4 发布前备份结果（仅 update 时存在） */
+  backup?: { ok: boolean; key?: string; error?: string };
 }
 
 interface PublishError {
@@ -121,17 +128,6 @@ function parseFrontmatterField(raw: string | null): FrontmatterPayload {
   }
 }
 
-/** 解析 D1 R2 key：从 prompt_date (YYYY-MM-DD / YYYY-MM-01) 提取 YYYY-MM */
-function deriveYearMonth(postDate: string | null | undefined, fallback: string): string {
-  const src = postDate || fallback;
-  // 匹配开头的 YYYY-MM
-  const m = String(src).match(/^(\d{4})-(\d{2})/);
-  if (m) return `${m[1]}-${m[2]}`;
-  // fallback 用当前月
-  const now = new Date();
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
-}
-
 /** 上传单个文件到 R2（覆盖语义，幂等） */
 async function uploadToR2(
   bucket: R2,
@@ -147,6 +143,53 @@ async function uploadToR2(
   } catch (e) {
     console.error(`[admin/publish] R2 put failed for ${key}:`, e);
     return false;
+  }
+}
+
+/**
+ * 3.4 发布前备份：update 前把旧 row + tags/models 关联 dump 到 R2
+ * `backups/<slug>/<timestamp>.json`（best-effort，失败不阻断发布）
+ */
+async function backupBeforeUpdate(
+  r2: R2,
+  d1: D1,
+  slug: string,
+  promptId: number,
+  now: string,
+): Promise<{ ok: boolean; key?: string; error?: string }> {
+  try {
+    const row = await d1
+      .prepare('SELECT * FROM prompts WHERE id = ?')
+      .bind(promptId)
+      .first<Record<string, unknown>>();
+    if (!row) return { ok: false, error: 'row not found' };
+
+    const tagRows = await d1
+      .prepare('SELECT t.name FROM prompt_tags pt JOIN tags t ON t.id = pt.tag_id WHERE pt.prompt_id = ?')
+      .bind(promptId)
+      .all<{ name: string }>();
+    const modelRows = await d1
+      .prepare('SELECT m.slug FROM prompt_models pm JOIN models m ON m.id = pm.model_id WHERE pm.prompt_id = ?')
+      .bind(promptId)
+      .all<{ slug: string }>();
+
+    const payload = {
+      backed_up_at: now,
+      reason: 'pre-publish-update',
+      prompt: row,
+      tags: (tagRows.results ?? []).map((r) => r.name),
+      models: (modelRows.results ?? []).map((r) => r.slug),
+    };
+    // ISO 时间戳的 : 和 . 对 key 不友好，替换为 -
+    const ts = now.replace(/[:.]/g, '-');
+    const key = `backups/${slug}/${ts}.json`;
+    await r2.put(key, JSON.stringify(payload, null, 2), {
+      httpMetadata: { contentType: 'application/json' },
+    });
+    return { ok: true, key };
+  } catch (e) {
+    console.warn(`[admin/publish] backup failed for ${slug}:`, e);
+    return { ok: false, error: (e as Error).message };
   }
 }
 
@@ -322,15 +365,21 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
     return serverError('Failed to access D1 or R2 binding', (e as Error).message);
   }
 
-  // 5) 判断是 create 还是 update
+  // 5) 判断是 create 还是 update（同时取既有媒体 URL，用于 R2 key 去耦）
   const existing = await d1
-    .prepare('SELECT id FROM prompts WHERE slug = ?')
+    .prepare('SELECT id, cover_url, video_url FROM prompts WHERE slug = ?')
     .bind(slug)
-    .first<{ id: number }>();
+    .first<{ id: number; cover_url: string | null; video_url: string | null }>();
   const operation: 'create' | 'update' = existing ? 'update' : 'create';
 
-  // 6) 计算 R2 key 用的 YYYY-MM（frontmatter.post_date → 当前月）
-  const yearMonth = deriveYearMonth(frontmatter.post_date, '');
+  // 6) 计算 R2 key（P0-2.1 去耦）：
+  //    update 且 D1 已有媒体 URL → 从 URL 反解，覆盖同一路径（post_date 改动不产生孤儿对象）
+  //    否则 → 按 post_date 推 YYYY-MM（create，或历史数据缺 URL 的兜底）
+  const yearMonth = deriveYearMonth(frontmatter.post_date);
+  const coverKey =
+    keyFromMediaUrl(existing?.cover_url, slug) ?? `${R2_KEY_PREFIX}/${yearMonth}/${slug}/cover.jpg`;
+  const videoKey =
+    keyFromMediaUrl(existing?.video_url, slug) ?? `${R2_KEY_PREFIX}/${yearMonth}/${slug}/video.mp4`;
 
   // 7) 上传 R2（每次都覆盖；不提供则跳过）
   const uploaded = { cover: false, video: false };
@@ -340,10 +389,9 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
       return badRequest(`cover file too large`, `${coverFile.size} > ${MAX_FILE_SIZE}`);
     }
     const buf = await coverFile.arrayBuffer();
-    const key = `${R2_KEY_PREFIX}/${yearMonth}/${slug}/cover.jpg`;
-    uploaded.cover = await uploadToR2(r2, key, buf, 'image/jpeg');
+    uploaded.cover = await uploadToR2(r2, coverKey, buf, 'image/jpeg');
     if (!uploaded.cover) {
-      return serverError('Failed to upload cover to R2', key);
+      return serverError('Failed to upload cover to R2', coverKey);
     }
   }
   const videoFile = form.get('video');
@@ -352,23 +400,22 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
       return badRequest(`video file too large`, `${videoFile.size} > ${MAX_FILE_SIZE}`);
     }
     const buf = await videoFile.arrayBuffer();
-    const key = `${R2_KEY_PREFIX}/${yearMonth}/${slug}/video.mp4`;
-    uploaded.video = await uploadToR2(r2, key, buf, 'video/mp4');
+    uploaded.video = await uploadToR2(r2, videoKey, buf, 'video/mp4');
     if (!uploaded.video) {
-      return serverError('Failed to upload video to R2', key);
+      return serverError('Failed to upload video to R2', videoKey);
     }
   }
 
-  // 8) 构建 R2 公开 URL（同步构造，让 D1 永远指向正确地址）
-  //    即使本次没上传也覆盖 URL —— R2 已有旧文件，URL 不变
+  // 8) 构建 R2 公开 URL（与实际上传 key 一致；update 未重传媒体时不会写入 D1，见下方 PATCH）
   const R2_PUBLIC = process.env.NEXT_PUBLIC_R2_PUBLIC_URL
     ?? 'https://static.awesomevideoprompts.com';
-  const coverUrl = `${R2_PUBLIC}/${R2_KEY_PREFIX}/${yearMonth}/${slug}/cover.jpg`;
-  const videoUrl = `${R2_PUBLIC}/${R2_KEY_PREFIX}/${yearMonth}/${slug}/video.mp4`;
+  const coverUrl = `${R2_PUBLIC}/${coverKey}`;
+  const videoUrl = `${R2_PUBLIC}/${videoKey}`;
 
   // 9) D1 upsert
   const now = new Date().toISOString();
   let promptId: number;
+  let backup: PublishResult['backup'];
 
   if (operation === 'create') {
     // INSERT 必须有 title（NOT NULL）
@@ -403,6 +450,10 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
   } else {
     // UPDATE：只更新提供的字段（PATCH 语义）
     promptId = existing!.id;
+
+    // 3.4 发布前备份（best-effort，失败不阻断）
+    backup = await backupBeforeUpdate(r2, d1, slug, promptId, now);
+
     const updates: string[] = [];
     const binds: unknown[] = [];
 
@@ -479,6 +530,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
     uploaded,
     revalidated,
     promptId,
+    ...(backup ? { backup } : {}),
   });
 }
 
