@@ -8,7 +8,7 @@
     "build": "next build",
     "prebuild": "node scripts/generate-version.mjs",
     "prebuild:cf": "node scripts/generate-version.mjs && node scripts/copy-wrapper.mjs",
-    "build:cf": "npm run prebuild:cf && opennextjs-cloudflare build",
+    "build:cf": "opennextjs-cloudflare build",
     "preview": "opennextjs-cloudflare preview",
     "deploy": "npm run build:cf && wrangler deploy",
     "lint": "next lint",
