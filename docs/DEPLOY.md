@@ -410,7 +410,32 @@ echo $BASE_URL  # 应该等于 https://awesome-video-prompts-nextjs.semonxue.wor
 
 ---
 
-## 10. 快速命令速查
+## 10. 清理本地/CI 缓存
+
+CI 日志里如果看到 “Restored from cache” 或最终 cache entry 几百 MB，说明 GitHub Actions 的 `actions/setup-node` cache 跟本地 `~/.npm` 都堆积了。可用项目内置脚本一键清。
+
+```bash
+# 1. 试运行（只列出大小，不删任何东西）
+./scripts/clean-cache.sh --dry-run
+
+# 2. 清理工作区内的 .next / .open-next / .wrangler / .npm-cache / node_modules/.cache
+./scripts/clean-cache.sh
+
+# 3. 同时清理全局 npm cache（macOS 常见 2~5GB；--global 会取 `npm config get cache` 的值）
+./scripts/clean-cache.sh --global
+```
+
+清理后重新走一遍：
+
+```bash
+npm ci              # 重建 node_modules
+npm run build       # 重建 .next
+npm run build:cf    # 重建 .open-next
+```
+
+> **CI 端说明**：GitHub Actions 的 `node_modules` cache 是按 `package-lock.json` hash 存的，源代码不变化时每次都会复用 250MB+ 缓存；这是设计行为，不要手动清，**依赖在 CI 端重装不会带来额外网络费**（走 cache）。在 release tag（如 `v2.x`）后第一次部署才会真正重新下载。
+
+## 11. 快速命令速查
 
 ```bash
 # 一键部署（推荐）
@@ -427,4 +452,8 @@ npx wrangler rollback
 
 # 看线上日志
 npx wrangler tail --format pretty
+
+# 清理本地/CI 缓存
+./scripts/clean-cache.sh --dry-run   # 先看
+./scripts/clean-cache.sh --global     # 真的清（含 ~/.npm）
 ```
