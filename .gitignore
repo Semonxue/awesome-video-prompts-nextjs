@@ -5,6 +5,7 @@
 .open-next/
 .cache/
 .wrangler/
+.npm-cache/
 
 # ============================================================
 # Dependencies

@@ -6,15 +6,19 @@
  *       用户自定义 wrapper 必须放在 node_modules/@opennextjs/aws/dist/overrides/wrappers/ 下
  *
  * 行为：
- *   - 复制 ./wrappers/cache-control-cloudflare-node.js → node_modules/.../wrappers/cache-control-cloudflare-node.js
+ *   - 复制 ./wrappers/cache-control-cloudflare-node.js → node_modules/.../wrappers/cache-control-cloudflare-node.js（保留调试名）
+ *   - 同时覆盖 node_modules/.../wrappers/cloudflare-node.js（官方默认 wrapper 名）
  *   - 幂等（每次都覆盖）
  */
 import fs from 'node:fs';
 import path from 'node:path';
 
 const src = path.resolve('./wrappers/cache-control-cloudflare-node.js');
-const dest = path.resolve(
+const destCustom = path.resolve(
   './node_modules/@opennextjs/aws/dist/overrides/wrappers/cache-control-cloudflare-node.js',
+);
+const destDefault = path.resolve(
+  './node_modules/@opennextjs/aws/dist/overrides/wrappers/cloudflare-node.js',
 );
 
 if (!fs.existsSync(src)) {
@@ -22,6 +26,8 @@ if (!fs.existsSync(src)) {
   process.exit(1);
 }
 
-fs.mkdirSync(path.dirname(dest), { recursive: true });
-fs.copyFileSync(src, dest);
-console.log(`[prebuild:cf] copied wrapper → ${path.relative(process.cwd(), dest)}`);
+for (const dest of [destCustom, destDefault]) {
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.copyFileSync(src, dest);
+  console.log(`[prebuild:cf] copied wrapper → ${path.relative(process.cwd(), dest)}`);
+}
