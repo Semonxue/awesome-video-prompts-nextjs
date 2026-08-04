@@ -40,8 +40,8 @@ seedance1.5pro:
   name: Seedance 1.5 Pro
 seedance2:
   name: Seedance 2.0
-dreamina:
-  name: Dreamina AI
+seedance25:
+  name: Seedance 2.5
 hedra:
   name: Hedra Omnia
 wan26:
@@ -62,5 +62,8 @@ runway:
   name: Runway
 geminiomniflash:
   name: Gemini Omni Flash
-claudefable5:
-  name: Claude Fable 5
+minimaxh3:
+  name: MiniMax H3
+flux3:
+  name: Flux 3
+

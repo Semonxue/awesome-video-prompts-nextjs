@@ -77,15 +77,14 @@ NEW_SITE_ADMIN_SECRET = _DEV_VARS.get("NEW_SITE_ADMIN_SECRET", "")
 # ============================================================
 # 状态判定（解析 front matter）
 # ============================================================
-def parse_publish_status(content: str) -> str:
+def parse_publish_status_from_data(fm: Dict[str, Any]) -> str:
     """
-    返回草稿状态：
+    返回草稿状态（基于已解析的 data dict，json/md 通用）：
       - "queued"      — 已入发布队列（publish_queued_at 有值，未完成）
       - "unpublished" — 还没发过（published: false 或没字段）
       - "published"   — 成功发布过（published: true 且 published_error 为空）
       - "failed"      — 发布失败（published_error 不为空）
     """
-    fm = parse_fm(content)
     if not fm:
         return "unpublished"
     # queued 优先级最高：标记了就是在队列里
@@ -98,6 +97,12 @@ def parse_publish_status(content: str) -> str:
     if published:
         return "published"
     return "unpublished"
+
+
+def parse_publish_status(content: str) -> str:
+    """兼容入口：接收 md 或 json 原始文本，返回草稿状态"""
+    fmt = detect_format_from_content(content)
+    return parse_publish_status_from_data(parse_data(content, fmt))
 
 
 def has_publish_queued(fm: Dict[str, Any]) -> bool:
@@ -156,6 +161,85 @@ def parse_fm(content: str) -> Dict[str, Any]:
         return {}
 
 
+# ============================================================
+# 双格式抽象（json 优先，md fallback）
+# 草稿文件后缀：.json（新） / .md（存量，保持原格式读写）
+# ============================================================
+DRAFT_SUFFIXES = (".md", ".json")
+
+
+def detect_format(path: Path) -> str:
+    """根据文件后缀判断格式: 'json' | 'md'"""
+    return "json" if path.suffix.lower() == ".json" else "md"
+
+
+def detect_format_from_content(content: str) -> str:
+    """根据内容判断格式：以 { 开头视为 json，否则视为 md"""
+    return "json" if content.lstrip().startswith("{") else "md"
+
+
+def parse_data(raw: str, fmt: str) -> Dict[str, Any]:
+    """按格式解析草稿内容为 data dict"""
+    if fmt == "json":
+        try:
+            data = json.loads(raw)
+            return data if isinstance(data, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+    return parse_fm(raw)
+
+
+def body_from_raw(raw: str, fmt: str) -> str:
+    """提取 body（仅 md 有；json 无 body 概念）"""
+    if fmt == "json":
+        return ""
+    parts = raw.split("---", 2)
+    return parts[2].lstrip() if len(parts) >= 3 else ""
+
+
+def iter_draft_files():
+    """遍历草稿目录下所有 .md 和 .json 文件（按路径排序）"""
+    if not DRAFT_CONTENT_DIR.exists():
+        return
+    for mf in sorted(DRAFT_CONTENT_DIR.rglob("*")):
+        if mf.is_file() and mf.suffix.lower() in DRAFT_SUFFIXES:
+            yield mf
+
+
+def read_draft(path: Path) -> Optional[Dict[str, Any]]:
+    """读取草稿 → { path, data, raw, format, body }；失败返回 None"""
+    if not path.exists():
+        return None
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except Exception:
+        return None
+    fmt = detect_format(path)
+    return {
+        "path": path,
+        "data": parse_data(raw, fmt),
+        "raw": raw,
+        "format": fmt,
+        "body": body_from_raw(raw, fmt),
+    }
+
+
+def build_content(data: Dict[str, Any], body: str, fmt: str) -> str:
+    """按格式序列化草稿内容（json 无 body；md 用 front matter + body）"""
+    if fmt == "json":
+        return json.dumps(data, ensure_ascii=False, indent=2)
+    return build_markdown_content(data, body)
+
+
+def write_draft(path: Path, data: Dict[str, Any], body: str, fmt: str) -> None:
+    """按原格式原子写回草稿"""
+    content = build_content(data, body, fmt)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + f".tmp.{uuid.uuid4().hex[:8]}")
+    tmp.write_text(content, encoding="utf-8")
+    tmp.replace(path)
+
+
 def get_published_at(fm: Dict[str, Any]) -> Optional[str]:
     v = fm.get("published_at")
     if v is None or v == "" or (isinstance(v, str) and v.lower() in ("null", "none")):
@@ -185,16 +269,21 @@ def get_prompt_path_info(file_path: Path) -> Optional[Tuple[str, str]]:
     从 _drafts 草稿路径提取 (yearMonth, slug)
     例：content/_drafts/prompts/2026-06/foo-bar.md
         → ("2026-06", "foo-bar")
+    例：content/_drafts/prompts/2026-06/foo-bar.json
+        → ("2026-06", "foo-bar")
     """
     try:
         rel = file_path.relative_to(DRAFT_CONTENT_DIR)
     except ValueError:
         return None
     parts = rel.parts
-    if len(parts) != 2 or not parts[0] or not parts[1].endswith(".md"):
+    if len(parts) != 2 or not parts[0]:
+        return None
+    name = parts[1]
+    if not (name.endswith(".md") or name.endswith(".json")):
         return None
     year_month = parts[0]
-    slug = parts[1][:-3]  # 去 .md
+    slug = name[: -len(Path(name).suffix)]  # 去 .md / .json
     return year_month, slug
 
 
@@ -287,17 +376,15 @@ def queue_snapshot() -> List[str]:
 
 
 def count_fs_queued() -> int:
-    """统计文件系统上还在队列里（publish_queued_at 有值）的 md 数量"""
+    """统计文件系统上还在队列里（publish_queued_at 有值）的草稿数量（md/json 通用）"""
     if not DRAFT_CONTENT_DIR.exists():
         return 0
     count = 0
-    for mf in DRAFT_CONTENT_DIR.rglob("*.md"):
-        try:
-            content = mf.read_text(encoding="utf-8")
-        except Exception:
+    for mf in iter_draft_files():
+        draft = read_draft(mf)
+        if not draft:
             continue
-        fm = parse_fm(content)
-        if has_publish_queued(fm):
+        if has_publish_queued(draft["data"]):
             count += 1
     return count
 
@@ -324,7 +411,7 @@ def _to_jsonable(v: Any) -> Any:
 
 def publish_one(rel_path: str) -> Dict[str, Any]:
     """
-    执行一次发布（读 md → 构造 multipart → 调新站 → 写 front matter 状态）。
+    执行一次发布（读草稿 → 构造 multipart → 调新站 → 写状态，md/json 通用）。
     返回 dict 含 success/error/operation/slug/uploaded 等。
     worker 和 handle_publish 都调这个函数；区别是 worker 不阻塞 HTTP 请求。
     """
@@ -340,11 +427,12 @@ def publish_one(rel_path: str) -> Dict[str, Any]:
         return {"success": False, "error": f"invalid path layout: {rel_path}"}
     year_month, slug = info
 
-    try:
-        content = full.read_text(encoding="utf-8")
-        fm = parse_fm(content)
-    except Exception as e:
-        return {"success": False, "error": f"read failed: {e}"}
+    draft = read_draft(full)
+    if not draft:
+        return {"success": False, "error": f"read failed: {rel_path}"}
+    fm = draft["data"]
+    fmt = draft["format"]
+    body_text = draft["body"]
 
     # 构造 multipart 字段
     fm_payload = {
@@ -382,8 +470,6 @@ def publish_one(rel_path: str) -> Dict[str, Any]:
         resp = {"raw": resp_text}
 
     success = status == 200 and resp.get("ok") is True
-    parts = content.split("---", 2)
-    body_text = parts[2].lstrip() if len(parts) >= 3 else ""
 
     if success:
         new_fm = update_publish_status_in_fm(
@@ -397,12 +483,8 @@ def publish_one(rel_path: str) -> Dict[str, Any]:
         new_fm = update_publish_status_in_fm(fm, success=False, error=err_msg)
     # 清掉队列标记
     new_fm = clear_publish_queued_in_fm(new_fm)
-    new_content = build_markdown_content(new_fm, body_text)
     try:
-        # 原子写
-        tmp = full.with_suffix(full.suffix + f".tmp.{uuid.uuid4().hex[:8]}")
-        tmp.write_text(new_content, encoding="utf-8")
-        tmp.replace(full)
+        write_draft(full, new_fm, body_text, fmt)
     except Exception as e:
         return {"success": success, "warning": f"online updated but local status write failed: {e}"}
 
@@ -423,42 +505,36 @@ def publish_one(rel_path: str) -> Dict[str, Any]:
 
 
 def _mark_failed_in_fm(rel_path: str, error_msg: str) -> None:
-    """worker 兜底：把异常路径的 md 标记成 failed 状态（写 published_error + 清 publish_queued_at）"""
+    """worker 兜底：把异常路径的草稿标记成 failed 状态（写 published_error + 清 publish_queued_at，md/json 通用）"""
     full = (PROJECT_ROOT / rel_path).resolve()
     if not full.exists():
         return
     try:
-        content = full.read_text(encoding="utf-8")
-        fm = parse_fm(content)
-        parts = content.split("---", 2)
-        body_text = parts[2].lstrip() if len(parts) >= 3 else ""
-        new_fm = update_publish_status_in_fm(fm, success=False, error=f"Worker exception: {error_msg}")
+        draft = read_draft(full)
+        if not draft:
+            return
+        new_fm = update_publish_status_in_fm(draft["data"], success=False, error=f"Worker exception: {error_msg}")
         new_fm = clear_publish_queued_in_fm(new_fm)
-        new_content = build_markdown_content(new_fm, body_text)
-        tmp = full.with_suffix(full.suffix + f".tmp.{uuid.uuid4().hex[:8]}")
-        tmp.write_text(new_content, encoding="utf-8")
-        tmp.replace(full)
+        write_draft(full, new_fm, draft["body"], draft["format"])
     except Exception as e:
         print(f"[worker] mark failed error for {rel_path}: {e}")
 
 
 def worker_loop() -> None:
-    """单 worker 线程：阻塞等 Event 信号，循环处理队列；启动时扫 md 做 crash recovery"""
+    """单 worker 线程：阻塞等 Event 信号，循环处理队列；启动时扫草稿做 crash recovery（md/json 通用）"""
     print("[worker] 启动，开始 crash recovery 扫描...")
     recovered = 0
     if DRAFT_CONTENT_DIR.exists():
-        for mf in sorted(DRAFT_CONTENT_DIR.rglob("*.md")):
-            try:
-                content = mf.read_text(encoding="utf-8")
-            except Exception:
+        for mf in iter_draft_files():
+            draft = read_draft(mf)
+            if not draft:
                 continue
-            fm = parse_fm(content)
-            if has_publish_queued(fm):
+            if has_publish_queued(draft["data"]):
                 rel = str(mf.relative_to(PROJECT_ROOT))
                 if enqueue_publish(rel):
                     recovered += 1
     if recovered:
-        print(f"[worker] crash recovery: 恢复 {recovered} 个队列中的 md")
+        print(f"[worker] crash recovery: 恢复 {recovered} 个队列中的草稿")
     else:
         print("[worker] crash recovery: 无遗留任务")
 
@@ -651,6 +727,8 @@ class EditorHandler(SimpleHTTPRequestHandler):
             self.handle_delete_online()
         elif path == "/api/unpublish-online":
             self.handle_unpublish_online()
+        elif path == "/api/parse":
+            self.handle_parse()
         else:
             self.send_error(404)
 
@@ -719,36 +797,35 @@ class EditorHandler(SimpleHTTPRequestHandler):
                 return
         self.send_error(404, "media not found")
 
-    # -------------------- 文件列表（按状态分类） --------------------
+    # -------------------- 文件列表（按状态分类，md/json 通用） --------------------
     def handle_list_files(self):
         files_by_status: Dict[str, List[Dict[str, Any]]] = {
             "unpublished": [],   # 包含 queued（极简：queued 也待编辑）
             "published": [],
             "failed": [],
         }
-        if DRAFT_CONTENT_DIR.exists():
-            for mf in sorted(DRAFT_CONTENT_DIR.rglob("*.md")):
-                try:
-                    content = mf.read_text(encoding="utf-8")
-                except Exception:
-                    continue
-                status = parse_publish_status(content)
-                fm = parse_fm(content)
-                stat = mf.stat()
-                item = {
-                    "path": str(mf.relative_to(PROJECT_ROOT)),
-                    "name": mf.name,
-                    "date": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
-                    "status": status,
-                    "in_queue": has_publish_queued(fm),
-                    "published_at": get_published_at(fm),
-                    "published_slug": get_published_slug(fm),
-                    "published_error": get_published_error(fm),
-                    "title": fm.get("title", ""),
-                }
-                # queued 文件归到 unpublished tab（极简：不单独建 tab）
-                bucket = "unpublished" if status == "queued" else status
-                files_by_status[bucket].append(item)
+        for mf in iter_draft_files():
+            draft = read_draft(mf)
+            if not draft:
+                continue
+            fm = draft["data"]
+            status = parse_publish_status_from_data(fm)
+            stat = mf.stat()
+            item = {
+                "path": str(mf.relative_to(PROJECT_ROOT)),
+                "name": mf.name,
+                "format": draft["format"],
+                "date": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
+                "status": status,
+                "in_queue": has_publish_queued(fm),
+                "published_at": get_published_at(fm),
+                "published_slug": get_published_slug(fm),
+                "published_error": get_published_error(fm),
+                "title": fm.get("title", ""),
+            }
+            # queued 文件归到 unpublished tab（极简：不单独建 tab）
+            bucket = "unpublished" if status == "queued" else status
+            files_by_status[bucket].append(item)
         # 各自按时间倒序
         for k in files_by_status:
             files_by_status[k].sort(key=lambda x: x["date"], reverse=True)
@@ -759,7 +836,7 @@ class EditorHandler(SimpleHTTPRequestHandler):
             "total": sum(len(v) for v in files_by_status.values()),
         })
 
-    # -------------------- 读取单个文件 --------------------
+    # -------------------- 读取单个文件（md/json 通用） --------------------
     def handle_read_file(self, file_path: str):
         if not file_path:
             self.send_error(400, "missing path")
@@ -775,15 +852,13 @@ class EditorHandler(SimpleHTTPRequestHandler):
             self.send_error(404, "file not found")
             return
         try:
-            content = full.read_text(encoding="utf-8")
-            fm = parse_fm(content)
-            body = content
-            if content.startswith("---"):
-                parts = content.split("---", 2)
-                if len(parts) >= 3:
-                    body = parts[2].lstrip()
+            draft = read_draft(full)
+            if not draft:
+                self.send_error(404, "file not found")
+                return
+            fm = draft["data"]
 
-            # tags/models 兼容
+            # tags/models 兼容（md 可能是字符串）
             if "tags" in fm and isinstance(fm["tags"], str):
                 fm["tags"] = [t.strip() for t in fm["tags"].split(",")]
             if "models" in fm and isinstance(fm["models"], str):
@@ -791,15 +866,16 @@ class EditorHandler(SimpleHTTPRequestHandler):
 
             self.send_json({
                 "path": file_path,
-                "frontmatter": fm,
-                "raw": content,
-                "body": body,
-                "status": parse_publish_status(content),
+                "data": fm,
+                "raw": draft["raw"],
+                "body": draft["body"],
+                "format": draft["format"],
+                "status": parse_publish_status_from_data(fm),
             })
         except Exception as e:
             self.send_error(500, str(e))
 
-    # -------------------- 保存文件（不搬文件夹，留在 _drafts/） --------------------
+    # -------------------- 保存文件（不搬文件夹，留在 _drafts/；md/json 通用） --------------------
     def handle_save_file(self):
         try:
             length = int(self.headers.get("Content-Length", 0))
@@ -815,13 +891,13 @@ class EditorHandler(SimpleHTTPRequestHandler):
                 self.send_error(403, "file not in drafts dir")
                 return
 
-            if "frontmatter" in body and "body" in body:
-                fm = body["frontmatter"]
-                content = build_markdown_content(fm, body["body"])
+            fmt = detect_format(full)
+            if "data" in body and "body" in body:
+                content = build_content(body["data"], body.get("body", ""), fmt)
             elif "content" in body:
                 content = body["content"]
             else:
-                self.send_error(400, "missing frontmatter+body or content")
+                self.send_error(400, "missing data+body or content")
                 return
 
             full.parent.mkdir(parents=True, exist_ok=True)
@@ -830,10 +906,12 @@ class EditorHandler(SimpleHTTPRequestHandler):
             tmp.write_text(content, encoding="utf-8")
             tmp.replace(full)
 
+            new_data = parse_data(content, fmt)
             self.send_json({
                 "success": True,
                 "path": str(full.relative_to(PROJECT_ROOT)),
-                "status": parse_publish_status(content),
+                "format": fmt,
+                "status": parse_publish_status_from_data(new_data),
             })
         except Exception as e:
             self.send_error(500, str(e))
@@ -877,7 +955,7 @@ class EditorHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self.send_error(500, str(e))
 
-    # -------------------- 发布（异步：只入队，立刻返回） --------------------
+    # -------------------- 发布（异步：只入队，立刻返回；md/json 通用） --------------------
     def handle_publish(self):
         if not NEW_SITE_ADMIN_SECRET:
             self.send_json({"success": False, "error": "NEW_SITE_ADMIN_SECRET not configured in .dev.vars"}, 500)
@@ -908,23 +986,14 @@ class EditorHandler(SimpleHTTPRequestHandler):
             self.send_json({"success": False, "error": "invalid path layout"}, 400)
             return
 
-        # 读 front matter → 写 publish_queued_at → 入内存队列
-        try:
-            content = full.read_text(encoding="utf-8")
-            fm = parse_fm(content)
-        except Exception as e:
-            self.send_json({"success": False, "error": f"read failed: {e}"}, 500)
+        # 读草稿 → 写 publish_queued_at → 入内存队列
+        draft = read_draft(full)
+        if not draft:
+            self.send_json({"success": False, "error": "read failed"}, 500)
             return
-
-        parts = content.split("---", 2)
-        body_text = parts[2].lstrip() if len(parts) >= 3 else ""
-        new_fm = set_publish_queued_in_fm(fm)
-        new_content = build_markdown_content(new_fm, body_text)
+        new_fm = set_publish_queued_in_fm(draft["data"])
         try:
-            # 原子写
-            tmp = full.with_suffix(full.suffix + f".tmp.{uuid.uuid4().hex[:8]}")
-            tmp.write_text(new_content, encoding="utf-8")
-            tmp.replace(full)
+            write_draft(full, new_fm, draft["body"], draft["format"])
         except Exception as e:
             self.send_json({"success": False, "error": f"write failed: {e}"}, 500)
             return
@@ -946,7 +1015,7 @@ class EditorHandler(SimpleHTTPRequestHandler):
             "fs_queued_count": count_fs_queued(),  # fs 上有 publish_queued_at 的（兜底）
         })
 
-    # -------------------- 清理已发布草稿 --------------------
+    # -------------------- 清理已发布草稿（md/json 通用） --------------------
     def handle_cleanup(self):
         """
         清理 published: true && published_error: null 的草稿
@@ -957,12 +1026,11 @@ class EditorHandler(SimpleHTTPRequestHandler):
             return
 
         candidates: List[Path] = []
-        for mf in DRAFT_CONTENT_DIR.rglob("*.md"):
-            try:
-                content = mf.read_text(encoding="utf-8")
-            except Exception:
+        for mf in iter_draft_files():
+            draft = read_draft(mf)
+            if not draft:
                 continue
-            if parse_publish_status(content) == "published":
+            if parse_publish_status_from_data(draft["data"]) == "published":
                 candidates.append(mf)
 
         deleted: List[Dict[str, str]] = []
@@ -971,8 +1039,10 @@ class EditorHandler(SimpleHTTPRequestHandler):
 
         for mf in candidates:
             try:
-                content = mf.read_text(encoding="utf-8")
-                fm = parse_fm(content)
+                draft = read_draft(mf)
+                if not draft:
+                    continue
+                fm = draft["data"]
                 remote_slug = get_published_slug(fm)
                 if not remote_slug:
                     skipped.append({"path": str(mf.relative_to(PROJECT_ROOT)), "reason": "no published_slug"})
@@ -1014,11 +1084,11 @@ class EditorHandler(SimpleHTTPRequestHandler):
             "total": len(candidates),
         })
 
-    # -------------------- 从线上加载 --------------------
+    # -------------------- 从线上加载（写 json 草稿） --------------------
     def handle_load_online(self):
         """
         body: { slug: "..." }
-        从线上 D1 拉一条 → 写到 _drafts/prompts/<post_date YYYY-MM>/<slug>.md
+        从线上 D1 拉一条 → 写到 _drafts/prompts/<post_date YYYY-MM>/<slug>.json
         注意：image/video 写的是 R2 公网绝对 URL（本地不落素材文件）；
         前端 updateMedia() 识别 http(s):// 直接渲染——/media/ 代理只服务
         static/_drafts 下的本地文件，不会也无法代理 R2。
@@ -1055,7 +1125,7 @@ class EditorHandler(SimpleHTTPRequestHandler):
         # 已有？覆盖
         target_dir = DRAFT_CONTENT_DIR / year_month
         target_dir.mkdir(parents=True, exist_ok=True)
-        target_path = target_dir / f"{slug}.md"
+        target_path = target_dir / f"{slug}.json"
         if target_path.exists():
             return self.send_json({
                 "success": False,
@@ -1080,10 +1150,11 @@ class EditorHandler(SimpleHTTPRequestHandler):
         }
         # 去掉空值
         fm = {k: v for k, v in fm.items() if v not in (None, "", [])}
-        body_text = ""  # 编辑时填
 
-        content = build_markdown_content(fm, body_text)
-        target_path.write_text(content, encoding="utf-8")
+        target_path.write_text(
+            json.dumps(fm, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
         # 媒体不落本地：fm.image/video 保留 R2 公网 URL，前端直接渲染
         self.send_json({
@@ -1164,6 +1235,28 @@ class EditorHandler(SimpleHTTPRequestHandler):
         else:
             err = (isinstance(resp, dict) and resp.get("error")) or (isinstance(resp, str) and resp) or f"HTTP {status}"
             self.send_json({"ok": False, "error": err}, status)
+
+    # -------------------- 解析 source 文本（前端 source→form 切换用） --------------------
+    def handle_parse(self):
+        """POST /api/parse：body { content } → { success, data, format }"""
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length).decode("utf-8"))
+        except Exception as e:
+            self.send_json({"success": False, "error": f"bad request: {e}"}, 400)
+            return
+        content = body.get("content", "")
+        if not content.strip():
+            self.send_json({"success": False, "error": "empty content"}, 400)
+            return
+        fmt = detect_format_from_content(content)
+        data = parse_data(content, fmt)
+        # tags/models 兼容（md 可能是字符串）
+        if "tags" in data and isinstance(data["tags"], str):
+            data["tags"] = [t.strip() for t in data["tags"].split(",")]
+        if "models" in data and isinstance(data["models"], str):
+            data["models"] = [m.strip() for m in data["models"].split(",")]
+        self.send_json({"success": True, "data": data, "format": fmt})
 
     # -------------------- 单独查线上（前端 preview 用） --------------------
     def handle_online_prompt(self, slug: str):

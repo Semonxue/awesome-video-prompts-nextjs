@@ -180,7 +180,7 @@
                         <input type="text" class="form-input" id="inputTitle">
                     </div>
                     <div class="form-row">
-                        <label class="form-label">模型</label>
+                        <label class="form-label">模型 <button class="source-btn" onclick="loadMetadata()" title="重新加载 data/models.yaml">🔄</button></label>
                         <div class="selector-options" id="modelSelector"></div>
                     </div>
                     <div class="form-row">
@@ -238,7 +238,7 @@
             <div class="modal-title">⬇️ 从线上 D1 加载到草稿</div>
             <div class="modal-body">
                 <p style="margin-bottom: 8px;">输入线上 prompt 的 slug（kebab-case）。</p>
-                <p style="margin-bottom: 8px;">会写到 <code>content/_drafts/prompts/&lt;YYYY-MM&gt;/&lt;slug&gt;.md</code>，并标记为已发布状态。</p>
+                <p style="margin-bottom: 8px;">会写到 <code>content/_drafts/prompts/&lt;YYYY-MM&gt;/&lt;slug&gt;.json</code>，并标记为已发布状态。</p>
                 <input type="text" class="modal-input" id="onlineSlugInput" placeholder="例如：206987039866945601-crocodile-floodgate">
             </div>
             <div class="modal-actions">
@@ -302,6 +302,7 @@
         let formData = {};
         let currentRaw = '';
         let currentStatus = 'unpublished';
+        let currentFormat = 'md';
         let mediaRefreshToken = Date.now();
         let activeTab = 'unpublished';
         let fileCache = { unpublished: [], published: [], failed: [] };
@@ -415,7 +416,7 @@
             renderModels();
         }
 
-        // ============ 打开文件 ============
+        // ============ 打开文件（md/json 通用） ============
         async function openFile(filePath) {
             if (currentFile === filePath) return;
             const modeForm = document.getElementById('formEditor').style.display === 'flex';
@@ -437,7 +438,7 @@
                 if (f.published_error) meta.push(`❌ ${f.published_error.slice(0, 50)}`);
                 const queuePrefix = f.in_queue ? '<span class="queue-icon">⏳ </span>' : '';
                 return `<div class="${cls}" onclick="openFile('${f.path.replace(/'/g, "\\'")}')">
-                    <div class="file-name" title="${f.name}">${queuePrefix}${(f.title || f.name).replace(/</g, '&lt;')}</div>
+                    <div class="file-name" title="${f.name}">${queuePrefix}${(f.title || f.name).replace(/</g, '\x3c')}</div>
                     <div class="file-date">${f.date}${meta.length ? ' · ' + meta.join(' · ') : ''}</div>
                 </div>`;
             }).join('');
@@ -449,27 +450,20 @@
                     return;
                 }
                 const data = await res.json();
-                const fm = data.frontmatter || {};
+                const fm = data.data || {};
                 currentRaw = data.raw || '';
+                currentFormat = data.format || 'md';
                 formData = { ...fm };
+                // md 的 body 单独存（保存时原样写回，避免丢失）
+                if (currentFormat === 'md') formData._body = data.body || '';
                 currentStatus = data.status || 'unpublished';
                 mediaRefreshToken = Date.now();
 
-                // 填表
-                document.getElementById('inputTitle').value = fm.title || '';
-                document.getElementById('inputAuthor').value = fm.author || '';
-                document.getElementById('inputSourceUrl').value = fm.source_url || '';
-                document.getElementById('inputPostDate').value = fm.post_date || fm.date || '';
-                let tags = fm.tags;
-                if (Array.isArray(tags)) tags = tags.join(', ');
-                else if (typeof tags !== 'string') tags = '';
-                document.getElementById('inputTags').value = tags;
+                // 每次打开文件都刷新模型列表（data/models.yaml 可能已更新）
+                loadMetadata();
 
-                if (Array.isArray(fm.models) && fm.models.length > 0) selectedModel = String(fm.models[0]);
-                else if (typeof fm.models === 'string' && fm.models) selectedModel = fm.models;
-                else if (typeof fm.model === 'string' && fm.model) selectedModel = fm.model;
-                else selectedModel = '';
-                renderModels();
+                // 填表
+                fillForm(fm);
 
                 // 状态徽章
                 updateStatusBadge(currentStatus);
@@ -479,23 +473,45 @@
                 // 媒体
                 updateMedia(fm);
 
-                // 描述
-                let desc = fm.description || '';
-                if (typeof desc === 'string') {
-                    desc = desc.split('\n').map(line => line.replace(/^\s{2}/, '')).join('\n').trim();
-                }
-                document.getElementById('inputDescription').value = desc;
-
                 document.getElementById('sourceTextarea').value = currentRaw;
                 const titleEl = document.getElementById('currentFileTitle');
                 const titleSrcEl = document.getElementById('sourceFileTitle');
                 titleEl.firstChild.textContent = filePath;
                 titleSrcEl.firstChild.textContent = filePath;
 
-                switchMode(modeForm ? 'form' : 'form');
+                switchMode('form');
             } catch (e) {
                 showToast('加载失败: ' + e.message, true);
             }
+        }
+
+        // 用 data dict 填充表单（openFile 与 source→form 切换共用）
+        function fillForm(fm) {
+            document.getElementById('inputTitle').value = fm.title || '';
+            document.getElementById('inputAuthor').value = fm.author || '';
+            document.getElementById('inputSourceUrl').value = fm.source_url || '';
+            document.getElementById('inputPostDate').value = fm.post_date || fm.date || '';
+            let tags = fm.tags;
+            if (Array.isArray(tags)) tags = tags.join(', ');
+            else if (typeof tags !== 'string') tags = '';
+            document.getElementById('inputTags').value = tags;
+
+            if (Array.isArray(fm.models) && fm.models.length > 0) selectedModel = String(fm.models[0]);
+            else if (typeof fm.models === 'string' && fm.models) selectedModel = fm.models;
+            else if (typeof fm.model === 'string' && fm.model) selectedModel = fm.model;
+            else selectedModel = '';
+            renderModels();
+
+            // 描述：md 的 YAML block 有 2 空格缩进，json 无缩进
+            let desc = fm.description || '';
+            if (typeof desc === 'string') {
+                if (currentFormat === 'md') {
+                    desc = desc.split('\n').map(line => line.replace(/^\s{2}/, '')).join('\n').trim();
+                } else {
+                    desc = desc.trim();
+                }
+            }
+            document.getElementById('inputDescription').value = desc;
         }
 
         function updateStatusBadge(status) {
@@ -560,8 +576,46 @@
             }
         }
 
-        function switchMode(mode) {
+        // ============ 模式切换（form ↔ source 双向同步） ============
+        async function switchMode(mode) {
             const formOn = mode === 'form';
+            const wasForm = document.getElementById('formEditor').style.display === 'flex';
+
+            if (formOn && !wasForm) {
+                // source → form：用 source 当前内容重新解析并填表（不保存）
+                const content = document.getElementById('sourceTextarea').value;
+                if (content && content !== currentRaw) {
+                    try {
+                        const res = await fetch(`${API}/parse`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ content }),
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            formData = { ...data.data };
+                            currentFormat = data.format || currentFormat;
+                            currentRaw = content;
+                            fillForm(formData);
+                            updateMedia(formData);
+                        } else {
+                            showToast('source 解析失败: ' + (data.error || '未知'), true);
+                        }
+                    } catch (e) {
+                        showToast('source 解析出错: ' + e.message, true);
+                    }
+                }
+            } else if (!formOn && wasForm) {
+                // form → source：把当前表单状态序列化到 source 编辑区
+                if (currentFormat === 'json') {
+                    const newFm = buildFormData();
+                    if (newFm) {
+                        document.getElementById('sourceTextarea').value = JSON.stringify(newFm, null, 2);
+                    }
+                }
+                // md 格式：保持显示磁盘 raw（YAML 序列化前端做不了，md 用户主要在 form 编辑、source 只查看）
+            }
+
             document.getElementById('formEditor').style.display = formOn ? 'flex' : 'none';
             document.getElementById('sourceEditor').classList.toggle('active', !formOn);
             document.getElementById('formToggle').classList.toggle('active', formOn);
@@ -585,9 +639,9 @@
             if (url) window.open(url, 'md_editor_source_link');
         }
 
-        // ============ 保存 ============
-        async function saveForm() {
-            if (!currentFile) return;
+        // ============ 保存（md/json 通用） ============
+        // 从当前表单构造 data dict（saveForm 与 form→source 序列化共用）
+        function buildFormData() {
             const title = document.getElementById('inputTitle').value.trim();
             const author = document.getElementById('inputAuthor').value.trim();
             const sourceUrl = document.getElementById('inputSourceUrl').value.trim();
@@ -596,9 +650,9 @@
             const postDate = document.getElementById('inputPostDate').value.trim();
             const tags = tagsStr.split(',').map(t => t.trim()).filter(Boolean);
 
-            // 推断 pathInfo
-            const m = currentFile.match(/^content\/_drafts\/prompts\/([^/]+)\/([^/]+)\.md$/);
-            if (!m) { showToast('路径无法解析', true); return; }
+            // 推断 pathInfo（md/json 双后缀）
+            const m = currentFile.match(/^content\/_drafts\/prompts\/([^/]+)\/([^/]+)\.(md|json)$/);
+            if (!m) { showToast('路径无法解析', true); return null; }
             const yearMonth = m[1], slug = m[2];
 
             const newFm = { ...formData };
@@ -625,8 +679,16 @@
             newFm.date = newFm.post_date;
             newFm.draft = true;
             // 保留 published* 字段（如果有）
+            return newFm;
+        }
 
-            await doSave({ path: currentFile, frontmatter: newFm, body: desc });
+        async function saveForm() {
+            if (!currentFile) return;
+            const newFm = buildFormData();
+            if (!newFm) return;
+            // md 有 body 概念（老草稿 body 为空）；json 无 body
+            const body = currentFormat === 'md' ? (formData._body || '') : '';
+            await doSave({ path: currentFile, data: newFm, body });
         }
 
         async function saveSource() {
@@ -659,16 +721,33 @@
             }
         }
 
-        // ============ 发布（异步：即入队即跳下一个） ============
+        // ============ 发布（先保存当前编辑状态，再入队） ============
         async function publishCurrent() {
             if (!currentFile) { showToast('请先选择文件', true); return; }
-            if (!confirm(`把 "${currentFile}" 加入发布队列？\n\n说明：后台单 worker 串行处理（覆盖 R2 + D1 upsert + revalidate）。前台会立即跳到下一个待编辑项，发布结果会写回 front matter（在"已发布"/"失败"tab 查看）。`)) return;
+            if (!confirm(`把 "${currentFile}" 加入发布队列？\n\n说明：会先保存当前编辑状态，再由后台单 worker 串行处理（覆盖 R2 + D1 upsert + revalidate）。前台会立即跳到下一个待编辑项，发布结果会写回 front matter（在"已发布"/"失败"tab 查看）。`)) return;
 
             // 记录当前文件在待编辑列表中的位置（入队后用来打开下一个）
             const unpublishedFiles = fileCache.unpublished || [];
             const currentIdx = unpublishedFiles.findIndex(f => f.path === currentFile);
 
-            // 立刻乐观更新：本地把这个文件标记成 in_queue（不等服务端响应）
+            // 1. 先保存当前编辑状态（form 或 source 模式）
+            const isFormMode = document.getElementById('formEditor').style.display === 'flex';
+            try {
+                if (isFormMode) {
+                    const newFm = buildFormData();
+                    if (!newFm) return;
+                    const body = currentFormat === 'md' ? (formData._body || '') : '';
+                    await doSave({ path: currentFile, data: newFm, body });
+                } else {
+                    const content = document.getElementById('sourceTextarea').value;
+                    await doSave({ path: currentFile, content });
+                }
+            } catch (e) {
+                showToast('发布前保存失败，已中止发布: ' + e.message, true);
+                return;
+            }
+
+            // 2. 入队
             const target = unpublishedFiles.find(f => f.path === currentFile);
             if (target) target.in_queue = true;
             renderFileList();
