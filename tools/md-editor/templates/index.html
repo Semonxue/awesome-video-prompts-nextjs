@@ -105,11 +105,6 @@
         .source-editor.active { display: flex; }
         .source-editor textarea { flex: 1; width: 100%; padding: 12px; border: none; font-family: 'Monaco', 'Menlo', monospace; font-size: 12px; line-height: 1.5; resize: none; background: var(--bg-primary); color: var(--text-primary); }
 
-        .iframe-panel { width: 25%; min-width: 200px; border-left: 1px solid var(--border-color); display: none; flex-direction: column; }
-        .iframe-panel.visible { display: flex; }
-        .iframe-header { padding: 8px 12px; border-bottom: 1px solid var(--border-color); background: var(--bg-secondary); font-size: 11px; color: var(--text-secondary); display: flex; justify-content: space-between; align-items: center; }
-        .iframe-content iframe { width: 100%; height: 100%; border: none; }
-
         .toast { position: fixed; bottom: 20px; right: 20px; background: var(--success-color); color: white; padding: 10px 16px; border-radius: 4px; font-size: 12px; opacity: 0; transform: translateY(10px); transition: all 0.2s; z-index: 1000; max-width: 400px; word-break: break-all; }
         .toast.show { opacity: 1; transform: translateY(0); }
         .toast.error { background: var(--error-color); }
@@ -189,9 +184,8 @@
                     </div>
                     <div class="form-row source-row">
                         <input type="text" class="form-input" id="inputAuthor" placeholder="作者">
-                        <input type="url" class="form-input" id="inputSourceUrl" placeholder="来源链接">
-                        <button class="source-btn" id="openNewTab" onclick="openInNewTab()" title="新窗口（可拖到分栏）">↗️</button>
-                        <button class="source-btn" id="iframeToggle" onclick="toggleIframe()">🔗</button>
+                        <input type="url" class="form-input" id="inputSourceUrl" placeholder="来源链接" oninput="syncSourceLink()">
+                        <a class="source-btn" id="openNewTab" target="md_editor_source_link" title="新窗口（可拖到分栏）">↗️</a>
                     </div>
                     <div class="form-row">
                         <label class="form-label">发布日期 (post_date)</label>
@@ -223,13 +217,6 @@
             </div>
         </div>
 
-        <div class="iframe-panel" id="iframePanel">
-            <div class="iframe-header">
-                <span>来源</span>
-                <button class="source-btn" onclick="toggleIframe()">×</button>
-            </div>
-            <div class="iframe-content"><iframe id="sourceIframe" src="about:blank"></iframe></div>
-        </div>
     </div>
 
     <!-- Modal: 加载线上 -->
@@ -298,7 +285,6 @@
         let currentFile = null;
         let models = {};
         let selectedModel = '';
-        let iframeVisible = false;
         let formData = {};
         let currentRaw = '';
         let currentStatus = 'unpublished';
@@ -490,6 +476,7 @@
             document.getElementById('inputTitle').value = fm.title || '';
             document.getElementById('inputAuthor').value = fm.author || '';
             document.getElementById('inputSourceUrl').value = fm.source_url || '';
+            syncSourceLink();
             document.getElementById('inputPostDate').value = fm.post_date || fm.date || '';
             let tags = fm.tags;
             if (Array.isArray(tags)) tags = tags.join(', ');
@@ -624,19 +611,16 @@
             document.getElementById('sourceToggle2').classList.toggle('active', !formOn);
         }
 
-        function toggleIframe() {
-            iframeVisible = !iframeVisible;
-            document.getElementById('iframePanel').classList.toggle('visible', iframeVisible);
-            document.getElementById('iframeToggle').classList.toggle('active', iframeVisible);
-            if (iframeVisible) {
-                const url = document.getElementById('inputSourceUrl').value;
-                if (url) document.getElementById('sourceIframe').src = url;
+        function syncSourceLink() {
+            const url = document.getElementById('inputSourceUrl').value.trim();
+            const link = document.getElementById('openNewTab');
+            if (url) {
+                link.href = url;
+                link.classList.add('active');
+            } else {
+                link.removeAttribute('href');
+                link.classList.remove('active');
             }
-        }
-
-        function openInNewTab() {
-            const url = document.getElementById('inputSourceUrl').value;
-            if (url) window.open(url, 'md_editor_source_link');
         }
 
         // ============ 保存（md/json 通用） ============

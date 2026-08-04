@@ -1365,3 +1365,591 @@ tool:
   zh-cn: 工具
   description_en: "Tools and utilities"
   description_zh-cn: "工具和实用程序"
+
+ai-art:
+  en: AI art
+  zh-cn: AI艺术
+  description_en: "AI-generated artistic content"
+  description_zh-cn: "AI生成的艺术内容"
+
+blockbuster:
+  en: blockbuster
+  zh-cn: 大片
+  description_en: "Blockbuster-style high-budget cinematic content"
+  description_zh-cn: "大片风格的高预算电影内容"
+
+bridge:
+  en: bridge
+  zh-cn: 桥梁
+  description_en: "Bridges and crossing structures"
+  description_zh-cn: "桥梁和跨越结构"
+
+broadcast:
+  en: broadcast
+  zh-cn: 转播
+  description_en: "Broadcast-style production and live coverage"
+  description_zh-cn: "转播风格制作和现场报道"
+
+chinese-fantasy:
+  en: Chinese fantasy
+  zh-cn: 中国奇幻
+  description_en: "Chinese fantasy themes and mythology"
+  description_zh-cn: "中国奇幻主题和神话"
+
+family:
+  en: family
+  zh-cn: 家庭
+  description_en: "Family and domestic scenes"
+  description_zh-cn: "家庭和日常生活场景"
+
+flamenco:
+  en: flamenco
+  zh-cn: 弗拉门戈
+  description_en: "Flamenco dance and music culture"
+  description_zh-cn: "弗拉门戈舞蹈和音乐文化"
+
+motorcycle:
+  en: motorcycle
+  zh-cn: 摩托车
+  description_en: "Motorcycles and motorcycle scenes"
+  description_zh-cn: "摩托车和摩托车场景"
+
+music-video:
+  en: music video
+  zh-cn: 音乐视频
+  description_en: "Music video style and production"
+  description_zh-cn: "音乐视频风格和制作"
+
+neo-flamenco:
+  en: neo-flamenco
+  zh-cn: 新弗拉门戈
+  description_en: "Modern fusion of flamenco with contemporary styles"
+  description_zh-cn: "弗拉门戈与现代风格的融合"
+
+product-launch:
+  en: product launch
+  zh-cn: 产品发布
+  description_en: "Product launch and announcement content"
+  description_zh-cn: "产品发布和公告内容"
+
+retrofuturistic:
+  en: retrofuturistic
+  zh-cn: 复古未来
+  description_en: "Retrofuturistic aesthetic blending past and future"
+  description_zh-cn: "融合过去与未来的复古未来美学"
+
+seedance:
+  en: Seedance
+  zh-cn: Seedance
+  description_en: "Seedance video generation model content"
+  description_zh-cn: "Seedance视频生成模型内容"
+
+short-film:
+  en: short film
+  zh-cn: 短片
+  description_en: "Short film format and storytelling"
+  description_zh-cn: "短片格式和叙事"
+
+travel:
+  en: travel
+  zh-cn: 旅行
+  description_en: "Travel and exploration content"
+  description_zh-cn: "旅行和探索内容"
+
+wire-fu:
+  en: wire-fu
+  zh-cn: 威亚功夫
+  description_en: "Wire-fu martial arts with acrobatic flying moves"
+  description_zh-cn: "带有杂技飞行动作的威亚功夫"
+
+wuxia:
+  en: wuxia
+  zh-cn: 武侠
+  description_en: "Wuxia martial arts and Chinese swordsmanship"
+  description_zh-cn: "武侠武术和中国剑术"
+
+Hong-Kong:
+  en: Hong Kong
+  zh-cn: 香港
+  description_en: "Hong Kong related content"
+  description_zh-cn: "香港相关内容"
+
+POV:
+  en: POV
+  zh-cn: 第一人称视角
+  description_en: "POV related content"
+  description_zh-cn: "第一人称视角相关内容"
+
+VFX:
+  en: VFX
+  zh-cn: 视觉特效
+  description_en: "VFX related content"
+  description_zh-cn: "视觉特效相关内容"
+
+ai-avatar:
+  en: AI avatar
+  zh-cn: AI虚拟形象
+  description_en: "AI avatar related content"
+  description_zh-cn: "AI虚拟形象相关内容"
+
+ai-comparison:
+  en: AI comparison
+  zh-cn: AI对比
+  description_en: "AI comparison related content"
+  description_zh-cn: "AI对比相关内容"
+
+anchor:
+  en: anchor
+  zh-cn: 主播
+  description_en: "anchor related content"
+  description_zh-cn: "主播相关内容"
+
+animals:
+  en: animals
+  zh-cn: 动物
+  description_en: "animals related content"
+  description_zh-cn: "动物相关内容"
+
+annotation:
+  en: annotation
+  zh-cn: 标注
+  description_en: "annotation related content"
+  description_zh-cn: "标注相关内容"
+
+apoc:
+  en: apocalypse
+  zh-cn: 末世
+  description_en: "apocalypse related content"
+  description_zh-cn: "末世相关内容"
+
+audition:
+  en: audition
+  zh-cn: 试镜
+  description_en: "audition related content"
+  description_zh-cn: "试镜相关内容"
+
+basketball:
+  en: basketball
+  zh-cn: 篮球
+  description_en: "basketball related content"
+  description_zh-cn: "篮球相关内容"
+
+battle:
+  en: battle
+  zh-cn: 战斗
+  description_en: "battle related content"
+  description_zh-cn: "战斗相关内容"
+
+biopunk:
+  en: biopunk
+  zh-cn: 生物朋克
+  description_en: "biopunk related content"
+  description_zh-cn: "生物朋克相关内容"
+
+bird:
+  en: bird
+  zh-cn: 鸟
+  description_en: "bird related content"
+  description_zh-cn: "鸟相关内容"
+
+budai:
+  en: Budai
+  zh-cn: 布袋
+  description_en: "Budai related content"
+  description_zh-cn: "布袋相关内容"
+
+ccd:
+  en: CCD
+  zh-cn: CCD
+  description_en: "CCD related content"
+  description_zh-cn: "CCD相关内容"
+
+ccd-effect:
+  en: CCD effect
+  zh-cn: CCD效果
+  description_en: "CCD effect related content"
+  description_zh-cn: "CCD效果相关内容"
+
+celebrity:
+  en: celebrity
+  zh-cn: 名人
+  description_en: "celebrity related content"
+  description_zh-cn: "名人相关内容"
+
+cityscape:
+  en: cityscape
+  zh-cn: 城市景观
+  description_en: "cityscape related content"
+  description_zh-cn: "城市景观相关内容"
+
+comfyui:
+  en: ComfyUI
+  zh-cn: ComfyUI
+  description_en: "ComfyUI related content"
+  description_zh-cn: "ComfyUI相关内容"
+
+digital-human:
+  en: digital human
+  zh-cn: 数字人
+  description_en: "digital human related content"
+  description_zh-cn: "数字人相关内容"
+
+divine:
+  en: divine
+  zh-cn: 神圣
+  description_en: "divine related content"
+  description_zh-cn: "神圣相关内容"
+
+dragon:
+  en: dragon
+  zh-cn: 龙
+  description_en: "dragon related content"
+  description_zh-cn: "龙相关内容"
+
+dramatic:
+  en: dramatic
+  zh-cn: 戏剧性
+  description_en: "dramatic related content"
+  description_zh-cn: "戏剧性相关内容"
+
+duel:
+  en: duel
+  zh-cn: 决斗
+  description_en: "duel related content"
+  description_zh-cn: "决斗相关内容"
+
+elevator:
+  en: elevator
+  zh-cn: 电梯
+  description_en: "elevator related content"
+  description_zh-cn: "电梯相关内容"
+
+emotional-support:
+  en: emotional support
+  zh-cn: 情感支持
+  description_en: "emotional support related content"
+  description_zh-cn: "情感支持相关内容"
+
+extreme:
+  en: extreme
+  zh-cn: 极限
+  description_en: "extreme related content"
+  description_zh-cn: "极限相关内容"
+
+extreme-sports:
+  en: extreme sports
+  zh-cn: 极限运动
+  description_en: "extreme sports related content"
+  description_zh-cn: "极限运动相关内容"
+
+facial-expression:
+  en: facial expression
+  zh-cn: 面部表情
+  description_en: "facial expression related content"
+  description_zh-cn: "面部表情相关内容"
+
+fight:
+  en: fight
+  zh-cn: 格斗
+  description_en: "fight related content"
+  description_zh-cn: "格斗相关内容"
+
+fight-scene:
+  en: fight scene
+  zh-cn: 打斗场景
+  description_en: "fight scene related content"
+  description_zh-cn: "打斗场景相关内容"
+
+first-person:
+  en: first person
+  zh-cn: 第一人称
+  description_en: "first person related content"
+  description_zh-cn: "第一人称相关内容"
+
+first-person-pov:
+  en: first person POV
+  zh-cn: 第一人称视角
+  description_en: "first person POV related content"
+  description_zh-cn: "第一人称视角相关内容"
+
+flower:
+  en: flower
+  zh-cn: 花
+  description_en: "flower related content"
+  description_zh-cn: "花相关内容"
+
+game-of-thrones:
+  en: Game of Thrones
+  zh-cn: 权力的游戏
+  description_en: "Game of Thrones related content"
+  description_zh-cn: "权力的游戏相关内容"
+
+handheld-camera:
+  en: handheld camera
+  zh-cn: 手持摄影
+  description_en: "handheld camera related content"
+  description_zh-cn: "手持摄影相关内容"
+
+hard-surface:
+  en: hard surface
+  zh-cn: 硬表面
+  description_en: "hard surface related content"
+  description_zh-cn: "硬表面相关内容"
+
+hong-kong:
+  en: Hong Kong
+  zh-cn: 香港
+  description_en: "Hong Kong related content"
+  description_zh-cn: "香港相关内容"
+
+india:
+  en: India
+  zh-cn: 印度
+  description_en: "India related content"
+  description_zh-cn: "印度相关内容"
+
+indian:
+  en: Indian
+  zh-cn: 印度
+  description_en: "Indian related content"
+  description_zh-cn: "印度相关内容"
+
+iphone:
+  en: iPhone
+  zh-cn: iPhone
+  description_en: "iPhone related content"
+  description_zh-cn: "iPhone相关内容"
+
+json:
+  en: JSON
+  zh-cn: JSON
+  description_en: "JSON related content"
+  description_zh-cn: "JSON相关内容"
+
+kling:
+  en: Kling
+  zh-cn: Kling
+  description_en: "Kling related content"
+  description_zh-cn: "Kling相关内容"
+
+large-scale:
+  en: large scale
+  zh-cn: 大规模
+  description_en: "large scale related content"
+  description_zh-cn: "大规模相关内容"
+
+maid:
+  en: maid
+  zh-cn: 女仆
+  description_en: "maid related content"
+  description_zh-cn: "女仆相关内容"
+
+mammoth:
+  en: mammoth
+  zh-cn: 猛犸象
+  description_en: "mammoth related content"
+  description_zh-cn: "猛犸象相关内容"
+
+martial arts:
+  en: martial arts
+  zh-cn: 武术
+  description_en: "martial arts related content"
+  description_zh-cn: "武术相关内容"
+
+mechanical:
+  en: mechanical
+  zh-cn: 机械
+  description_en: "mechanical related content"
+  description_zh-cn: "机械相关内容"
+
+micro-expression:
+  en: micro expression
+  zh-cn: 微表情
+  description_en: "micro expression related content"
+  description_zh-cn: "微表情相关内容"
+
+monkey-king:
+  en: Monkey King
+  zh-cn: 孙悟空
+  description_en: "Monkey King related content"
+  description_zh-cn: "孙悟空相关内容"
+
+motion:
+  en: motion
+  zh-cn: 动态
+  description_en: "motion related content"
+  description_zh-cn: "动态相关内容"
+
+motion-transfer:
+  en: motion transfer
+  zh-cn: 动作迁移
+  description_en: "motion transfer related content"
+  description_zh-cn: "动作迁移相关内容"
+
+motocross:
+  en: motocross
+  zh-cn: 越野摩托
+  description_en: "motocross related content"
+  description_zh-cn: "越野摩托相关内容"
+
+night-street:
+  en: night street
+  zh-cn: 夜街
+  description_en: "night street related content"
+  description_zh-cn: "夜街相关内容"
+
+open-source:
+  en: open source
+  zh-cn: 开源
+  description_en: "open source related content"
+  description_zh-cn: "开源相关内容"
+
+parallax:
+  en: parallax
+  zh-cn: 视差
+  description_en: "parallax related content"
+  description_zh-cn: "视差相关内容"
+
+psychological:
+  en: psychological
+  zh-cn: 心理
+  description_en: "psychological related content"
+  description_zh-cn: "心理相关内容"
+
+python:
+  en: Python
+  zh-cn: Python
+  description_en: "Python related content"
+  description_zh-cn: "Python相关内容"
+
+sacred:
+  en: sacred
+  zh-cn: 神圣
+  description_en: "sacred related content"
+  description_zh-cn: "神圣相关内容"
+
+seedance2:
+  en: Seedance 2
+  zh-cn: Seedance 2
+  description_en: "Seedance 2 related content"
+  description_zh-cn: "Seedance 2相关内容"
+
+seedance2mini:
+  en: Seedance 2 Mini
+  zh-cn: Seedance 2 Mini
+  description_en: "Seedance 2 Mini related content"
+  description_zh-cn: "Seedance 2 Mini相关内容"
+
+side-by-side:
+  en: side by side
+  zh-cn: 并排对比
+  description_en: "side by side related content"
+  description_zh-cn: "并排对比相关内容"
+
+skydiving:
+  en: skydiving
+  zh-cn: 跳伞
+  description_en: "skydiving related content"
+  description_zh-cn: "跳伞相关内容"
+
+sora:
+  en: Sora
+  zh-cn: Sora
+  description_en: "Sora related content"
+  description_zh-cn: "Sora相关内容"
+
+street:
+  en: street
+  zh-cn: 街头
+  description_en: "street related content"
+  description_zh-cn: "街头相关内容"
+
+street-scene:
+  en: street scene
+  zh-cn: 街景
+  description_en: "street scene related content"
+  description_zh-cn: "街景相关内容"
+
+survival:
+  en: survival
+  zh-cn: 生存
+  description_en: "survival related content"
+  description_zh-cn: "生存相关内容"
+
+suspense:
+  en: suspense
+  zh-cn: 悬疑
+  description_en: "suspense related content"
+  description_zh-cn: "悬疑相关内容"
+
+talking-head:
+  en: talking head
+  zh-cn: 说话人
+  description_en: "talking head related content"
+  description_zh-cn: "说话人相关内容"
+
+thailand:
+  en: Thailand
+  zh-cn: 泰国
+  description_en: "Thailand related content"
+  description_zh-cn: "泰国相关内容"
+
+thriller:
+  en: thriller
+  zh-cn: 惊悚
+  description_en: "thriller related content"
+  description_zh-cn: "惊悚相关内容"
+
+tiktok:
+  en: TikTok
+  zh-cn: TikTok
+  description_en: "TikTok related content"
+  description_zh-cn: "TikTok相关内容"
+
+vertical-video:
+  en: vertical video
+  zh-cn: 竖屏视频
+  description_en: "vertical video related content"
+  description_zh-cn: "竖屏视频相关内容"
+
+virtual-human:
+  en: virtual human
+  zh-cn: 虚拟人
+  description_en: "virtual human related content"
+  description_zh-cn: "虚拟人相关内容"
+
+visual-prompting:
+  en: visual prompting
+  zh-cn: 视觉提示
+  description_en: "visual prompting related content"
+  description_zh-cn: "视觉提示相关内容"
+
+volleyball:
+  en: volleyball
+  zh-cn: 排球
+  description_en: "volleyball related content"
+  description_zh-cn: "排球相关内容"
+
+war-scene:
+  en: war scene
+  zh-cn: 战争场景
+  description_en: "war scene related content"
+  description_zh-cn: "战争场景相关内容"
+
+warfare:
+  en: warfare
+  zh-cn: 战争
+  description_en: "warfare related content"
+  description_zh-cn: "战争相关内容"
+
+workflow:
+  en: workflow
+  zh-cn: 工作流
+  description_en: "workflow related content"
+  description_zh-cn: "工作流相关内容"
+
+live-action:
+  en: live action
+  zh-cn: 真人实拍
+  description_en: "Live-action filmed content, not animated"
+  description_zh-cn: "真人实拍内容，非动画"
