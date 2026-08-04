@@ -48,6 +48,10 @@ import { deriveYearMonth, keyFromMediaUrl, R2_KEY_PREFIX } from '@/lib/r2-keys';
 // 显式标记使用 schema 里的 import（防止 lint 报 unused）
 void prompts; void tags; void models; void promptTags; void promptModels;
 
+// 使用 Cloudflare workers-types 里的 R2Object（避免与项目自带的同名全局冲突）
+import type { R2Object as CFR2Object } from '@cloudflare/workers-types';
+type R2Obj = CFR2Object;
+
 /** D1 binding 类型（来自 CloudflareEnv，OpenNext 内部版本） */
 type D1 = CloudflareEnv['DB'];
 /** R2 binding 类型（来自 CloudflareEnv，OpenNext 内部版本） */
@@ -128,22 +132,45 @@ function parseFrontmatterField(raw: string | null): FrontmatterPayload {
   }
 }
 
-/** 上传单个文件到 R2（覆盖语义，幂等） */
+/** 上传单个文件到 R2（覆盖语义，幂等）。
+ * 严格校验：put 必须返回非 null R2Object + size 匹配 + head 二次确认写入。
+ * 任何一步不通过都返回 false —— 避免 silent-fail 让 D1 留下孤儿 cover_url。
+ */
 async function uploadToR2(
   bucket: R2,
   key: string,
   body: ArrayBuffer,
   contentType: string,
-): Promise<boolean> {
+): Promise<{ ok: boolean; error?: string }> {
+  const expectedSize = body.byteLength;
+  let result: R2Obj | null = null;
   try {
-    await bucket.put(key, body, {
+    result = await bucket.put(key, body, {
       httpMetadata: { contentType },
     });
-    return true;
   } catch (e) {
-    console.error(`[admin/publish] R2 put failed for ${key}:`, e);
-    return false;
+    return { ok: false, error: `put threw: ${(e as Error).message}` };
   }
+  if (!result) {
+    return { ok: false, error: 'put returned null (silent fail — likely binding/bucket mismatch)' };
+  }
+  if (result.size !== expectedSize) {
+    return { ok: false, error: `size mismatch: put reported ${result.size}, expected ${expectedSize}` };
+  }
+  // 二次校验：head 取回
+  let head: R2Obj | null = null;
+  try {
+    head = await bucket.head(key);
+  } catch (e) {
+    return { ok: false, error: `head threw: ${(e as Error).message}` };
+  }
+  if (!head) {
+    return { ok: false, error: 'head returned null (object not visible after put)' };
+  }
+  if (head.size !== expectedSize) {
+    return { ok: false, error: `head size mismatch: ${head.size} vs ${expectedSize}` };
+  }
+  return { ok: true };
 }
 
 /**
@@ -389,9 +416,10 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
       return badRequest(`cover file too large`, `${coverFile.size} > ${MAX_FILE_SIZE}`);
     }
     const buf = await coverFile.arrayBuffer();
-    uploaded.cover = await uploadToR2(r2, coverKey, buf, 'image/jpeg');
-    if (!uploaded.cover) {
-      return serverError('Failed to upload cover to R2', coverKey);
+    const coverRes = await uploadToR2(r2, coverKey, buf, 'image/jpeg');
+    uploaded.cover = coverRes.ok;
+    if (!coverRes.ok) {
+      return serverError('Failed to upload cover to R2', `${coverKey}: ${coverRes.error}`);
     }
   }
   const videoFile = form.get('video');
@@ -400,9 +428,10 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
       return badRequest(`video file too large`, `${videoFile.size} > ${MAX_FILE_SIZE}`);
     }
     const buf = await videoFile.arrayBuffer();
-    uploaded.video = await uploadToR2(r2, videoKey, buf, 'video/mp4');
-    if (!uploaded.video) {
-      return serverError('Failed to upload video to R2', videoKey);
+    const videoRes = await uploadToR2(r2, videoKey, buf, 'video/mp4');
+    uploaded.video = videoRes.ok;
+    if (!videoRes.ok) {
+      return serverError('Failed to upload video to R2', `${videoKey}: ${videoRes.error}`);
     }
   }
 

@@ -22,10 +22,14 @@ database_id = "486ccac9-d364-4db4-b911-d4a420bcbc6c"
 # ============================================================
 # R2: 视频/封面图托管
 # 通过自定义域 static.awesomevideoprompts.com 公开访问
+# 注意：自定义域 static.awesomevideoprompts.com 绑定在 awesome-video-prompts-static
+#       （历史素材都在此 bucket），发布必须写这个 bucket，否则公开 URL 404。
+#       media bucket（awesome-video-prompts-media）是 2026-06 误建的旧绑定，
+#       已在 2026-08-04 把其中对象迁移至 static bucket。
 # ============================================================
 [[r2_buckets]]
 binding = "MEDIA"
-bucket_name = "awesome-video-prompts-media"
+bucket_name = "awesome-video-prompts-static"
 
 # ============================================================
 # 环境变量
