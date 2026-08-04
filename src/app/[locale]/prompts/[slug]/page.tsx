@@ -226,7 +226,7 @@ export default async function PromptDetailPage({ params }: Props) {
         <section className="prompt-detail__copy">
           <div className="copy-header">
             <h2>{t('copyPromptTitle')}</h2>
-            <CopyButton text={prompt.description} />
+            <CopyButton text={prompt.description} promptName={prompt.title} />
           </div>
           <div className="copy-body" title={t('clickToCopyHint')}>
             {paragraphs.length > 1 ? (

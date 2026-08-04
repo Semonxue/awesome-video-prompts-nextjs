@@ -12,13 +12,23 @@ interface CopyButtonProps {
   text: string;
   /** 按钮变体：icon-only / text */
   variant?: 'icon' | 'text';
+  /** Matomo 追踪用的 prompt 名称（可选） */
+  promptName?: string;
 }
 
-export default function CopyButton({ text, variant = 'icon' }: CopyButtonProps) {
+export default function CopyButton({ text, variant = 'icon', promptName }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
   const t = useTranslations('prompt');
 
+  /** Matomo 复制事件追踪（迁移自老站 assets/js/global.js） */
+  function trackCopy() {
+    if (typeof window !== 'undefined' && typeof (window as any)._paq !== 'undefined' && promptName) {
+      (window as any)._paq.push(['trackEvent', 'prompts', 'copy', promptName]);
+    }
+  }
+
   async function handleCopy() {
+    trackCopy();
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
