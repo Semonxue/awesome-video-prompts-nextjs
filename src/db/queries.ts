@@ -204,6 +204,45 @@ export async function listPrompts(args: ListPromptsArgs): Promise<ListPromptsRes
 }
 
 /**
+ * 批量查重 — 按 twitter id 检查线上是否已存在对应 prompt
+ *
+ * 匹配逻辑（双保险）：
+ *   - source_url 包含 `/status/<id>`（最可靠，不依赖 slug 约定）
+ *   - slug 以 `<id>-` 开头（兼容 slug 前缀约定）
+ *
+ * 返回：已存在的 twitter id 集合
+ * 调用方：/api/prompts/check-duplicates（LLM 批量预处理前查重）
+ */
+export async function checkDuplicateTweetIds(ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const d1 = await getD1();
+  const db = getDb(d1);
+
+  const existing = new Set<string>();
+  // D1 单 query 变量上限 ~461：每批 50 个 id × 2 条件 = 100 变量，安全
+  const CHUNK = 50;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const chunk = ids.slice(i, i + CHUNK);
+    const conds = chunk.flatMap((id) => [
+      like(prompts.sourceUrl, `%/status/${id}%`),
+      like(prompts.slug, `${id}-%`),
+    ]);
+    const rows = await db
+      .select({ sourceUrl: prompts.sourceUrl, slug: prompts.slug })
+      .from(prompts)
+      .where(or(...conds));
+    for (const r of rows) {
+      for (const id of chunk) {
+        if (r.sourceUrl?.includes(`/status/${id}`) || r.slug?.startsWith(`${id}-`)) {
+          existing.add(id);
+        }
+      }
+    }
+  }
+  return existing;
+}
+
+/**
  * 单条查询 — 详情页入口（不分 locale）
  */
 export async function getPromptBySlug(slug: string): Promise<PromptCardData | null> {

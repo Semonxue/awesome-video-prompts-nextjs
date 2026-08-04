@@ -8,13 +8,17 @@
 - 如果下载出错，重试 2 次
 - 如果帖子中提到提示词在回复中，则拉取回复内容，提取完整提示词（不要改写、不要提炼，如果是 json 格式则保持），所有收集到的信息存入 full_text 字段
 
-### 新流程关键变化（与老 Hugo 流程不同）
+### 批量查重 (Batch Dedup)
 
-1. **草稿不再 publish-ready 时搬文件夹**——所有草稿始终在 `_drafts/` 目录，状态用字段区分
-2. **没有 `content/prompts/` 目录**——发布后的源真相在 D1，不再写文件系统
-3. **媒体不再入 `static/prompts/`**——发布由 md-editor 直接 HTTP 上传到新站 R2 binding
-4. **草稿格式为 JSON**（不是 YAML front matter）——存储更通用、解析不会出错，md-editor 优先读 JSON、兼容存量 MD
-5. **状态字段**：`draft`、`published`、`published_at`、`published_slug`、`published_error`、`publish_queued_at`
+- 批量处理多个帖子时，**先收集所有帖子的 twitter id**，一次性调用线上查重接口，跳过已存在的：
+  ```
+  GET https://awesome-video-prompts-nextjs.semonxue.workers.dev/api/prompts/check-duplicates?ids=<id1>,<id2>,<id3>...
+  ```
+- 返回 `{ existing: [...], missing: [...] }`：
+  - `existing`：线上已存在对应 prompt 的 twitter id → **跳过，不下载不生成**
+  - `missing`：可安全处理的 twitter id
+- 匹配逻辑（双保险）：`source_url` 包含 `/status/<id>` 或 `slug` 以 `<id>-` 开头
+- 单条处理时也可用该接口（传单个 id），或直接按 slug 判断
 
 ### 解析元数据 (Analyze Metadata)
 
@@ -41,6 +45,7 @@
 ### 生成草稿内容 (Content Generation)
 
 - 创建文件：`content/_drafts/prompts/<YYYY-MM>/<Slug>.json`
+- 草稿格式为 **JSON**（不是 YAML front matter）——存储更通用、解析不会出错，md-editor 优先读 JSON、兼容存量 MD
 - 生成标准 JSON 对象（字段务必不要写错，值类型必须正确）：
 
   ```json
@@ -109,3 +114,4 @@
 - ❌ 不要 `git push` 触发 Hugo 部署（老仓库已退役）
 - ❌ 不要用 url 字段存原帖链接（用 source_url）
 - ❌ 不要把 models/tags 写成逗号分隔字符串（必须是 JSON 数组）
+- ❌ 不要生成 YAML front matter 格式的草稿（新草稿统一 JSON；存量 .md 草稿由 md-editor 兼容读取，不迁移）
