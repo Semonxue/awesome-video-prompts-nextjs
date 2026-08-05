@@ -21,10 +21,8 @@ import CopyButton from '@/components/CopyButton';
 import { GridEngine } from '@/components/GridEngine';
 import { getPromptBySlug, listPrompts, listAllModels, listAllTags } from '@/db/queries';
 import { formatModelName } from '@/lib/format';
+import { SITE_URL, R2_PUBLIC_URL } from '@/lib/site';
 
-/** R2 Transform URL（见 PromptCard.tsx 注） */
-const R2_PUBLIC_URL = process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? 'https://static.awesomevideoprompts.com';
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://awesome-video-prompts-nextjs.semonxue.workers.dev';
 function r2Webp(url: string | null, _width: number): string | null {
   // 当前 R2 自定义域不支持 transform；CF 降级到原图
   return url;
@@ -61,6 +59,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!prompt) return { title: 'Prompt not found' };
   const canonical = `${SITE_URL}/${locale}/prompts/${slug}`;
   const description = prompt.description.replace(/\s+/g, ' ').trim().slice(0, 160);
+  const ogImage = prompt.coverUrl
+    ? [{ url: prompt.coverUrl, width: 960, height: 540 }]
+    : [];
   return {
     title: prompt.title,
     description,
@@ -77,8 +78,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title: prompt.title,
       description,
       url: canonical,
-      images: prompt.coverUrl ? [{ url: prompt.coverUrl, width: 960, height: 540 }] : [],
+      images: ogImage,
       type: 'article',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: prompt.title,
+      description,
+      images: ogImage.map((img) => img.url),
     },
   };
 }
@@ -121,8 +128,56 @@ export default async function PromptDetailPage({ params }: Props) {
 
   const paragraphs = splitParagraphs(prompt.description);
 
+  // JSON-LD 结构化数据（Article + VideoObject + BreadcrumbList）
+  const canonicalUrl = `${SITE_URL}/${locale}/prompts/${slug}`;
+  const jsonLd: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: prompt.title,
+    description: prompt.description.replace(/\s+/g, ' ').trim().slice(0, 160),
+    url: canonicalUrl,
+    ...(prompt.coverUrl ? { image: prompt.coverUrl } : {}),
+    ...(prompt.promptDate ? { datePublished: prompt.promptDate } : {}),
+    ...(prompt.author ? { author: { '@type': 'Person', name: prompt.author } } : {}),
+    mainEntityOfPage: canonicalUrl,
+  };
+  const videoJsonLd = prompt.videoUrl
+    ? {
+        '@context': 'https://schema.org',
+        '@type': 'VideoObject',
+        name: prompt.title,
+        description: prompt.description.replace(/\s+/g, ' ').trim().slice(0, 160),
+        thumbnailUrl: prompt.coverUrl ?? undefined,
+        contentUrl: prompt.videoUrl,
+        uploadDate: prompt.promptDate ?? new Date().toISOString(),
+      }
+    : null;
+  const breadcrumbJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_URL}/${locale}` },
+      { '@type': 'ListItem', position: 2, name: prompt.title, item: canonicalUrl },
+    ],
+  };
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      {videoJsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(videoJsonLd) }}
+        />
+      )}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+      />
+
       <Header
         locale={locale}
         modelOptions={modelOptions}

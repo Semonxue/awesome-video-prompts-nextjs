@@ -5,8 +5,7 @@ import { getTranslations } from 'next-intl/server';
 import { locales, type Locale } from '@/i18n/request';
 import { notFound } from 'next/navigation';
 import { listAllTags } from '@/db/queries';
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://awesome-video-prompts-nextjs.semonxue.workers.dev';
+import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
 
 interface TagsPageProps {
   params: Promise<{ locale: string }>;
@@ -26,6 +25,13 @@ export async function generateMetadata({ params }: TagsPageProps) {
         ja: `${SITE_URL}/ja/tags`,
         'x-default': `${SITE_URL}/en/tags`,
       },
+    },
+    openGraph: {
+      title: 'Browse by tag',
+      description: 'Explore prompts organized by topic and style.',
+      url: canonical,
+      images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }],
+      type: 'website',
     },
   };
 }

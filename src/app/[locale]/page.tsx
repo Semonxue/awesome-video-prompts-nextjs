@@ -14,8 +14,7 @@ import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { GridEngine } from '@/components/GridEngine';
 import Link from 'next/link';
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://awesome-video-prompts-nextjs.semonxue.workers.dev';
+import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
 
 interface HomePageProps {
   params: Promise<{ locale: string }>;
@@ -27,9 +26,18 @@ export const revalidate = 3600;
 
 const PAGE_SIZE = 24;
 
-export async function generateMetadata({ params }: HomePageProps) {
+export async function generateMetadata({ params, searchParams }: HomePageProps) {
   const { locale } = await params;
+  const sp = await searchParams;
   const canonical = `${SITE_URL}/${locale}`;
+
+  // 低质量页面 noindex：分页 >1 / 搜索 / 筛选（与独立 tag/model 页重复）
+  const isLowValue =
+    (sp.page && parseInt(sp.page, 10) > 1) ||
+    Boolean(sp.q) ||
+    Boolean(sp.tag) ||
+    Boolean(sp.model);
+
   return {
     title: 'Awesome Video Prompts',
     description: 'An open-source collection of awesome AI video generation prompts. Browse, copy, and remix.',
@@ -41,6 +49,14 @@ export async function generateMetadata({ params }: HomePageProps) {
         ja: `${SITE_URL}/ja`,
         'x-default': `${SITE_URL}/en`,
       },
+    },
+    robots: isLowValue ? { index: false, follow: true } : undefined,
+    openGraph: {
+      title: 'Awesome Video Prompts',
+      description: 'An open-source collection of awesome AI video generation prompts. Browse, copy, and remix.',
+      url: canonical,
+      images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }],
+      type: 'website',
     },
   };
 }

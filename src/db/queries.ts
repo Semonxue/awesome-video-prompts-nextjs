@@ -264,7 +264,7 @@ export async function getPromptBySlug(slug: string): Promise<PromptCardData | nu
  * 全部 tags — 标签页/筛选器下拉用（全局唯一，不分 locale）
  * 按 count DESC 排序；只统计有 prompt 关联的 tag（避免孤儿）
  */
-export async function listAllTags(): Promise<{ slug: string; name: string; count: number }[]> {
+export async function listAllTags(): Promise<{ slug: string; name: string; count: number; updatedAt: string }[]> {
   const d1 = await getD1();
   const db = getDb(d1);
 
@@ -272,6 +272,7 @@ export async function listAllTags(): Promise<{ slug: string; name: string; count
     .select({
       slug: tags.name,
       count: sql<number>`count(${promptTags.promptId})`,
+      updatedAt: sql<string>`max(${prompts.updatedAt})`,
     })
     .from(tags)
     .innerJoin(promptTags, eq(promptTags.tagId, tags.id))
@@ -279,13 +280,13 @@ export async function listAllTags(): Promise<{ slug: string; name: string; count
     .groupBy(tags.name)
     .orderBy(desc(sql`count(${promptTags.promptId})`), tags.name);
 
-  return rows.map((r) => ({ slug: r.slug, name: r.slug, count: Number(r.count) }));
+  return rows.map((r) => ({ slug: r.slug, name: r.slug, count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
 }
 
 /**
  * 全部 models — 模型页用（全局唯一，不分 locale）
  */
-export async function listAllModels(): Promise<{ slug: string; name: string; count: number }[]> {
+export async function listAllModels(): Promise<{ slug: string; name: string; count: number; updatedAt: string }[]> {
   const d1 = await getD1();
   const db = getDb(d1);
 
@@ -294,6 +295,7 @@ export async function listAllModels(): Promise<{ slug: string; name: string; cou
       slug: models.slug,
       name: models.name,
       count: sql<number>`count(${promptModels.promptId})`,
+      updatedAt: sql<string>`max(${prompts.updatedAt})`,
     })
     .from(models)
     .innerJoin(promptModels, eq(promptModels.modelId, models.id))
@@ -301,5 +303,5 @@ export async function listAllModels(): Promise<{ slug: string; name: string; cou
     .groupBy(models.slug, models.name)
     .orderBy(desc(sql`count(${promptModels.promptId})`), models.name);
 
-  return rows.map((r) => ({ slug: r.slug, name: formatModelName(r.slug), count: Number(r.count) }));
+  return rows.map((r) => ({ slug: r.slug, name: formatModelName(r.slug), count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
 }

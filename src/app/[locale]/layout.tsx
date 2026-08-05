@@ -31,6 +31,9 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
   return (
     <html lang={locale}>
       <head>
+        {/* 品牌资源：favicon + manifest */}
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="manifest" href="/site.webmanifest" />
         {/* Matomo 监测（迁移自老站 layouts/_default/baseof.html） */}
         <script
           dangerouslySetInnerHTML={{

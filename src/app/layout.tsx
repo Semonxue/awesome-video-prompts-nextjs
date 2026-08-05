@@ -4,10 +4,16 @@
  */
 import type { ReactNode } from 'react';
 import './globals.css';
+import { SITE_URL, R2_PUBLIC_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://awesome-video-prompts-nextjs.semonxue.workers.dev';
-
-export const metadata: { title: { default: string; template: string }; description: string; metadataBase: string; alternates: { languages: Record<string, string> } } = {
+export const metadata: {
+  title: { default: string; template: string };
+  description: string;
+  metadataBase: string;
+  alternates: { languages: Record<string, string> };
+  openGraph: { type: string; siteName: string; title: string; description: string; url: string; images: { url: string; width: number; height: number }[] };
+  twitter: { card: string; title: string; description: string; images: string[] };
+} = {
   title: {
     default: 'Awesome Video Prompts',
     template: '%s | Awesome Video Prompts',
@@ -22,10 +28,21 @@ export const metadata: { title: { default: string; template: string }; descripti
       'x-default': '/en',
     },
   },
+  openGraph: {
+    type: 'website',
+    siteName: 'Awesome Video Prompts',
+    title: 'Awesome Video Prompts',
+    description: 'Curated prompts for AI video generation',
+    url: SITE_URL,
+    images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Awesome Video Prompts',
+    description: 'Curated prompts for AI video generation',
+    images: [DEFAULT_OG_IMAGE],
+  },
 };
-
-/** R2 公网域（用于 preconnect / dns-prefetch） */
-const R2_PUBLIC_URL = process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? 'https://static.awesomevideoprompts.com';
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

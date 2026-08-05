@@ -8,9 +8,7 @@ import { locales, type Locale } from '@/i18n/request';
 import { listAllModels, listAllTags } from '@/db/queries';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
-
-const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL ?? 'https://awesome-video-prompts.semonxue.workers.dev';
+import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -27,6 +25,13 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
         ja: `${SITE_URL}/ja/about`,
         'x-default': `${SITE_URL}/en/about`,
       },
+    },
+    openGraph: {
+      title: t('title'),
+      description: t('intro'),
+      url: canonical,
+      images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }],
+      type: 'website',
     },
   };
 }

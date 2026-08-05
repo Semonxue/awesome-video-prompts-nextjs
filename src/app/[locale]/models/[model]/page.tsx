@@ -17,6 +17,7 @@ import { Footer } from '@/components/Footer';
 import { GridEngine } from '@/components/GridEngine';
 import { listAllModels, listAllTags, listPrompts } from '@/db/queries';
 import { formatModelName } from '@/lib/format';
+import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
 
 export const revalidate = 3600;
 
@@ -27,12 +28,16 @@ interface Props {
   searchParams: Promise<{ tag?: string; page?: string }>;
 }
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://awesome-video-prompts-nextjs.semonxue.workers.dev';
-
-export async function generateMetadata({ params }: Props) {
+export async function generateMetadata({ params, searchParams }: Props) {
   const { locale, model } = await params;
+  const sp = await searchParams;
   const name = formatModelName(model);
   const canonical = `${SITE_URL}/${locale}/models/${model}`;
+
+  // 低质量页面 noindex：分页 >1 / tag 筛选（与独立 tag 页重复）
+  const isLowValue =
+    (sp.page && parseInt(sp.page, 10) > 1) || Boolean(sp.tag);
+
   return {
     title: `${name} Prompts | Awesome Video Prompts`,
     description: `Browse ${name} video prompts on Awesome Video Prompts`,
@@ -44,6 +49,14 @@ export async function generateMetadata({ params }: Props) {
         ja: `${SITE_URL}/ja/models/${model}`,
         'x-default': `${SITE_URL}/en/models/${model}`,
       },
+    },
+    robots: isLowValue ? { index: false, follow: true } : undefined,
+    openGraph: {
+      title: `${name} Prompts | Awesome Video Prompts`,
+      description: `Browse ${name} video prompts on Awesome Video Prompts`,
+      url: canonical,
+      images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }],
+      type: 'website',
     },
   };
 }
