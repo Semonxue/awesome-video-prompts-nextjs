@@ -45,7 +45,94 @@ function isLocalePage(pathname: string): boolean {
   return locales.some((loc) => pathname === `/${loc}` || pathname.startsWith(`/${loc}/`));
 }
 
+/**
+ * 旧版网站 URL → 新版 URL 301 重定向（2026-08-05 GSC 收录修复）
+ *
+ * 背景：旧站 URL 格式与新站不同，GSC 里大量 "Crawled - currently not indexed" 的 URL
+ *       都是旧格式，在新站上 404。加 301 让 Google 把旧 URL 权重转移给新 URL，
+ *       并自动从索引中替换旧 URL。
+ *
+ * 旧格式 → 新格式：
+ *   - /prompts/2026-05/2051883545807999024-wwe-championship-finale/  → /en/prompts/wwe-championship-finale
+ *   - /tags/smile/                                                   → /en/tags/smile
+ *   - /models/hedra/                                                 → /en/models/hedra
+ *   - /prompts/page/150/                                             → /en?page=150
+ *   - /zh-cn/...                                                     → /zh/...
+ *   - 所有旧 URL 统一去尾部斜杠
+ *
+ * 规则：
+ *   1. 去尾部斜杠（根路径除外）
+ *   2. 旧 locale 前缀映射（zh-cn → zh）
+ *   3. 无 locale 前缀 → 加 /en
+ *   4. prompt 旧格式 /prompts/YYYY-MM/<slug> → /prompts/<slug>（去掉日期前缀 + Twitter ID 前缀）
+ *   5. 旧分页 /prompts/page/N → /?page=N
+ *   6. 其他路径若因去斜杠/加 locale 变化 → 重定向
+ */
+const LEGACY_LOCALE_MAP: Record<string, string> = {
+  '/zh-cn': '/zh',
+  '/zh-CN': '/zh',
+  '/zh-tw': '/zh',
+};
+
+/** 旧 slug 形如 <twitter-id>-<slug> 或 <数字ID>-<slug>，去掉数字前缀 */
+function extractLegacySlug(raw: string): string {
+  const m = raw.match(/^\d{6,20}-(.+)$/);
+  return m ? m[1] : raw;
+}
+
+function legacyRedirect(pathname: string, search: string): string | null {
+  // 根路径交给 intlMiddleware（302 → /en），不在这里处理
+  if (pathname === '/') return null;
+
+  // 1. 去尾部斜杠（根路径除外）
+  let path = pathname;
+  if (path.length > 1 && path.endsWith('/')) {
+    path = path.slice(0, -1);
+  }
+
+  // 2. 旧 locale 前缀映射：/zh-cn/... → /zh/...
+  for (const [oldPrefix, newPrefix] of Object.entries(LEGACY_LOCALE_MAP)) {
+    if (path === oldPrefix || path.startsWith(`${oldPrefix}/`)) {
+      path = newPrefix + path.slice(oldPrefix.length);
+      break;
+    }
+  }
+
+  // 3. 无 locale 前缀 → 加 /en
+  const hasLocale = locales.some((l) => path === `/${l}` || path.startsWith(`/${l}/`));
+  if (!hasLocale) {
+    path = `/en${path}`;
+  }
+
+  // 4. 旧 prompt 格式：/en/prompts/YYYY-MM/<slug> → /en/prompts/<slug>
+  const promptMatch = path.match(/^\/(en|zh|ja)\/prompts\/(\d{4}-\d{2})\/(.+)$/);
+  if (promptMatch) {
+    const [, l, , rawSlug] = promptMatch;
+    return `/${l}/prompts/${extractLegacySlug(rawSlug)}`;
+  }
+
+  // 5. 旧分页：/en/prompts/page/N → /en?page=N
+  const pageMatch = path.match(/^\/(en|zh|ja)\/prompts\/page\/(\d+)$/);
+  if (pageMatch) {
+    const [, l, pageNum] = pageMatch;
+    return `/${l}?page=${pageNum}`;
+  }
+
+  // 6. 其他路径：若因去斜杠/加 locale 变化 → 重定向
+  if (path !== pathname) {
+    return path + search;
+  }
+
+  return null;
+}
+
 export default function middleware(req: NextRequest) {
+  // 旧 URL → 新 URL 301（在 intlMiddleware 之前，避免被 302 抢先）
+  const legacy = legacyRedirect(req.nextUrl.pathname, req.nextUrl.search);
+  if (legacy) {
+    return NextResponse.redirect(new URL(legacy, req.url), 301);
+  }
+
   const res = intlMiddleware(req);
 
   // 只对 GET 的 locale HTML 页面设 CDN cache
@@ -63,6 +150,8 @@ export default function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)',
+    // 排除 API、Next.js 静态、favicon、以及真正的静态资源扩展名
+    // 注意：不能排除所有含 "." 的路径（如 /models/seedance1.5pro/ 旧 URL 含点号）
+    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|css|js|txt|xml|json|woff2?|ttf|eot|map)$).*)',
   ],
 };
