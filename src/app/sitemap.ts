@@ -27,6 +27,27 @@ import { SITE_URL } from '@/lib/site';
 export const dynamic = 'force-dynamic';
 export const revalidate = 3600;
 
+/**
+ * 把 DB 里的 updatedAt 转成 W3C Datetime 格式（sitemap lastmod 要求）
+ *
+ * D1/SQLite 的 updated_at 实际存的是 `YYYY-MM-DD HH:MM:SS`（空格分隔），
+ * 不是 W3C 标准格式。GSC 会报 "Invalid date"。
+ * 这里统一转成 `YYYY-MM-DDTHH:MM:SSZ`。
+ */
+function toW3CDate(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  // 已经是 W3C 格式（含 T 或 Z）则原样返回
+  if (/[TZ]/.test(trimmed)) return trimmed;
+  // `YYYY-MM-DD HH:MM:SS` → `YYYY-MM-DDTHH:MM:SSZ`
+  const m = trimmed.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})$/);
+  if (m) return `${m[1]}T${m[2]}Z`;
+  // `YYYY-MM-DD` → 原样（W3C 允许纯日期）
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  return undefined;
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const [rows, tags, models] = await Promise.all([
     listAllSlugsForSitemap(),
@@ -64,7 +85,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const tagRoutes: MetadataRoute.Sitemap = tags.flatMap((tag) =>
     locales.map((locale) => ({
       url: `${SITE_URL}/${locale}/tags/${tag.slug}`,
-      lastModified: tag.updatedAt || undefined,
+      lastModified: toW3CDate(tag.updatedAt),
       changeFrequency: 'weekly' as const,
       priority: locale === 'en' ? 0.7 : 0.6,
     })),
@@ -74,7 +95,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const modelRoutes: MetadataRoute.Sitemap = models.flatMap((model) =>
     locales.map((locale) => ({
       url: `${SITE_URL}/${locale}/models/${model.slug}`,
-      lastModified: model.updatedAt || undefined,
+      lastModified: toW3CDate(model.updatedAt),
       changeFrequency: 'weekly' as const,
       priority: locale === 'en' ? 0.7 : 0.6,
     })),
@@ -84,7 +105,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const detailRoutes: MetadataRoute.Sitemap = rows.flatMap((row) =>
     locales.map((locale) => ({
       url: `${SITE_URL}/${locale}/prompts/${row.slug}`,
-      lastModified: row.updatedAt ?? undefined,
+      lastModified: toW3CDate(row.updatedAt),
       changeFrequency: 'monthly' as const,
       priority: locale === 'en' ? 0.9 : 0.7,
     })),
