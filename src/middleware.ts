@@ -74,12 +74,6 @@ const LEGACY_LOCALE_MAP: Record<string, string> = {
   '/zh-tw': '/zh',
 };
 
-/** 旧 slug 形如 <twitter-id>-<slug> 或 <数字ID>-<slug>，去掉数字前缀 */
-function extractLegacySlug(raw: string): string {
-  const m = raw.match(/^\d{6,20}-(.+)$/);
-  return m ? m[1] : raw;
-}
-
 function legacyRedirect(pathname: string, search: string): string | null {
   // 根路径交给 intlMiddleware（302 → /en），不在这里处理
   if (pathname === '/') return null;
@@ -105,10 +99,12 @@ function legacyRedirect(pathname: string, search: string): string | null {
   }
 
   // 4. 旧 prompt 格式：/en/prompts/YYYY-MM/<slug> → /en/prompts/<slug>
+  //    注意：新站 slug 就是 <twitter-id>-<slug>，与旧 URL 日期前缀后的部分完全一致，
+  //    所以直接保留完整 slug（不去掉 ID 前缀），只去掉日期前缀 YYYY-MM/ 并加 locale。
   const promptMatch = path.match(/^\/(en|zh|ja)\/prompts\/(\d{4}-\d{2})\/(.+)$/);
   if (promptMatch) {
     const [, l, , rawSlug] = promptMatch;
-    return `/${l}/prompts/${extractLegacySlug(rawSlug)}`;
+    return `/${l}/prompts/${rawSlug}`;
   }
 
   // 5. 旧分页：/en/prompts/page/N → /en?page=N
