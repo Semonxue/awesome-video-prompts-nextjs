@@ -996,6 +996,24 @@ group:
   description_en: "Groups and multiple people"
   description_zh-cn: "团体和多人"
 
+education:
+  en: education
+  zh-cn: 教育
+  description_en: "Educational and learning content"
+  description_zh-cn: "教育和学习内容"
+
+dragon:
+  en: dragon
+  zh-cn: 龙
+  description_en: "Dragons and mythical creatures"
+  description_zh-cn: "龙和神话生物"
+
+summer:
+  en: summer
+  zh-cn: 夏天
+  description_en: "Summer time, hot weather, and seasonal scenes"
+  description_zh-cn: "夏季、炎热天气和季节场景"
+
 apocalypse:
   en: apocalypse
   zh-cn: 末世
@@ -1599,12 +1617,6 @@ divine:
   zh-cn: 神圣
   description_en: "divine related content"
   description_zh-cn: "神圣相关内容"
-
-dragon:
-  en: dragon
-  zh-cn: 龙
-  description_en: "dragon related content"
-  description_zh-cn: "龙相关内容"
 
 dramatic:
   en: dramatic

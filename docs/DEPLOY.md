@@ -122,7 +122,15 @@ git push origin main
 ./scripts/deploy.sh --dry-run
 ```
 
-脚本自动：加载 `.dev.vars` → type-check → unit tests → npm build → npm build:cf → wrangler deploy → 6 路由冒烟验证 → cache-control 检查。
+脚本自动：加载 `.dev.vars` → type-check → unit tests → npm build → npm build:cf → wrangler deploy → **模型校准（以 `data/models.yaml` 为准同步 D1 models 表）** → 6 路由冒烟验证 → cache-control 检查。
+
+> **模型校准说明**：`data/models.yaml` 是模型字典的唯一真源（slug → name）。部署时 `scripts/sync-models.ts` 会把线上 D1 `models` 表校准到与它完全一致——新增缺失的、更新 name 不一致的、删除线上多余（并清理 `prompt_models` 关联）。幂等可重跑，无差异时不写库。也可单独手动执行：
+> ```bash
+> # 试运行（只打印差异，不写库）
+> npx tsx scripts/sync-models.ts --dry-run
+> # 实际校准（需 CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN / D1_DATABASE_ID）
+> npx tsx scripts/sync-models.ts
+> ```
 
 ### 方式 B：分步手动
 

@@ -143,6 +143,14 @@ else
   warn "无法从输出中提取 URL，请手动验证"
 fi
 
+# ─── Step 5b: 模型校准（以 data/models.yaml 为准）──────
+log "Step 5b/6 — 模型校准 (data/models.yaml → D1 models)..."
+if ! npx tsx scripts/sync-models.ts 2>&1; then
+  err "模型校准失败，停止部署"
+  exit 1
+fi
+log "模型校准 ✓"
+
 # ─── Step 6: 冒烟验证 ────────────────────────────────
 SMOKE_URL="${DEPLOY_URL:-${NEXT_PUBLIC_SITE_URL}}"
 log "冒烟验证..."
