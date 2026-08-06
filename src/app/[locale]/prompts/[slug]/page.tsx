@@ -19,7 +19,7 @@ import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import CopyButton from '@/components/CopyButton';
 import { GridEngine } from '@/components/GridEngine';
-import { getPromptBySlug, listPrompts, listAllModels, listAllTags } from '@/db/queries';
+import { getPromptBySlug, listRecentPromptsCached, listAllModels, listAllTags } from '@/db/queries';
 import { formatModelName } from '@/lib/format';
 import { SITE_URL, R2_PUBLIC_URL } from '@/lib/site';
 
@@ -103,7 +103,8 @@ export default async function PromptDetailPage({ params }: Props) {
   // Perf 优化（2026-08-06 Error 1102 修复）：limit 200 → 48
   //   之前每次详情页渲染拉 200 条 + hydrate 4 次 D1 查询，是 CPU 超限主因之一。
   //   相关推荐只需 6 条，上下篇只需相邻 2 条，48 条足够覆盖（同 model 的 prompt 通常在前 48 条内）。
-  const allResult = await listPrompts({ limit: 48 });
+  // Perf 优化（2026-08-07）：改用跨实例缓存版本，避免每次详情页渲染都查 D1
+  const allResult = await listRecentPromptsCached(48);
   const related = allResult.items
     .filter((p) => p.slug !== prompt.slug)
     .map((p) => {

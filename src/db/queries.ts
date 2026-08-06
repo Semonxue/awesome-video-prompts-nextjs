@@ -31,6 +31,7 @@ import type { PromptCardData, ModelRef, TagRef } from '@/components/types';
 import { getDb } from './index';
 import { prompts, tags, models, promptTags, promptModels } from './schema';
 import { formatModelName } from '@/lib/format';
+import { getCachedData, CACHE_KEYS } from './cache';
 
 /** 拿 D1 binding（OpenNext 注入 env.DB） */
 async function getD1(): Promise<D1Database> {
@@ -261,80 +262,71 @@ export async function getPromptBySlug(slug: string): Promise<PromptCardData | nu
 }
 
 /**
- * 模块级缓存（Worker 实例内）— 避免每次请求都查 D1 全表聚合
+ * 最近 N 条 prompts（详情页相关推荐用）— 跨实例缓存
  *
- * 背景（2026-08-06 Error 1102 修复）：
- *   - listAllTags / listAllModels 是全表 JOIN + GROUP BY 聚合（~56ms，读 7.4 万行）
- *   - 首页 / 详情页 / 标签页 / 模型页每次渲染都调用 → 多次慢查询叠加 → CPU 超限
- *   - tags/models 数据只在发布 prompt 时变化，缓存 5 分钟完全合理
- *   - Worker 实例被回收时缓存自然失效，无一致性问题
+ * 背景（2026-08-07 优化）：
+ *   - 详情页每次渲染都调 listPrompts({ limit: 48 }) 拉全量列表做相关推荐
+ *   - 该数据只在发布新 prompt 时变化，缓存 5 分钟完全合理
+ *   - publish 时主动失效，保证发布后立即可见
  */
-const CACHE_TTL_MS = 5 * 60 * 1000;
-
-interface CacheEntry<T> {
-  value: T;
-  expiresAt: number;
-}
-
-let tagsCache: CacheEntry<{ slug: string; name: string; count: number; updatedAt: string }[]> | null = null;
-let modelsCache: CacheEntry<{ slug: string; name: string; count: number; updatedAt: string }[]> | null = null;
-
-function isCacheFresh<T>(entry: CacheEntry<T> | null): entry is CacheEntry<T> {
-  return entry !== null && entry.expiresAt > Date.now();
+export async function listRecentPromptsCached(limit = 48): Promise<ListPromptsResult> {
+  return getCachedData(`${CACHE_KEYS.recentPrompts}-${limit}`, async () => {
+    return listPrompts({ limit });
+  });
 }
 
 /**
  * 全部 tags — 标签页/筛选器下拉用（全局唯一，不分 locale）
  * 按 count DESC 排序；只统计有 prompt 关联的 tag（避免孤儿）
- * 模块级缓存 5 分钟，避免每次请求全表聚合
+ *
+ * 缓存（2026-08-07 优化）：
+ *   - 原实现只有模块级缓存，但 Worker 实例频繁回收导致缓存形同虚设
+ *   - 现用跨实例缓存（L1 内存 + L2 Cache API），TTL 5 分钟
+ *   - publish 时主动失效，保证发布后立即可见
  */
 export async function listAllTags(): Promise<{ slug: string; name: string; count: number; updatedAt: string }[]> {
-  if (isCacheFresh(tagsCache)) return tagsCache.value;
+  return getCachedData(CACHE_KEYS.allTags, async () => {
+    const d1 = await getD1();
+    const db = getDb(d1);
 
-  const d1 = await getD1();
-  const db = getDb(d1);
+    const rows = await db
+      .select({
+        slug: tags.name,
+        count: sql<number>`count(${promptTags.promptId})`,
+        updatedAt: sql<string>`max(${prompts.updatedAt})`,
+      })
+      .from(tags)
+      .innerJoin(promptTags, eq(promptTags.tagId, tags.id))
+      .innerJoin(prompts, and(eq(prompts.id, promptTags.promptId), eq(prompts.isDraft, 0)))
+      .groupBy(tags.name)
+      .orderBy(desc(sql`count(${promptTags.promptId})`), tags.name);
 
-  const rows = await db
-    .select({
-      slug: tags.name,
-      count: sql<number>`count(${promptTags.promptId})`,
-      updatedAt: sql<string>`max(${prompts.updatedAt})`,
-    })
-    .from(tags)
-    .innerJoin(promptTags, eq(promptTags.tagId, tags.id))
-    .innerJoin(prompts, and(eq(prompts.id, promptTags.promptId), eq(prompts.isDraft, 0)))
-    .groupBy(tags.name)
-    .orderBy(desc(sql`count(${promptTags.promptId})`), tags.name);
-
-  const value = rows.map((r) => ({ slug: r.slug, name: r.slug, count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
-  tagsCache = { value, expiresAt: Date.now() + CACHE_TTL_MS };
-  return value;
+    return rows.map((r) => ({ slug: r.slug, name: r.slug, count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
+  });
 }
 
 /**
  * 全部 models — 模型页用（全局唯一，不分 locale）
- * 模块级缓存 5 分钟，避免每次请求全表聚合
+ * 跨实例缓存 5 分钟（同 listAllTags）
  */
 export async function listAllModels(): Promise<{ slug: string; name: string; count: number; updatedAt: string }[]> {
-  if (isCacheFresh(modelsCache)) return modelsCache.value;
+  return getCachedData(CACHE_KEYS.allModels, async () => {
+    const d1 = await getD1();
+    const db = getDb(d1);
 
-  const d1 = await getD1();
-  const db = getDb(d1);
+    const rows = await db
+      .select({
+        slug: models.slug,
+        name: models.name,
+        count: sql<number>`count(${promptModels.promptId})`,
+        updatedAt: sql<string>`max(${prompts.updatedAt})`,
+      })
+      .from(models)
+      .innerJoin(promptModels, eq(promptModels.modelId, models.id))
+      .innerJoin(prompts, and(eq(prompts.id, promptModels.promptId), eq(prompts.isDraft, 0)))
+      .groupBy(models.slug, models.name)
+      .orderBy(desc(sql`count(${promptModels.promptId})`), models.name);
 
-  const rows = await db
-    .select({
-      slug: models.slug,
-      name: models.name,
-      count: sql<number>`count(${promptModels.promptId})`,
-      updatedAt: sql<string>`max(${prompts.updatedAt})`,
-    })
-    .from(models)
-    .innerJoin(promptModels, eq(promptModels.modelId, models.id))
-    .innerJoin(prompts, and(eq(prompts.id, promptModels.promptId), eq(prompts.isDraft, 0)))
-    .groupBy(models.slug, models.name)
-    .orderBy(desc(sql`count(${promptModels.promptId})`), models.name);
-
-  const value = rows.map((r) => ({ slug: r.slug, name: formatModelName(r.slug), count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
-  modelsCache = { value, expiresAt: Date.now() + CACHE_TTL_MS };
-  return value;
+    return rows.map((r) => ({ slug: r.slug, name: formatModelName(r.slug), count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
+  });
 }

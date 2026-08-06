@@ -44,6 +44,7 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { getDb } from '@/db';
 import { prompts, tags, models, promptTags, promptModels } from '@/db/schema';
 import { deriveYearMonth, keyFromMediaUrl, R2_KEY_PREFIX } from '@/lib/r2-keys';
+import { invalidateCache, CACHE_KEYS } from '@/db/cache';
 
 // 显式标记使用 schema 里的 import（防止 lint 报 unused）
 void prompts; void tags; void models; void promptTags; void promptModels;
@@ -545,6 +546,13 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
 
   // 11) revalidate
   const revalidated = revalidatePromptPaths(slug);
+
+  // 12) 主动失效跨实例缓存（tags/models/最近列表，保证发布后立即可见）
+  await Promise.allSettled([
+    invalidateCache(CACHE_KEYS.allTags),
+    invalidateCache(CACHE_KEYS.allModels),
+    invalidateCache(`${CACHE_KEYS.recentPrompts}-48`),
+  ]);
 
   const elapsed = Date.now() - startTime;
   console.log(
