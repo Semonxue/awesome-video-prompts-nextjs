@@ -157,4 +157,6 @@ export const CACHE_KEYS = {
   modelTagDist: 'model-tag-dist',
   /** 单条 prompt（key 后缀接 slug） */
   promptBySlug: 'prompt-by-slug',
+  /** 整个 sitemap 输出（避免每次请求都重新构造 18000+ 对象） */
+  sitemapOutput: 'sitemap-output',
 } as const;

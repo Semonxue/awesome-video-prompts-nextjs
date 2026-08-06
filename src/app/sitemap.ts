@@ -20,6 +20,7 @@
  */
 import type { MetadataRoute } from 'next';
 import { listAllSlugsForSitemap, listAllTags, listAllModels } from '@/db/queries';
+import { getCachedData, invalidateCache, CACHE_KEYS } from '@/db/cache';
 import { locales } from '@/i18n/request';
 import { SITE_URL } from '@/lib/site';
 
@@ -27,6 +28,10 @@ import { SITE_URL } from '@/lib/site';
 // 之前 force-dynamic 导致每次请求都打 D1，加上 13437 个 URL 对象构造时内存压力大，
 // 是 Error 1102（Worker 资源超限）的主要复发源（2026-08-07 修复）。
 // publish/unpublish/delete 会主动 revalidatePath('/sitemap.xml') 保证时效。
+// 必须 force-dynamic：让 Next.js 把 sitemap 视为动态路由，走 OpenNext wrapper 层
+// （wrapper 把 cache-control 设为 s-maxage=3600 让 CF 边缘缓存）
+// 否则 Next.js 在 build 时静态预渲染，绕过 wrapper，cache-control 永远是 no-store
+export const dynamic = 'force-dynamic';
 export const revalidate = 86400;
 
 /**
@@ -51,11 +56,16 @@ function toW3CDate(value: string | null | undefined): string | undefined {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [rows, tags, models] = await Promise.all([
-    listAllSlugsForSitemap(),
-    listAllTags(),
-    listAllModels(),
-  ]);
+  // 整个 sitemap 输出加跨实例缓存（2026-08-07 Error 1102 修复）
+  // 背景：sitemap 构造 18000+ 个 URL 对象 + 多次 D1 round-trip，CPU 重
+  // 缓存 1h：1h 内所有请求从缓存返回，不重新生成，避免 CPU 超限
+  // publish/unpublish/delete 会主动 invalidateCache(sitemapOutput) 立即失效
+  return getCachedData(CACHE_KEYS.sitemapOutput, async () => {
+    const [rows, tags, models] = await Promise.all([
+      listAllSlugsForSitemap(),
+      listAllTags(),
+      listAllModels(),
+    ]);
 
   // 首页：3 locale（根 URL 会 302 到 /en，Google 实际收录 /en，所以直接提交 locale 版本）
   const homeRoutes: MetadataRoute.Sitemap = locales.map((locale) => ({
@@ -113,5 +123,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })),
   );
 
-  return [...homeRoutes, ...staticRoutes, ...tagRoutes, ...modelRoutes, ...detailRoutes];
+    return [...homeRoutes, ...staticRoutes, ...tagRoutes, ...modelRoutes, ...detailRoutes];
+  });
 }
