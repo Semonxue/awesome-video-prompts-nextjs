@@ -21,6 +21,8 @@
  *   - prompt_tags / prompt_models 由 D1 CASCADE 自动清理
  */
 import { revalidatePath } from 'next/cache';
+import { invalidateCache, CACHE_KEYS } from '@/db/cache';
+import { listAllModels } from '@/db/queries';
 import { eq } from 'drizzle-orm';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
@@ -154,9 +156,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     revalidatePath(`/en/prompts/${slug}`);
     revalidatePath(`/zh/prompts/${slug}`);
     revalidatePath(`/ja/prompts/${slug}`);
+    revalidatePath('/sitemap.xml');
   } catch (err) {
     console.warn('[delete] revalidate error:', err);
   }
+
+  // 失效跨实例缓存（与 publish 一致）
+  const allModels = await listAllModels();
+  await Promise.allSettled([
+    invalidateCache(CACHE_KEYS.allTags),
+    invalidateCache(CACHE_KEYS.allModels),
+    invalidateCache(`${CACHE_KEYS.recentPrompts}-48`),
+    invalidateCache(`${CACHE_KEYS.promptBySlug}-${slug}`),
+    ...allModels.map((m) => invalidateCache(`${CACHE_KEYS.modelTagDist}-${m.slug}`)),
+  ]);
 
   return NextResponse.json({
     ok: true,

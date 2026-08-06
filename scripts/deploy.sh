@@ -156,6 +156,12 @@ SMOKE_URL="${DEPLOY_URL:-${NEXT_PUBLIC_SITE_URL}}"
 log "冒烟验证..."
 SMOKE_FAILED=0
 
+# 热路径预热（2026-08-07）：deploy 后 ISR + CF 边缘缓存全部被 purge，第一波流量会触发大量 cache miss
+# 这里每条路径最多尝试 5 次（应对 SSR 冷启动 + CF 边缘 miss→hit），触发首次 ISR 渲染并推到 CF 边缘
+# 这样 deploy 后真实用户访问的是命中边缘的响应，避免冷启动导致 1102
+PREHEAL_RETRY=5
+PREHEAL_OK_THRESHOLD=1  # 任意一次 200 即认为预热成功
+
   for path in \
   "/en" \
   "/zh" \
@@ -165,12 +171,23 @@ SMOKE_FAILED=0
   "/sitemap.xml"; do
 
   FULL_URL="${SMOKE_URL}${path}"
-  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$FULL_URL" --max-time 10 2>&1 | tail -1)
+  PREHEAT_OK=0
+  PREHEAT_LAST_CODE=""
+  for ((i=1; i<=PREHEAL_RETRY; i++)); do
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$FULL_URL" --max-time 15 2>&1 | tail -1)
+    PREHEAT_LAST_CODE="$HTTP_CODE"
+    if [[ "$HTTP_CODE" == "200" ]]; then
+      PREHEAT_OK=1
+      break
+    fi
+    # 间隔短暂等待让 ISR 渲染完成（SSR 首次冷启动可能需要数秒）
+    sleep 1
+  done
 
-  if [[ "$HTTP_CODE" == "200" ]]; then
-    info "✓ $HTTP_CODE $path"
+  if [[ "$PREHEAT_OK" == "1" ]]; then
+    info "✓ $PREHEAT_LAST_CODE $path (attempt $i)"
   else
-    err "✗ $HTTP_CODE $path"
+    err "✗ $PREHEAT_LAST_CODE $path (failed after $PREHEAL_RETRY retries)"
     SMOKE_FAILED=1
   fi
 done

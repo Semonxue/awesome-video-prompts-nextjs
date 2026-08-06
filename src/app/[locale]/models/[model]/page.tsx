@@ -15,7 +15,7 @@ import { getTranslations } from 'next-intl/server';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { GridEngine } from '@/components/GridEngine';
-import { listAllModels, listAllTags, listPrompts } from '@/db/queries';
+import { listAllModels, listAllTags, listPrompts, listModelTagDistribution } from '@/db/queries';
 import { formatModelName } from '@/lib/format';
 import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
 
@@ -77,15 +77,10 @@ export default async function ModelPage({ params, searchParams }: Props) {
   const result = await listPrompts({ model, tag: sp.tag, limit: PAGE_SIZE, offset });
   const modelItems = result.items;
 
-  // 该 model 下的 tag 分布（来自全集）
-  const allForModel = await listPrompts({ model });
-  const tagSet = new Map<string, number>();
-  for (const p of allForModel.items) for (const tag of p.tags) {
-    tagSet.set(tag.slug, (tagSet.get(tag.slug) ?? 0) + 1);
-  }
-  const tagOptions = [...tagSet.entries()]
-    .map(([slug, count]) => ({ slug, name: slug, count }))
-    .sort((a, b) => b.count - a.count);
+  // 该 model 下的 tag 分布（专门 SQL + 跨实例缓存，2026-08-07 替换 listPrompts({ model }) 的错误实现）
+  // 之前用 listPrompts({ model }) 默认 limit=24 拿分布是逻辑 bug（不全），且要走 3 次 D1 + 完整 hydrate
+  // 现改 1 次 JOIN GROUP BY，1 次 D1 round-trip 完成，5 分钟跨实例缓存
+  const tagOptions = await listModelTagDistribution(model);
 
   // 全集 modelOptions（顶部 model tabs，不分 locale）
   const modelOptions = await listAllModels();

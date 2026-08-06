@@ -25,6 +25,8 @@
  *   500: { error: "..." }
  */
 import { revalidatePath } from 'next/cache';
+import { invalidateCache, CACHE_KEYS } from '@/db/cache';
+import { listAllModels } from '@/db/queries';
 import { eq } from 'drizzle-orm';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
@@ -65,7 +67,7 @@ function revalidatePromptPaths(slug: string): string[] {
     }
   }
   // 顺手刷首页 + 标签/模型索引（下架后列表也要消失）
-  for (const p of ['/en', '/zh', '/ja', '/en/tags', '/zh/tags', '/ja/tags', '/en/models', '/zh/models', '/ja/models']) {
+  for (const p of ['/en', '/zh', '/ja', '/en/tags', '/zh/tags', '/ja/tags', '/en/models', '/zh/models', '/ja/models', '/sitemap.xml']) {
     try {
       revalidatePath(p);
     } catch {
@@ -128,6 +130,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // 5) revalidate（下架后立即刷新缓存）
   const revalidated = revalidatePromptPaths(slug);
+
+  // 失效跨实例缓存（与 publish 一致）
+  const allModels = await listAllModels();
+  await Promise.allSettled([
+    invalidateCache(CACHE_KEYS.allTags),
+    invalidateCache(CACHE_KEYS.allModels),
+    invalidateCache(`${CACHE_KEYS.recentPrompts}-48`),
+    invalidateCache(`${CACHE_KEYS.promptBySlug}-${slug}`),
+    ...allModels.map((m) => invalidateCache(`${CACHE_KEYS.modelTagDist}-${m.slug}`)),
+  ]);
 
   console.log(`[admin/unpublish] slug=${slug} changed=${!alreadyDraft}`);
 

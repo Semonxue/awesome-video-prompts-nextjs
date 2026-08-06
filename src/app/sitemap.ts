@@ -23,9 +23,11 @@ import { listAllSlugsForSitemap, listAllTags, listAllModels } from '@/db/queries
 import { locales } from '@/i18n/request';
 import { SITE_URL } from '@/lib/site';
 
-// sitemap 每次请求都动态生成（避免 build 时 prerender D1）
-export const dynamic = 'force-dynamic';
-export const revalidate = 3600;
+// sitemap ISR 缓存：1 天 revalidate（sitemap 数据小时级变化即可，更激进缓存）
+// 之前 force-dynamic 导致每次请求都打 D1，加上 13437 个 URL 对象构造时内存压力大，
+// 是 Error 1102（Worker 资源超限）的主要复发源（2026-08-07 修复）。
+// publish/unpublish/delete 会主动 revalidatePath('/sitemap.xml') 保证时效。
+export const revalidate = 86400;
 
 /**
  * 把 DB 里的 updatedAt 转成 W3C Datetime 格式（sitemap lastmod 要求）

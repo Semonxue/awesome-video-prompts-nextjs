@@ -30,6 +30,9 @@ const CDN_CACHE_CONTROL =
   "public, s-maxage=3600, stale-while-revalidate=86400";
 // 匹配 /en, /zh, /ja 及其下子路径（不带 api 前缀）
 const LOCALE_PATH_REGEX = /^\/(en|zh|ja)(\/|\?|$)/;
+// sitemap.xml / robots.txt 也需要走 CDN 缓存（否则 Googlebot 每次抓取都打 D1）
+const SITEMAP_PATH_REGEX = /^\/(sitemap\.xml|robots\.txt)$/;
+
 
 const handler = async (handler, converter) =>
   async (request, env, ctx, abortSignal) => {
@@ -46,6 +49,9 @@ const handler = async (handler, converter) =>
       Promise.withResolvers();
     const isLocalePage =
       request.method === "GET" && LOCALE_PATH_REGEX.test(url.pathname);
+    const isSitemapPath =
+      request.method === "GET" && SITEMAP_PATH_REGEX.test(url.pathname);
+    const isCacheablePage = isLocalePage || isSitemapPath;
     const streamCreator = {
       writeHeaders(prelude) {
         const { statusCode, cookies, headers } = prelude;
@@ -59,7 +65,10 @@ const handler = async (handler, converter) =>
           responseHeaders.set("Content-Encoding", "identity");
         }
         // === cache-control override（P0 #0.1 修复） ===
-        if (isLocalePage) {
+        // 覆盖对象：/en/zh/ja 页面 + /sitemap.xml /robots.txt
+        // 背景（2026-08-07）：sitemap 没被 CDN 缓存，Googlebot 每抓一次都打 D1，
+        //                   构造 13437 个 URL 对象时内存压力大，是 1102 主要复发源
+        if (isCacheablePage) {
           responseHeaders.delete("cache-control");
           responseHeaders.delete("set-cookie");
           // 删除 vary 头：Next.js 的 RSC 相关 vary 会阻止 CF 边缘缓存

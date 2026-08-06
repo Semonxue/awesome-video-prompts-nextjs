@@ -330,3 +330,53 @@ export async function listAllModels(): Promise<{ slug: string; name: string; cou
     return rows.map((r) => ({ slug: r.slug, name: formatModelName(r.slug), count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
   });
 }
+/**
+ * 单个 model 的 tag 分布 — 模型页用
+ *
+ * 背景（2026-08-07 Error 1102 修复）：
+ *   - 之前模型页调 listPrompts({ model }) 默认 limit=24 拿 tag 分布，逻辑 bug（不全）
+ *   - 而且 listPrompts 内部走 3 次 D1 round-trip + 完整 hydrate，CPU 成本高
+ *   - 现改为专用 SQL：1 次 JOIN 直接 GROUP BY tag，1 次 D1 round-trip 完成
+ *   - 加跨实例缓存 5 分钟（同 listAllTags 模式）
+ *   - publish/unpublish/delete 时通过 listAllModels() 遍历失效对应 key
+ */
+export async function listModelTagDistribution(
+  modelSlug: string,
+): Promise<{ slug: string; name: string; count: number }[]> {
+  return getCachedData(`${CACHE_KEYS.modelTagDist}-${modelSlug}`, async () => {
+    const d1 = await getD1();
+    const db = getDb(d1);
+    const rows = await db
+      .select({
+        slug: tags.name,
+        count: sql<number>`count(${promptTags.promptId})`,
+      })
+      .from(promptModels)
+      .innerJoin(models, eq(promptModels.modelId, models.id))
+      .innerJoin(promptTags, eq(promptTags.promptId, promptModels.promptId))
+      .innerJoin(tags, eq(promptTags.tagId, tags.id))
+      .innerJoin(prompts, and(eq(prompts.id, promptModels.promptId), eq(prompts.isDraft, 0)))
+      .where(eq(models.slug, modelSlug))
+      .groupBy(tags.name)
+      .orderBy(desc(sql`count(${promptTags.promptId})`), tags.name);
+
+    return rows.map((r) => ({ slug: r.slug, name: r.slug, count: Number(r.count) }));
+  });
+}
+
+/**
+ * 单条 prompt 查询（按 slug）— 跨实例缓存版本
+ *
+ * 背景（2026-08-07 Error 1102 修复）：
+ *   - 详情页 ISR 渲染时，generateMetadata 调一次 getPromptBySlug，
+ *     default handler 再调一次（拉相关推荐前需要 prompt 详情），共 2 次 D1 round-trip
+ *   - 加 slug 维度跨实例缓存后，两次调用只查 1 次 D1
+ *   - publish/unpublish/delete 时主动失效对应 slug 的缓存
+ *
+ * 注意：cache key 包含 slug，按 slug 失效；同一个 prompt 在不同 ISR 渲染间复用缓存
+ */
+export async function getPromptBySlugCached(slug: string): Promise<PromptCardData | null> {
+  return getCachedData(`${CACHE_KEYS.promptBySlug}-${slug}`, async () => {
+    return getPromptBySlug(slug);
+  });
+}

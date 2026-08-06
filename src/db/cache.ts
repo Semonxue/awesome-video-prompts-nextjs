@@ -112,8 +112,15 @@ export async function invalidateCache(key: string): Promise<void> {
   }
 }
 
+// Single-flight 表：同一 key 的并发请求共享同一个 Promise
+// 背景（2026-08-07 Error 1102 修复）：ISR 失效瞬间可能 N 个并发 cache miss，
+// 之前每个并发都各自 fetch → N 倍 D1 查询 → CPU 超限。single-flight 后 N 个并发
+// 只触发 1 次 fetcher，其他等待同一个 Promise。
+const inflightPromises = new Map<string, Promise<unknown>>();
+
 /**
  * 通用缓存读取：命中返回缓存值，未命中调用 fetcher 并写入缓存
+ * 包含 single-flight：同 key 并发请求共享同一个 in-flight Promise
  */
 export async function getCachedData<T>(
   key: string,
@@ -122,9 +129,23 @@ export async function getCachedData<T>(
   const cached = await readCache<T>(key);
   if (cached !== null) return cached;
 
-  const value = await fetcher();
-  await writeCache(key, value);
-  return value;
+  // 检查是否已有同 key 的 in-flight 请求
+  const existing = inflightPromises.get(key);
+  if (existing) return existing as Promise<T>;
+
+  // 创建新的 in-flight Promise
+  const promise = (async () => {
+    try {
+      const value = await fetcher();
+      await writeCache(key, value);
+      return value;
+    } finally {
+      inflightPromises.delete(key);
+    }
+  })();
+
+  inflightPromises.set(key, promise);
+  return promise;
 }
 
 /** 缓存 key 常量 */
@@ -132,4 +153,8 @@ export const CACHE_KEYS = {
   allTags: 'all-tags',
   allModels: 'all-models',
   recentPrompts: 'recent-prompts-48',
+  /** 单 model 的 tag 分布（key 后缀接 modelSlug） */
+  modelTagDist: 'model-tag-dist',
+  /** 单条 prompt（key 后缀接 slug） */
+  promptBySlug: 'prompt-by-slug',
 } as const;

@@ -45,6 +45,7 @@ import { getDb } from '@/db';
 import { prompts, tags, models, promptTags, promptModels } from '@/db/schema';
 import { deriveYearMonth, keyFromMediaUrl, R2_KEY_PREFIX } from '@/lib/r2-keys';
 import { invalidateCache, CACHE_KEYS } from '@/db/cache';
+import { listAllModels } from '@/db/queries';
 
 // 显式标记使用 schema 里的 import（防止 lint 报 unused）
 void prompts; void tags; void models; void promptTags; void promptModels;
@@ -252,7 +253,7 @@ function revalidatePromptPaths(slug: string): string[] {
     }
   }
   // 顺手刷首页 + 标签/模型索引
-  for (const p of ['/en', '/zh', '/ja', '/en/tags', '/zh/tags', '/ja/tags', '/en/models', '/zh/models', '/ja/models']) {
+  for (const p of ['/en', '/zh', '/ja', '/en/tags', '/zh/tags', '/ja/tags', '/en/models', '/zh/models', '/ja/models', '/sitemap.xml']) {
     try {
       revalidatePath(p);
     } catch (e) {
@@ -547,11 +548,15 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
   // 11) revalidate
   const revalidated = revalidatePromptPaths(slug);
 
-  // 12) 主动失效跨实例缓存（tags/models/最近列表，保证发布后立即可见）
+  // 12) 主动失效跨实例缓存（tags/models/最近列表/prompt-by-slug/model-tag-dist，保证发布后立即可见）
+  // listAllModels() 走缓存，无额外 D1 开销；遍历失效 model-tag-dist-*
+  const allModels = await listAllModels();
   await Promise.allSettled([
     invalidateCache(CACHE_KEYS.allTags),
     invalidateCache(CACHE_KEYS.allModels),
     invalidateCache(`${CACHE_KEYS.recentPrompts}-48`),
+    invalidateCache(`${CACHE_KEYS.promptBySlug}-${slug}`),
+    ...allModels.map((m) => invalidateCache(`${CACHE_KEYS.modelTagDist}-${m.slug}`)),
   ]);
 
   const elapsed = Date.now() - startTime;

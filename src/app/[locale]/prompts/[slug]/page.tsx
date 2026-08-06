@@ -19,7 +19,7 @@ import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import CopyButton from '@/components/CopyButton';
 import { GridEngine } from '@/components/GridEngine';
-import { getPromptBySlug, listRecentPromptsCached, listAllModels, listAllTags } from '@/db/queries';
+import { getPromptBySlug, getPromptBySlugCached, listRecentPromptsCached, listAllModels, listAllTags } from '@/db/queries';
 import { formatModelName } from '@/lib/format';
 import { SITE_URL, R2_PUBLIC_URL } from '@/lib/site';
 
@@ -55,7 +55,7 @@ function splitParagraphs(text: string): string[] {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { locale, slug } = await params;
   if (!['en', 'zh', 'ja'].includes(locale)) return {};
-  const prompt = await getPromptBySlug(slug);
+  const prompt = await getPromptBySlugCached(slug);
   if (!prompt) return { title: 'Prompt not found' };
   const canonical = `${SITE_URL}/${locale}/prompts/${slug}`;
   const description = prompt.description.replace(/\s+/g, ' ').trim().slice(0, 160);
@@ -96,7 +96,7 @@ export default async function PromptDetailPage({ params }: Props) {
   if (!['en', 'zh', 'ja'].includes(locale)) notFound();
 
   // 内容不分 locale：slug 全局唯一；locale 仅用于 UI（next-intl）
-  const prompt = await getPromptBySlug(slug);
+  const prompt = await getPromptBySlugCached(slug);
   if (!prompt) notFound();
 
   // 相关推荐：同 model 优先 + tag 重叠打分，取前 6
