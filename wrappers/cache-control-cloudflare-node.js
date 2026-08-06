@@ -62,6 +62,9 @@ const handler = async (handler, converter) =>
         if (isLocalePage) {
           responseHeaders.delete("cache-control");
           responseHeaders.delete("set-cookie");
+          // 删除 vary 头：Next.js 的 RSC 相关 vary 会阻止 CF 边缘缓存
+          // （vary: rsc, next-router-state-tree, ... 导致 CF 无法缓存 HTML）
+          responseHeaders.delete("vary");
           responseHeaders.set("Cache-Control", CDN_CACHE_CONTROL);
         }
         // Optimize: skip ReadableStream creation for null body statuses
