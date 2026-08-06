@@ -261,10 +261,36 @@ export async function getPromptBySlug(slug: string): Promise<PromptCardData | nu
 }
 
 /**
+ * 模块级缓存（Worker 实例内）— 避免每次请求都查 D1 全表聚合
+ *
+ * 背景（2026-08-06 Error 1102 修复）：
+ *   - listAllTags / listAllModels 是全表 JOIN + GROUP BY 聚合（~56ms，读 7.4 万行）
+ *   - 首页 / 详情页 / 标签页 / 模型页每次渲染都调用 → 多次慢查询叠加 → CPU 超限
+ *   - tags/models 数据只在发布 prompt 时变化，缓存 5 分钟完全合理
+ *   - Worker 实例被回收时缓存自然失效，无一致性问题
+ */
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+interface CacheEntry<T> {
+  value: T;
+  expiresAt: number;
+}
+
+let tagsCache: CacheEntry<{ slug: string; name: string; count: number; updatedAt: string }[]> | null = null;
+let modelsCache: CacheEntry<{ slug: string; name: string; count: number; updatedAt: string }[]> | null = null;
+
+function isCacheFresh<T>(entry: CacheEntry<T> | null): entry is CacheEntry<T> {
+  return entry !== null && entry.expiresAt > Date.now();
+}
+
+/**
  * 全部 tags — 标签页/筛选器下拉用（全局唯一，不分 locale）
  * 按 count DESC 排序；只统计有 prompt 关联的 tag（避免孤儿）
+ * 模块级缓存 5 分钟，避免每次请求全表聚合
  */
 export async function listAllTags(): Promise<{ slug: string; name: string; count: number; updatedAt: string }[]> {
+  if (isCacheFresh(tagsCache)) return tagsCache.value;
+
   const d1 = await getD1();
   const db = getDb(d1);
 
@@ -280,13 +306,18 @@ export async function listAllTags(): Promise<{ slug: string; name: string; count
     .groupBy(tags.name)
     .orderBy(desc(sql`count(${promptTags.promptId})`), tags.name);
 
-  return rows.map((r) => ({ slug: r.slug, name: r.slug, count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
+  const value = rows.map((r) => ({ slug: r.slug, name: r.slug, count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
+  tagsCache = { value, expiresAt: Date.now() + CACHE_TTL_MS };
+  return value;
 }
 
 /**
  * 全部 models — 模型页用（全局唯一，不分 locale）
+ * 模块级缓存 5 分钟，避免每次请求全表聚合
  */
 export async function listAllModels(): Promise<{ slug: string; name: string; count: number; updatedAt: string }[]> {
+  if (isCacheFresh(modelsCache)) return modelsCache.value;
+
   const d1 = await getD1();
   const db = getDb(d1);
 
@@ -303,5 +334,7 @@ export async function listAllModels(): Promise<{ slug: string; name: string; cou
     .groupBy(models.slug, models.name)
     .orderBy(desc(sql`count(${promptModels.promptId})`), models.name);
 
-  return rows.map((r) => ({ slug: r.slug, name: formatModelName(r.slug), count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
+  const value = rows.map((r) => ({ slug: r.slug, name: formatModelName(r.slug), count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
+  modelsCache = { value, expiresAt: Date.now() + CACHE_TTL_MS };
+  return value;
 }
