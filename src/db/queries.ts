@@ -25,7 +25,7 @@ export async function listAllSlugsForSitemap(): Promise<Array<{ slug: string; up
  * 部署目标：Cloudflare Workers via OpenNext
  */
 
-import { eq, and, inArray, like, or, sql, desc } from 'drizzle-orm';
+import { eq, and, inArray, like, or, sql, desc, ne, lt, gt } from 'drizzle-orm';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import type { PromptCardData, ModelRef, TagRef } from '@/components/types';
 import { getDb } from './index';
@@ -36,6 +36,7 @@ import {
   AGG_CACHE_KEYS,
   readAggregateCache,
   writeAggregateCache,
+  invalidateAggregateCache,
   type CountsCache,
 } from './aggregate-cache';
 import { MODELS_DICT, TAGS_DICT } from '@/lib/dict-yaml';
@@ -80,7 +81,7 @@ export interface ListPromptsResult {
  *       - round-trip 数 = ceil(N / 100)；100 条 prompt = 1 次；200 条 = 2 次
  *       - 4479 条 tag/model 关联进单 prompt 的 hydrate 不触发（单条走单 query）
  */
-async function hydratePrompts(
+export async function hydratePrompts(
   rows: Array<typeof prompts.$inferSelect>,
 ): Promise<PromptCardData[]> {
   if (rows.length === 0) return [];
@@ -336,14 +337,18 @@ async function queryAllTags(): Promise<{ slug: string; name: string; count: numb
 
 export async function listAllTags(): Promise<{ slug: string; name: string; count: number; updatedAt: string }[]> {
   // R2 聚合缓存：发布时全量重算覆盖写，读时直接取（CDN 缓存，零 D1 扫描）
+  // L1+L2 由 aggregate-cache.ts 内部提供（复用 cache.ts 的 getCachedData）
   const cached = await readAggregateCache<{ slug: string; name: string; count: number; updatedAt: string }[]>(
     AGG_CACHE_KEYS.tags,
   );
   if (cached) return cached;
 
   // 兜底：缓存不存在（首次部署）→ 实时查询 + 写 R2
+  // 注意：readAggregateCache 会把 null 写入 L1+L2，写完 R2 后必须 invalidateAggregateCache
+  //       清掉这个 null，否则后续 5min 内的读仍返回 null → 反复触发兜底 queryAll
   const result = await queryAllTags();
   await writeAggregateCache(AGG_CACHE_KEYS.tags, result);
+  await invalidateAggregateCache(AGG_CACHE_KEYS.tags);
   return result;
 }
 
@@ -375,14 +380,18 @@ async function queryAllModels(): Promise<{ slug: string; name: string; count: nu
 
 export async function listAllModels(): Promise<{ slug: string; name: string; count: number; updatedAt: string }[]> {
   // R2 聚合缓存：发布时全量重算覆盖写，读时直接取（CDN 缓存，零 D1 扫描）
+  // L1+L2 由 aggregate-cache.ts 内部提供（复用 cache.ts 的 getCachedData）
   const cached = await readAggregateCache<{ slug: string; name: string; count: number; updatedAt: string }[]>(
     AGG_CACHE_KEYS.models,
   );
   if (cached) return cached;
 
   // 兜底：缓存不存在（首次部署）→ 实时查询 + 写 R2
+  // 注意：readAggregateCache 会把 null 写入 L1+L2，写完 R2 后必须 invalidateAggregateCache
+  //       清掉这个 null，否则后续 5min 内的读仍返回 null → 反复触发兜底 queryAll
   const result = await queryAllModels();
   await writeAggregateCache(AGG_CACHE_KEYS.models, result);
+  await invalidateAggregateCache(AGG_CACHE_KEYS.models);
   return result;
 }
 /**
@@ -479,4 +488,155 @@ export async function rebuildAllAggregateCaches(): Promise<void> {
     modelTags[m.slug] = await queryModelTagDistribution(m.slug);
   }
   await writeAggregateCache(AGG_CACHE_KEYS.modelTags, modelTags);
+}
+
+/**
+ * 详情页上下篇 — 按 id 单调排序，仅取 3 个导航字段
+ *
+ * 背景（2026-08-07 Error 1102 修复 Phase 2）：
+ *   - 之前：listRecentPromptsCached(48) → in-memory findIndex by promptDate
+ *     → 每次详情页 SSR 拉 48 行 + hydrate 48 份 tags/models（最大头）
+ *   - 现在：3 次轻量 D1 查询（id + prev + next），不 hydrate，仅 3 个字段
+ *   - id 是 auto-increment 单调，与 promptDate 同向；用 id 排序更稳定（不依赖 ISO 8601 字符串比较）
+ *
+ * 返回：prev/next 可能为 null（详情页已是最新/最旧时）
+ */
+export interface AdjacentPrompt {
+  slug: string;
+  title: string;
+  coverUrl: string | null;
+}
+
+export async function getAdjacentPrompts(
+  slug: string,
+): Promise<{ prev: AdjacentPrompt | null; next: AdjacentPrompt | null }> {
+  const d1 = await getD1();
+  const db = getDb(d1);
+
+  // 1) 查 target id（只 select id，极轻量）
+  const targetRows = await db
+    .select({ id: prompts.id })
+    .from(prompts)
+    .where(and(eq(prompts.slug, slug), eq(prompts.isDraft, 0)))
+    .limit(1);
+
+  if (targetRows.length === 0) return { prev: null, next: null };
+  const targetId = targetRows[0].id;
+
+  // 2) 并发查 prev/next，各 1 行，仅 select 导航字段
+  const [prevRows, nextRows] = await Promise.all([
+    db
+      .select({ slug: prompts.slug, title: prompts.title, coverUrl: prompts.coverUrl })
+      .from(prompts)
+      .where(and(ne(prompts.id, targetId), eq(prompts.isDraft, 0), lt(prompts.id, targetId)))
+      .orderBy(desc(prompts.id))
+      .limit(1),
+    db
+      .select({ slug: prompts.slug, title: prompts.title, coverUrl: prompts.coverUrl })
+      .from(prompts)
+      .where(and(ne(prompts.id, targetId), eq(prompts.isDraft, 0), gt(prompts.id, targetId)))
+      .orderBy(prompts.id)
+      .limit(1),
+  ]);
+
+  return {
+    prev: prevRows[0] ?? null,
+    next: nextRows[0] ?? null,
+  };
+}
+
+/**
+ * 详情页相关推荐 — 按共享 tag/model 打分取 top N
+ *
+ * 背景（2026-08-07 Error 1102 修复 Phase 2）：
+ *   - 之前：listRecentPromptsCached(48) → in-memory 全量 hydrate + 过滤打分
+ *     → 每次详情页 SSR hydrate 48 份 tags/models（最大头）
+ *   - 现在：只取共享 tag/model 的候选集合（远 < 48）→ hydrate 候选 → JS 打分取 6
+ *   - 极端情况（共享 tag/model 很少）：返回空数组，UI 只隐藏 "You Might Also Like"
+ *
+ * 打分规则（同原实现）：
+ *   - 共享 model：+10/个
+ *   - 共享 tag：+2/个
+ *   - 排序：分数 DESC，再 promptDate DESC
+ */
+export async function getRelatedPrompts(
+  sourcePrompt: PromptCardData,
+  limit: number = 6,
+): Promise<PromptCardData[]> {
+  const tagNames = sourcePrompt.tags.map((t) => t.slug);
+  const modelSlugs = sourcePrompt.models.map((m) => m.slug);
+  if (tagNames.length === 0 && modelSlugs.length === 0) return [];
+
+  const d1 = await getD1();
+  const db = getDb(d1);
+
+  // 1) 找共享 tag / model 的 promptId 集合（去重）
+  //    两个独立 query 并发；为空时跳过对应 query
+  const tagIdsPromise: Promise<Array<{ id: number }>> = tagNames.length > 0
+    ? db
+        .select({ id: promptTags.promptId })
+        .from(promptTags)
+        .innerJoin(tags, eq(promptTags.tagId, tags.id))
+        .where(inArray(tags.name, tagNames))
+    : Promise.resolve([]);
+
+  const modelIdsPromise: Promise<Array<{ id: number }>> = modelSlugs.length > 0
+    ? db
+        .select({ id: promptModels.promptId })
+        .from(promptModels)
+        .innerJoin(models, eq(promptModels.modelId, models.id))
+        .where(inArray(models.slug, modelSlugs))
+    : Promise.resolve([]);
+
+  const [tagRows, modelRows] = await Promise.all([tagIdsPromise, modelIdsPromise]);
+  const candidateIds = new Set<number>();
+  for (const r of tagRows) candidateIds.add(r.id);
+  for (const r of modelRows) candidateIds.add(r.id);
+  if (candidateIds.size === 0) return [];
+
+  // 2) 取候选的卡片字段（排除自己，限制 30 避免 hydrate 过量）
+  const CANDIDATE_CAP = 30;
+  const candidateIdArr = Array.from(candidateIds);
+  const rows = await db
+    .select()
+    .from(prompts)
+    .where(
+      and(
+        inArray(prompts.id, candidateIdArr),
+        eq(prompts.isDraft, 0),
+        ne(prompts.slug, sourcePrompt.slug),
+      ),
+    )
+    .orderBy(desc(prompts.promptDate), desc(prompts.id))
+    .limit(CANDIDATE_CAP);
+
+  if (rows.length === 0) return [];
+
+  // 3) hydrate 候选（行数 ≤ 30，最多 1 chunk，2 次 D1 round-trip）
+  const hydrated = await hydratePrompts(rows);
+
+  // 4) JS 端按相关性打分
+  const sourceTagSlugs = new Set(tagNames);
+  const sourceModelSlugs = new Set(modelSlugs);
+  const scored = hydrated
+    .map((p) => {
+      let score = 0;
+      if (p.models.some((m) => sourceModelSlugs.has(m.slug))) score += 10;
+      const overlap = p.tags.reduce(
+        (n, t) => (sourceTagSlugs.has(t.slug) ? n + 1 : n),
+        0,
+      );
+      score += overlap * 2;
+      return { p, score };
+    })
+    .filter((x) => x.score > 0)
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        (b.p.promptDate ?? '').localeCompare(a.p.promptDate ?? ''),
+    )
+    .slice(0, limit)
+    .map((x) => x.p);
+
+  return scored;
 }

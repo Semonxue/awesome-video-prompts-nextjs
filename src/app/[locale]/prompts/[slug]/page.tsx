@@ -19,9 +19,9 @@ import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import CopyButton from '@/components/CopyButton';
 import { GridEngine } from '@/components/GridEngine';
-import { getPromptBySlug, getPromptBySlugCached, listRecentPromptsCached, listAllModels, listAllTags } from '@/db/queries';
+import { getPromptBySlugCached, getAdjacentPrompts, getRelatedPrompts } from '@/db/queries';
+import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
 import { formatModelName, tagHref, modelHref } from '@/lib/format';
-import { HEADER_TAG_LIMIT } from '@/components/types';
 import { SITE_URL, R2_PUBLIC_URL } from '@/lib/site';
 
 
@@ -101,40 +101,24 @@ export default async function PromptDetailPage({ params }: Props) {
   const prompt = await getPromptBySlugCached(slug);
   if (!prompt) notFound();
 
-  // 相关推荐：同 model 优先 + tag 重叠打分，取前 6
-  // Perf 优化（2026-08-06 Error 1102 修复）：limit 200 → 48
-  //   之前每次详情页渲染拉 200 条 + hydrate 4 次 D1 查询，是 CPU 超限主因之一。
-  //   相关推荐只需 6 条，上下篇只需相邻 2 条，48 条足够覆盖（同 model 的 prompt 通常在前 48 条内）。
-  // Perf 优化（2026-08-07）：改用跨实例缓存版本，避免每次详情页渲染都查 D1
-  const allResult = await listRecentPromptsCached(48);
-  const related = allResult.items
-    .filter((p) => p.slug !== prompt.slug)
-    .map((p) => {
-      let score = 0;
-      if (p.models.some((m) => prompt.models.some((pm) => pm.slug === m.slug))) score += 10;
-      const overlap = p.tags.filter((t) => prompt.tags.some((pt) => pt.slug === t.slug)).length;
-      score += overlap * 2;
-      return { p, score };
-    })
-    .filter((x) => x.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 6)
-    .map((x) => x.p);
-
-  // 上下篇
-  const sortedByDate = [...allResult.items].sort((a, b) =>
-    (b.promptDate ?? '').localeCompare(a.promptDate ?? ''),
-  );
-  const idx = sortedByDate.findIndex((p) => p.slug === prompt.slug);
-  const prev = idx > 0 ? sortedByDate[idx - 1] : undefined;
-  const next = idx >= 0 && idx < sortedByDate.length - 1 ? sortedByDate[idx + 1] : undefined;
+  // 相关推荐 + 上下篇 — 详情页 Phase 2 优化（2026-08-07 Error 1102 修复）：
+  //   旧路径：listRecentPromptsCached(48) → hydrate 48 份 tags/models → 内存打分
+  //     → 详情页 RSC 载荷背 1520 个 tag/model 对象，SSR CPU 超限主因之一
+  //   新路径：两条专用 SQL，仅取真正需要的少量候选 + 上下篇各 1 行
+  //     → 详情页不再背全局数据，SSR CPU 大幅下降
+  //   并发取：两个查询无依赖，并发执行
+  const [related, { prev, next }] = await Promise.all([
+    getRelatedPrompts(prompt),
+    getAdjacentPrompts(slug),
+  ]);
 
   // Header 数据（不分 locale）
-  // 只取前 N 个 tag：Header 默认只渲染 11 个，全量 1486 个会被完整序列化进 RSC
-  // 载荷（实测首页因此多背 235KB / 1520 个对象），是 CPU 超限的主因之一。
-  // models 只有 49 个，可全量传。
-  const [modelOptions, allTags] = await Promise.all([listAllModels(), listAllTags()]);
-  const tagOptions = allTags.slice(0, HEADER_TAG_LIMIT);
+  //   Phase 2：详情页不再给 Header 传 modelOptions / tagOptions ——
+  //   Header 的 `length > 0` 判断会自动隐藏 model tab 和 tag tab 两排，
+  //   避免 1486+49 个对象序列化进 RSC 载荷。
+  //   Header intro 的总数从 R2 counts 缓存取（后续 A2 加 L1 后几乎 0 开销）。
+  const counts = await readAggregateCache<CountsCache>(AGG_CACHE_KEYS.counts);
+  const totalCount = counts?.total ?? 0;
 
   const paragraphs = splitParagraphs(prompt.description);
 
@@ -188,12 +172,8 @@ export default async function PromptDetailPage({ params }: Props) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
 
-      <Header
-        locale={locale}
-        modelOptions={modelOptions}
-        tagOptions={tagOptions}
-        totalCount={allResult.total}
-      />
+      {/* Phase 2 优化：不传 modelOptions / tagOptions —— Header 的 `length > 0` 判断自动隐藏两排 tab，避免 1535 个对象序列化进 RSC 载荷 */}
+      <Header locale={locale} totalCount={totalCount} />
 
       <main className="main-content prompt-detail">
         {/* 视频/封面 */}
