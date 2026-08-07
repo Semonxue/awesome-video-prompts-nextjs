@@ -32,6 +32,12 @@ import { getDb } from './index';
 import { prompts, tags, models, promptTags, promptModels } from './schema';
 import { formatModelName } from '@/lib/format';
 import { getCachedData, CACHE_KEYS } from './cache';
+import {
+  AGG_CACHE_KEYS,
+  readAggregateCache,
+  writeAggregateCache,
+  type CountsCache,
+} from './aggregate-cache';
 
 /** 拿 D1 binding（OpenNext 注入 env.DB） */
 async function getD1(): Promise<D1Database> {
@@ -139,6 +145,17 @@ async function hydratePrompts(
   }));
 }
 
+/** 实时 count（R2 counts 缓存 miss 或带关键词搜索时兜底） */
+async function countPrompts(whereClause: ReturnType<typeof and> | undefined): Promise<number> {
+  const d1 = await getD1();
+  const db = getDb(d1);
+  const totalRows = await db
+    .select({ c: sql<number>`count(*)` })
+    .from(prompts)
+    .where(whereClause);
+  return Number(totalRows[0]?.c ?? 0);
+}
+
 /**
  * 列表查询 — 首页 / 标签 / 模型 页面入口
  */
@@ -182,12 +199,21 @@ export async function listPrompts(args: ListPromptsArgs): Promise<ListPromptsRes
 
   const whereClause = and(...conditions);
 
-  // 1) 总数
-  const totalRows = await db
-    .select({ c: sql<number>`count(*)` })
-    .from(prompts)
-    .where(whereClause);
-  const total = Number(totalRows[0]?.c ?? 0);
+  // 1) 总数 — 优先从 R2 counts 缓存取（发布时全量重算覆盖写，读时零 D1 扫描）
+  //    仅当无关键词搜索时可用（q 是 LIKE 全表扫描，无法预聚合）
+  let total: number;
+  if (!q || !q.trim()) {
+    const counts = await readAggregateCache<CountsCache>(AGG_CACHE_KEYS.counts);
+    if (counts) {
+      if (tag) total = counts.tags[tag] ?? 0;
+      else if (model) total = counts.models[model] ?? 0;
+      else total = counts.total;
+    } else {
+      total = await countPrompts(whereClause);
+    }
+  } else {
+    total = await countPrompts(whereClause);
+  }
 
   // 2) 主表分页
   const rows = await db
@@ -284,51 +310,75 @@ export async function listRecentPromptsCached(limit = 48): Promise<ListPromptsRe
  *   - 现用跨实例缓存（L1 内存 + L2 Cache API），TTL 5 分钟
  *   - publish 时主动失效，保证发布后立即可见
  */
+/** 实时查询全部 tags（R2 缓存 miss 或重建时用，不走缓存） */
+async function queryAllTags(): Promise<{ slug: string; name: string; count: number; updatedAt: string }[]> {
+  const d1 = await getD1();
+  const db = getDb(d1);
+
+  const rows = await db
+    .select({
+      slug: tags.name,
+      count: sql<number>`count(${promptTags.promptId})`,
+      updatedAt: sql<string>`max(${prompts.updatedAt})`,
+    })
+    .from(tags)
+    .innerJoin(promptTags, eq(promptTags.tagId, tags.id))
+    .innerJoin(prompts, and(eq(prompts.id, promptTags.promptId), eq(prompts.isDraft, 0)))
+    .groupBy(tags.name)
+    .orderBy(desc(sql`count(${promptTags.promptId})`), tags.name);
+
+  return rows.map((r) => ({ slug: r.slug, name: r.slug, count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
+}
+
 export async function listAllTags(): Promise<{ slug: string; name: string; count: number; updatedAt: string }[]> {
-  return getCachedData(CACHE_KEYS.allTags, async () => {
-    const d1 = await getD1();
-    const db = getDb(d1);
+  // R2 聚合缓存：发布时全量重算覆盖写，读时直接取（CDN 缓存，零 D1 扫描）
+  const cached = await readAggregateCache<{ slug: string; name: string; count: number; updatedAt: string }[]>(
+    AGG_CACHE_KEYS.tags,
+  );
+  if (cached) return cached;
 
-    const rows = await db
-      .select({
-        slug: tags.name,
-        count: sql<number>`count(${promptTags.promptId})`,
-        updatedAt: sql<string>`max(${prompts.updatedAt})`,
-      })
-      .from(tags)
-      .innerJoin(promptTags, eq(promptTags.tagId, tags.id))
-      .innerJoin(prompts, and(eq(prompts.id, promptTags.promptId), eq(prompts.isDraft, 0)))
-      .groupBy(tags.name)
-      .orderBy(desc(sql`count(${promptTags.promptId})`), tags.name);
-
-    return rows.map((r) => ({ slug: r.slug, name: r.slug, count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
-  });
+  // 兜底：缓存不存在（首次部署）→ 实时查询 + 写 R2
+  const result = await queryAllTags();
+  await writeAggregateCache(AGG_CACHE_KEYS.tags, result);
+  return result;
 }
 
 /**
  * 全部 models — 模型页用（全局唯一，不分 locale）
  * 跨实例缓存 5 分钟（同 listAllTags）
  */
+/** 实时查询全部 models（R2 缓存 miss 或重建时用，不走缓存） */
+async function queryAllModels(): Promise<{ slug: string; name: string; count: number; updatedAt: string }[]> {
+  const d1 = await getD1();
+  const db = getDb(d1);
+
+  const rows = await db
+    .select({
+      slug: models.slug,
+      name: models.name,
+      count: sql<number>`count(${promptModels.promptId})`,
+      updatedAt: sql<string>`max(${prompts.updatedAt})`,
+    })
+    .from(models)
+    .innerJoin(promptModels, eq(promptModels.modelId, models.id))
+    .innerJoin(prompts, and(eq(prompts.id, promptModels.promptId), eq(prompts.isDraft, 0)))
+    .groupBy(models.slug, models.name)
+    .orderBy(desc(sql`count(${promptModels.promptId})`), models.name);
+
+  return rows.map((r) => ({ slug: r.slug, name: formatModelName(r.slug), count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
+}
+
 export async function listAllModels(): Promise<{ slug: string; name: string; count: number; updatedAt: string }[]> {
-  return getCachedData(CACHE_KEYS.allModels, async () => {
-    const d1 = await getD1();
-    const db = getDb(d1);
+  // R2 聚合缓存：发布时全量重算覆盖写，读时直接取（CDN 缓存，零 D1 扫描）
+  const cached = await readAggregateCache<{ slug: string; name: string; count: number; updatedAt: string }[]>(
+    AGG_CACHE_KEYS.models,
+  );
+  if (cached) return cached;
 
-    const rows = await db
-      .select({
-        slug: models.slug,
-        name: models.name,
-        count: sql<number>`count(${promptModels.promptId})`,
-        updatedAt: sql<string>`max(${prompts.updatedAt})`,
-      })
-      .from(models)
-      .innerJoin(promptModels, eq(promptModels.modelId, models.id))
-      .innerJoin(prompts, and(eq(prompts.id, promptModels.promptId), eq(prompts.isDraft, 0)))
-      .groupBy(models.slug, models.name)
-      .orderBy(desc(sql`count(${promptModels.promptId})`), models.name);
-
-    return rows.map((r) => ({ slug: r.slug, name: formatModelName(r.slug), count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
-  });
+  // 兜底：缓存不存在（首次部署）→ 实时查询 + 写 R2
+  const result = await queryAllModels();
+  await writeAggregateCache(AGG_CACHE_KEYS.models, result);
+  return result;
 }
 /**
  * 单个 model 的 tag 分布 — 模型页用
@@ -340,28 +390,40 @@ export async function listAllModels(): Promise<{ slug: string; name: string; cou
  *   - 加跨实例缓存 5 分钟（同 listAllTags 模式）
  *   - publish/unpublish/delete 时通过 listAllModels() 遍历失效对应 key
  */
+/** 实时查询单个 model 的 tag 分布（R2 缓存 miss 或重建时用，不走缓存） */
+async function queryModelTagDistribution(
+  modelSlug: string,
+): Promise<{ slug: string; name: string; count: number }[]> {
+  const d1 = await getD1();
+  const db = getDb(d1);
+  const rows = await db
+    .select({
+      slug: tags.name,
+      count: sql<number>`count(${promptTags.promptId})`,
+    })
+    .from(promptModels)
+    .innerJoin(models, eq(promptModels.modelId, models.id))
+    .innerJoin(promptTags, eq(promptTags.promptId, promptModels.promptId))
+    .innerJoin(tags, eq(promptTags.tagId, tags.id))
+    .innerJoin(prompts, and(eq(prompts.id, promptModels.promptId), eq(prompts.isDraft, 0)))
+    .where(eq(models.slug, modelSlug))
+    .groupBy(tags.name)
+    .orderBy(desc(sql`count(${promptTags.promptId})`), tags.name);
+
+  return rows.map((r) => ({ slug: r.slug, name: r.slug, count: Number(r.count) }));
+}
+
 export async function listModelTagDistribution(
   modelSlug: string,
 ): Promise<{ slug: string; name: string; count: number }[]> {
-  return getCachedData(`${CACHE_KEYS.modelTagDist}-${modelSlug}`, async () => {
-    const d1 = await getD1();
-    const db = getDb(d1);
-    const rows = await db
-      .select({
-        slug: tags.name,
-        count: sql<number>`count(${promptTags.promptId})`,
-      })
-      .from(promptModels)
-      .innerJoin(models, eq(promptModels.modelId, models.id))
-      .innerJoin(promptTags, eq(promptTags.promptId, promptModels.promptId))
-      .innerJoin(tags, eq(promptTags.tagId, tags.id))
-      .innerJoin(prompts, and(eq(prompts.id, promptModels.promptId), eq(prompts.isDraft, 0)))
-      .where(eq(models.slug, modelSlug))
-      .groupBy(tags.name)
-      .orderBy(desc(sql`count(${promptTags.promptId})`), tags.name);
+  // R2 聚合缓存：model-tags.json 存所有 model 的 tag 分布（发布时全量重算覆盖写）
+  const cached = await readAggregateCache<Record<string, { slug: string; name: string; count: number }[]>>(
+    AGG_CACHE_KEYS.modelTags,
+  );
+  if (cached && cached[modelSlug]) return cached[modelSlug];
 
-    return rows.map((r) => ({ slug: r.slug, name: r.slug, count: Number(r.count) }));
-  });
+  // 兜底：缓存不存在（首次部署）→ 实时查询
+  return queryModelTagDistribution(modelSlug);
 }
 
 /**
@@ -379,4 +441,36 @@ export async function getPromptBySlugCached(slug: string): Promise<PromptCardDat
   return getCachedData(`${CACHE_KEYS.promptBySlug}-${slug}`, async () => {
     return getPromptBySlug(slug);
   });
+}
+
+/**
+ * 全量重建 R2 聚合缓存 — 发布/删除/下架后调用
+ *
+ * 背景（2026-08-07 CPU 超时优化）：
+ *   - listAllTags / listAllModels / listModelTagDistribution / listPrompts 的 count
+ *     改为读 R2 中间文件（_cache/*.json），不再实时全表扫描
+ *   - 这些聚合的输入只在发布时变化，而发布是人工低频操作
+ *   - 本函数在发布/删除/下架时全量重算一次，覆盖写 R2，保证读端永远新鲜
+ *
+ * 注意：本函数会执行全表聚合（读 33M / 12M 行），但只在低频写操作时调用，
+ *       慢几百 ms 完全无感。读端（listAllTags 等）不再触发全表扫描。
+ */
+export async function rebuildAllAggregateCaches(): Promise<void> {
+  // 必须走实时查询（query* 内部函数），不能走 listAll*（会读 R2 旧缓存）
+  const [tags, models] = await Promise.all([queryAllTags(), queryAllModels()]);
+
+  // counts.json：total + 各 tag/model 的 count
+  const counts: CountsCache = {
+    total: tags.reduce((sum, t) => sum + t.count, 0),
+    tags: Object.fromEntries(tags.map((t) => [t.slug, t.count])),
+    models: Object.fromEntries(models.map((m) => [m.slug, m.count])),
+  };
+  await writeAggregateCache(AGG_CACHE_KEYS.counts, counts);
+
+  // model-tags.json：所有 model 的 tag 分布（一个文件全量）
+  const modelTags: Record<string, { slug: string; name: string; count: number }[]> = {};
+  for (const m of models) {
+    modelTags[m.slug] = await queryModelTagDistribution(m.slug);
+  }
+  await writeAggregateCache(AGG_CACHE_KEYS.modelTags, modelTags);
 }

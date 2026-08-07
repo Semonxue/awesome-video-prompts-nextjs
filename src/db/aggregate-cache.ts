@@ -1,0 +1,80 @@
+/**
+ * R2 聚合缓存工具 — 把全表聚合结果存成 R2 中间文件
+ *
+ * 背景（2026-08-07 CPU 超时优化）：
+ *   - listAllTags / listAllModels / listModelTagDistribution / listPrompts 的 count
+ *     都是全表 JOIN + GROUP BY 聚合（读 33M / 12M / 8M 行），是 CPU 超时主因
+ *   - 这些聚合的输入只在发布时变化，而发布是人工低频操作
+ *   - 方案：发布/删除/下架时全量重算一次，序列化 JSON 覆盖写 R2（_cache/ 前缀）
+ *     查询端直接读 R2 对象（被 CF CDN 缓存，读几乎零成本），不再实时全表扫描
+ *   - 相比 D1 物化表：不改 DB 结构、无增量维护边界、零新增资源（复用现有 MEDIA bucket）
+ *
+ * 本模块只提供 R2 读写工具，不依赖 queries.ts（避免循环依赖）。
+ * 全量重算逻辑在 queries.ts 的 rebuildAllAggregateCaches()。
+ */
+
+import { getCloudflareContext } from '@opennextjs/cloudflare';
+
+/** R2 聚合缓存 key（_cache/ 前缀，与媒体 prompts/ 前缀隔离） */
+export const AGG_CACHE_KEYS = {
+  /** listAllTags 结果 */
+  tags: '_cache/tags.json',
+  /** listAllModels 结果 */
+  models: '_cache/models.json',
+  /** 所有 model 的 tag 分布（一个文件全量） */
+  modelTags: '_cache/model-tags.json',
+  /** 各筛选维度 count（total / tags / models） */
+  counts: '_cache/counts.json',
+} as const;
+
+/** counts.json 结构 */
+export interface CountsCache {
+  /** 总 published prompt 数 */
+  total: number;
+  /** tag name -> count */
+  tags: Record<string, number>;
+  /** model slug -> count */
+  models: Record<string, number>;
+}
+
+/** R2 binding 类型（来自 CloudflareEnv，与 admin 路由一致，避免全局 R2Bucket 类型冲突） */
+type R2 = NonNullable<CloudflareEnv['MEDIA']>;
+
+/** 获取 R2 binding（OpenNext 注入 env.MEDIA） */
+async function getR2(): Promise<R2> {
+  const ctx = await getCloudflareContext({ async: true });
+  const r2 = ctx.env.MEDIA;
+  if (!r2) throw new Error('R2 binding (env.MEDIA) not found in Cloudflare context');
+  return r2;
+}
+
+/**
+ * 读聚合缓存。文件不存在或解析失败返回 null（调用方回退实时查询）。
+ * 任何异常都降级为 null，不阻断主流程。
+ */
+export async function readAggregateCache<T>(key: string): Promise<T | null> {
+  try {
+    const r2 = await getR2();
+    const obj = await r2.get(key);
+    if (!obj) return null;
+    const text = await obj.text();
+    if (!text) return null;
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 写聚合缓存（覆盖语义，幂等）。失败仅告警，不抛出（发布流程不应被缓存写失败阻断）。
+ */
+export async function writeAggregateCache(key: string, value: unknown): Promise<void> {
+  try {
+    const r2 = await getR2();
+    await r2.put(key, JSON.stringify(value), {
+      httpMetadata: { contentType: 'application/json' },
+    });
+  } catch (e) {
+    console.warn(`[aggregate-cache] write failed for ${key}:`, e);
+  }
+}

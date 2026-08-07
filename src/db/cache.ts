@@ -150,11 +150,7 @@ export async function getCachedData<T>(
 
 /** 缓存 key 常量 */
 export const CACHE_KEYS = {
-  allTags: 'all-tags',
-  allModels: 'all-models',
   recentPrompts: 'recent-prompts-48',
-  /** 单 model 的 tag 分布（key 后缀接 modelSlug） */
-  modelTagDist: 'model-tag-dist',
   /** 单条 prompt（key 后缀接 slug） */
   promptBySlug: 'prompt-by-slug',
   /** 整个 sitemap 输出（避免每次请求都重新构造 18000+ 对象） */

@@ -22,7 +22,7 @@
  */
 import { revalidatePath } from 'next/cache';
 import { invalidateCache, CACHE_KEYS } from '@/db/cache';
-import { listAllModels } from '@/db/queries';
+import { rebuildAllAggregateCaches } from '@/db/queries';
 import { eq } from 'drizzle-orm';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
@@ -161,14 +161,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     console.warn('[delete] revalidate error:', err);
   }
 
-  // 失效跨实例缓存（与 publish 一致）
-  const allModels = await listAllModels();
+  // 重建 R2 聚合缓存（tags/models/model-tag-dist/counts 全量重算覆盖写，保证删除后立即可见）
+  await rebuildAllAggregateCaches();
+
+  // 失效内存级缓存（recentPrompts / promptBySlug 仍走 cache.ts）
   await Promise.allSettled([
-    invalidateCache(CACHE_KEYS.allTags),
-    invalidateCache(CACHE_KEYS.allModels),
     invalidateCache(`${CACHE_KEYS.recentPrompts}-48`),
     invalidateCache(`${CACHE_KEYS.promptBySlug}-${slug}`),
-    ...allModels.map((m) => invalidateCache(`${CACHE_KEYS.modelTagDist}-${m.slug}`)),
   ]);
 
   return NextResponse.json({
