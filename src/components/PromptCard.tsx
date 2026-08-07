@@ -29,6 +29,8 @@ import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import type { PromptCardData } from './types';
 import type { PromptCardVideoHandle } from './PromptCardVideo';
+import { tagHref, modelHref } from '@/lib/format';
+
 
 /** PromptCardVideo 动态 import（不在首屏 bundle 里） */
 const PromptCardVideo = dynamic(() => import('./PromptCardVideo'), { ssr: false });
@@ -222,7 +224,7 @@ export function PromptCard({ prompt, locale, isFirst = false }: Props) {
 
           {modelLabel && (
             <Link
-              href={`/${locale}?model=${modelLabel}`}
+              href={modelHref(locale, modelLabel)}
               className="model-badge"
               data-model-key={modelLabel}
               onClick={(e) => e.stopPropagation()}
@@ -295,7 +297,7 @@ export function PromptCard({ prompt, locale, isFirst = false }: Props) {
             {prompt.tags.slice(0, 4).map((tag) => (
               <Link
                 key={tag.slug}
-                href={`/${locale}?tag=${tag.slug}`}
+                href={tagHref(locale, tag.slug)}
                 className="prompt-tag"
                 onClick={(e) => e.stopPropagation()}
               >

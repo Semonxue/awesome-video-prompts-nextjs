@@ -16,6 +16,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import LangSwitcher from './LangSwitcher';
 import { locales, type Locale } from '@/i18n/request';
+import { tagHref, modelHref } from '@/lib/format';
 
 interface Props {
   locale: string;
@@ -154,7 +155,7 @@ export function Header({
                   {visibleModels.map((m) => (
                     <Link
                       key={m.slug}
-                      href={`/${locale}?model=${m.slug}`}
+                      href={modelHref(locale, m.slug)}
                       className={`model-tag${activeModel === m.slug ? ' active' : ''}`}
                       data-model={m.slug}
                     >
@@ -183,7 +184,7 @@ export function Header({
                   {visibleTags.map((tt) => (
                     <Link
                       key={tt.slug}
-                      href={`/${locale}?tag=${tt.slug}`}
+                      href={tagHref(locale, tt.slug)}
                       className={`content-tag${activeTag === tt.slug ? ' active' : ''}`}
                       data-tag={tt.slug}
                     >

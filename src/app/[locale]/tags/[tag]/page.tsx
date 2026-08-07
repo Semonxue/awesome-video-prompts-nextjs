@@ -14,6 +14,7 @@ import { getTranslations } from 'next-intl/server';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { GridEngine } from '@/components/GridEngine';
+import { HEADER_TAG_LIMIT } from '@/components/types';
 import { listAllModels, listAllTags, listPrompts } from '@/db/queries';
 import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
 
@@ -83,7 +84,9 @@ export default async function TagPage({ params, searchParams }: Props) {
     .sort((a, b) => b.count - a.count);
 
   // 全集 tagOptions（顶部 tag tabs，不分 locale）
-  const allTags = await listAllTags();
+  // 只传前 N 个：Header 是客户端组件，全量 1486 个 tag 会被序列化进 RSC 载荷
+  // （实测占首页 HTML 的 77%）。详见 components/types.ts 的 HEADER_TAG_LIMIT。
+  const allTags = (await listAllTags()).slice(0, HEADER_TAG_LIMIT);
 
   return (
     <>

@@ -20,8 +20,10 @@ import { Footer } from '@/components/Footer';
 import CopyButton from '@/components/CopyButton';
 import { GridEngine } from '@/components/GridEngine';
 import { getPromptBySlug, getPromptBySlugCached, listRecentPromptsCached, listAllModels, listAllTags } from '@/db/queries';
-import { formatModelName } from '@/lib/format';
+import { formatModelName, tagHref, modelHref } from '@/lib/format';
+import { HEADER_TAG_LIMIT } from '@/components/types';
 import { SITE_URL, R2_PUBLIC_URL } from '@/lib/site';
+
 
 function r2Webp(url: string | null, _width: number): string | null {
   // 当前 R2 自定义域不支持 transform；CF 降级到原图
@@ -128,7 +130,11 @@ export default async function PromptDetailPage({ params }: Props) {
   const next = idx >= 0 && idx < sortedByDate.length - 1 ? sortedByDate[idx + 1] : undefined;
 
   // Header 数据（不分 locale）
-  const [modelOptions, tagOptions] = await Promise.all([listAllModels(), listAllTags()]);
+  // 只取前 N 个 tag：Header 默认只渲染 11 个，全量 1486 个会被完整序列化进 RSC
+  // 载荷（实测首页因此多背 235KB / 1520 个对象），是 CPU 超限的主因之一。
+  // models 只有 49 个，可全量传。
+  const [modelOptions, allTags] = await Promise.all([listAllModels(), listAllTags()]);
+  const tagOptions = allTags.slice(0, HEADER_TAG_LIMIT);
 
   const paragraphs = splitParagraphs(prompt.description);
 
@@ -236,7 +242,7 @@ export default async function PromptDetailPage({ params }: Props) {
               <div className="meta-label">{t('tags')}</div>
               <div className="meta-value meta-tags">
                 {prompt.tags.map((tag) => (
-                  <Link key={tag.slug} href={`/${locale}?tag=${tag.slug}`} className="meta-link">
+                  <Link key={tag.slug} href={tagHref(locale, tag.slug)} className="meta-link">
                     {tag.name}
                   </Link>
                 ))}
@@ -249,7 +255,7 @@ export default async function PromptDetailPage({ params }: Props) {
               <div className="meta-label">{t('models')}</div>
               <div className="meta-value meta-models">
                 {prompt.models.map((m) => (
-                  <Link key={m.slug} href={`/${locale}?model=${m.slug}`} className="meta-link meta-link--model">
+                  <Link key={m.slug} href={modelHref(locale, m.slug)} className="meta-link meta-link--model">
                     {formatModelName(m.slug)}
                   </Link>
                 ))}

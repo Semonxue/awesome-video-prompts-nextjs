@@ -13,6 +13,7 @@ import { listPrompts, listAllModels, listAllTags } from '@/db/queries';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { GridEngine } from '@/components/GridEngine';
+import { HEADER_TAG_LIMIT } from '@/components/types';
 import Link from 'next/link';
 import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
 
@@ -84,7 +85,11 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
   });
 
   // 模型/标签 tabs 数据（全局唯一，不分 locale）
+  // tag 只传前 N 个：Header 是客户端组件，props 会全量序列化进 RSC 载荷。
+  // 实测全量传 1486 个 tag 导致 HTML 303KB 中有 235KB 是这份载荷（77%），
+  // 而页面只渲染 15 个 chip。详见 components/types.ts 的 HEADER_TAG_LIMIT。
   const [allModels, allTags] = await Promise.all([listAllModels(), listAllTags()]);
+  const headerTags = allTags.slice(0, HEADER_TAG_LIMIT);
 
   // "view more" 入口需要的本地化名字
   const activeModel = sp.model
@@ -99,7 +104,7 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
         activeTag={sp.tag}
         activeModel={sp.model}
         modelOptions={allModels}
-        tagOptions={allTags}
+        tagOptions={headerTags}
         totalCount={result.total}
       />
 

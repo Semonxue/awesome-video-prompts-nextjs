@@ -44,3 +44,18 @@ export interface TagRef {
  * 用于空网格骨架展示
  */
 export const EMPTY_PROMPTS: PromptCardData[] = [];
+
+/**
+ * 传给 Header 的 tag 上限（2026-08-07 CPU 优化）
+ *
+ * 背景：Header 是客户端组件，props 必须全量序列化进 RSC 载荷嵌入 HTML。
+ *   之前各页面把全量 1486 个 tag 传进去，而 Header 默认只渲染 11 个
+ *   （展开也只是本地 state）。实测首页 HTML 303KB 里有 235KB（77%）
+ *   是这份载荷，含 1520 个 tag/model 对象 —— 页面上只渲染了 28 个 chip。
+ *   这是每个请求都要付的序列化 CPU，是 Error 1102 的主因之一。
+ *
+ * 取 40：默认显示 11 个，展开后仍有富余；想看全部 tag 的用户走 /tags 页。
+ * models 只有 49 个（约 4KB），无需限制。
+ */
+export const HEADER_TAG_LIMIT = 40;
+
