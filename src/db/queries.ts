@@ -472,11 +472,27 @@ export async function getPromptBySlugCached(slug: string): Promise<PromptCardDat
  */
 export async function rebuildAllAggregateCaches(): Promise<void> {
   // 必须走实时查询（query* 内部函数），不能走 listAll*（会读 R2 旧缓存）
-  const [tags, models] = await Promise.all([queryAllTags(), queryAllModels()]);
+  // counts.total 必须直接从 prompts 表 count 真实行数，不能用 sum(tag counts)：
+  //   - 一个 prompt 通常挂多个 tag，tag counts 加总会把同一个 prompt 算 N 次
+  //   - 历史上用 sum 算出的 total 比真实值大 N 倍（典型 ~4-5×），参见
+  //     2026-08-07 Header "Collected N prompts" 统计口径 bug
+  const [tags, models, totalRow] = await Promise.all([
+    queryAllTags(),
+    queryAllModels(),
+    (async () => {
+      const d1 = await getD1();
+      const db = getDb(d1);
+      const r = await db
+        .select({ c: sql<number>`count(*)` })
+        .from(prompts)
+        .where(eq(prompts.isDraft, 0));
+      return Number(r[0]?.c ?? 0);
+    })(),
+  ]);
 
-  // counts.json：total + 各 tag/model 的 count
+  // counts.json：total（真实 published prompt 数） + 各 tag/model 的 count
   const counts: CountsCache = {
-    total: tags.reduce((sum, t) => sum + t.count, 0),
+    total: totalRow,
     tags: Object.fromEntries(tags.map((t) => [t.slug, t.count])),
     models: Object.fromEntries(models.map((m) => [m.slug, m.count])),
   };
