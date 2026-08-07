@@ -27,6 +27,12 @@
         .btn-delete { background: none; border: 1px solid #e53e3e; color: #e53e3e; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
         .btn-delete:hover { background: #fff5f5; }
         .load-btn { color: var(--accent-color); border-color: var(--accent-color); }
+        .republish-btn { background: none; border: 1px solid var(--error-color); color: var(--error-color); padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+        .republish-btn:hover:not(:disabled) { background: #fff5f5; }
+        .republish-btn:disabled { color: var(--text-muted); border-color: var(--border-color); cursor: not-allowed; }
+        .progress-bar { height: 8px; background: var(--bg-tertiary); border-radius: 4px; overflow: hidden; margin: 8px 0; }
+        .progress-bar-inner { height: 100%; background: var(--accent-color); transition: width 0.2s; }
+        .progress-bar-inner.done { background: var(--success-color); }
 
         .tabs { display: flex; border-bottom: 1px solid var(--border-color); background: var(--bg-primary); }
         .tab { flex: 1; padding: 8px 6px; text-align: center; cursor: pointer; font-size: 11px; color: var(--text-secondary); border-bottom: 2px solid transparent; user-select: none; }
@@ -137,6 +143,7 @@
                     <button class="cleanup-btn" onclick="cleanupPublished()" title="清理已发布成功的草稿（先校验 D1）">🧹 清理</button>
                     <button class="btn btn-delete" onclick="showDeleteOnline()" title="按 slug 直接删除线上 prompt（D1 + R2）">❌ 删除线上</button>
                     <button class="btn" onclick="showUnpublishOnline()" title="按 slug 下架线上 prompt（is_draft=1，可重新发布恢复）">📥 下架线上</button>
+                    <button class="republish-btn" id="republishAllFailedBtn" onclick="republishAllFailed()" title="一键重新发布「失败」tab 里的全部草稿（入异步队列，后台单 worker 处理）" disabled>🔁 批量重试 (<span id="republishCount">0</span>)</button>
                     <button class="refresh-btn" onclick="loadFileList()">🔄</button>
                 </div>
             </div>
@@ -279,6 +286,17 @@
         </div>
     </div>
 
+    <!-- Modal: 一键重新发布全部失败 -->
+    <div class="modal-mask" id="republishAllFailedModal">
+        <div class="modal" style="min-width: 480px;">
+            <div class="modal-title">🔁 一键重新发布全部失败</div>
+            <div class="modal-body" id="republishAllFailedResult"></div>
+            <div class="modal-actions">
+                <button class="btn" id="republishAllFailedCloseBtn" onclick="hideRepublishAllFailed()">关闭</button>
+            </div>
+        </div>
+    </div>
+
     <div class="toast" id="toast"></div>
 
     <script>
@@ -334,10 +352,19 @@
                 document.getElementById('cntUnpublished').textContent = fileCache.unpublished.length;
                 document.getElementById('cntPublished').textContent = fileCache.published.length;
                 document.getElementById('cntFailed').textContent = fileCache.failed.length;
+                updateRepublishButton();
                 renderFileList();
             } catch (e) {
                 showToast('加载文件列表失败', true);
             }
+        }
+
+        // 更新「一键重试」按钮的可用状态（依赖 fileCache.failed）
+        function updateRepublishButton() {
+            const btn = document.getElementById('republishAllFailedBtn');
+            const cnt = (fileCache.failed || []).length;
+            document.getElementById('republishCount').textContent = cnt;
+            if (btn) btn.disabled = cnt === 0;
         }
 
         function renderFileList() {
@@ -1094,6 +1121,90 @@
             html += '</ul>';
             resultEl.innerHTML = html;
             await loadFileList();
+        }
+
+        // ============ 一键重新发布全部失败 ============
+        // 后端 0 改动：复用现有 handle_publish，逐个发起 async 入队（后台单 worker 串行处理）。
+        // 这里只负责前端进度 UX + 入队状态写回（in_queue=true，会被现有轮询刷新逻辑还原）。
+        async function republishAllFailed() {
+            const list = (fileCache.failed || []).slice();
+            const cnt = list.length;
+            if (!cnt) { showToast('没有可重试的失败草稿'); return; }
+            if (!confirm(`确定要重新发布 ${cnt} 个失败草稿？\n\n背景：会逐个发起后台的 /api/publish 接口，把它们一一入队（后台单 worker 会逐一处理）。\n实际发布成功/失败状态会写回 front matter：成功的会从「失败」tab 消失、跑到「已发布」tab；仍然失败的留在「失败」tab。\n\n提示：如果发生 503，表示 Worker 端未运行/编译失败，该批结果会全部仍标失败。`)) return;
+
+            // 先把列表从失败 tab 立即状态标记为入队中（前端立即反映）
+            for (const f of list) f.in_queue = true;
+            renderFileList();
+            updateRepublishButton();
+            refreshQueue();
+
+            // 打开进度 modal（同时初始化布局）
+            const resultEl = document.getElementById('republishAllFailedResult');
+            resultEl.innerHTML = `
+                <p>正在逐个入队 <b>${cnt}</b> 个草稿…（后台 worker 串行消费，本次只需等待「全部入队」完成）</p>
+                <div class="progress-bar"><div class="progress-bar-inner" id="republishProgress" style="width: 0%"></div></div>
+                <p id="republishSummary" style="margin-top: 4px; color: var(--text-secondary); font-size: 12px;"></p>
+                <ul id="republishErrs" style="max-height: 220px; overflow-y: auto;"></ul>
+                <p style="margin-top: 8px; color: var(--text-muted); font-size: 11px;">💡 提示：入队完成后，后台 worker 仍可能在消费，这一步的“全部入队”不代表“全部发布成功”。剩余的进度会在「失败 / 已发布」tab 中实时更新。</p>
+            `;
+            document.getElementById('republishAllFailedModal').classList.add('show');
+
+            let ok = 0, already = 0, fail = 0;
+            const errsUl = document.getElementById('republishErrs');
+            const progressEl = document.getElementById('republishProgress');
+            const summaryEl = document.getElementById('republishSummary');
+
+            for (let i = 0; i < list.length; i++) {
+                const f = list[i];
+                try {
+                    const res = await fetch(`${API}/publish`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ path: f.path }),
+                    });
+                    const data = await res.json();
+                    if (data && data.success) {
+                        if (data.already_queued) already++;
+                        else ok++;
+                    } else {
+                        fail++;
+                        // 入队失败（通常是入参问题），表现不出来的 actual 发布错不需处理
+                        const li = document.createElement('li');
+                        li.className = 'fail';
+                        li.innerHTML = `✗ ${f.path}: ${(data && data.error) || ('HTTP ' + res.status)}`;
+                        errsUl.appendChild(li);
+                        // 把失败的从「in_queue」还原
+                        const item = (fileCache.failed || []).find(x => x.path === f.path);
+                        if (item) item.in_queue = false;
+                    }
+                } catch (e) {
+                    fail++;
+                    const li = document.createElement('li');
+                    li.className = 'fail';
+                    li.textContent = `✗ ${f.path}: ${e.message}`;
+                    errsUl.appendChild(li);
+                    const item = (fileCache.failed || []).find(x => x.path === f.path);
+                    if (item) item.in_queue = false;
+                }
+                const pct = Math.round(((i + 1) / list.length) * 100);
+                progressEl.style.width = pct + '%';
+                summaryEl.innerHTML = `进度：${i + 1} / ${list.length} &nbsp; · &nbsp; ✓ ${ok} 个已入队 &nbsp; · &nbsp; ↪ ${already} 个已在队列 &nbsp; · &nbsp; ✗ ${fail} 个入队失败`;
+            }
+
+            progressEl.classList.add('done');
+            // 总结行
+            const tail = document.createElement('p');
+            tail.style.marginTop = '10px';
+            tail.innerHTML = `<b>本次入队完成：</b>总 ${list.length} &nbsp; ✓ ${ok} 个新入队 &nbsp; ↪ ${already} 个已在队列 &nbsp; ✗ ${fail} 个入队失败`;
+            resultEl.appendChild(tail);
+            // 刷新队列角标 + 后面让轮询处理「in_queue → published / failed」状态写回
+            refreshQueue();
+            updateRepublishButton();
+            renderFileList();
+        }
+
+        function hideRepublishAllFailed() {
+            document.getElementById('republishAllFailedModal').classList.remove('show');
         }
 
         // ============ 工具 ============
