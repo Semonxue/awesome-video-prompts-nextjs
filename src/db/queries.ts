@@ -613,20 +613,51 @@ export async function getRelatedPrompts(
   // 2) 取候选的卡片字段（排除自己，限制 30 避免 hydrate 过量）
   const CANDIDATE_CAP = 30;
   const candidateIdArr = Array.from(candidateIds);
-  const rows = await db
-    .select()
-    .from(prompts)
-    .where(
-      and(
-        inArray(prompts.id, candidateIdArr),
-        eq(prompts.isDraft, 0),
-        ne(prompts.slug, sourcePrompt.slug),
-      ),
-    )
-    .orderBy(desc(prompts.promptDate), desc(prompts.id))
-    .limit(CANDIDATE_CAP);
 
-  if (rows.length === 0) return [];
+  // D1 单 query 的 SQL variables 上限实测 ~461。
+  // 热门 tag/model（cinematic/realistic/multi-shot/drama/happyhorse 等）单条 prompt
+  // 共享的候选集实测 3000+（如 2085641595437912197-maya-award-press-wall-confrontation = 3354），
+  // 单条 inArray 直塞会爆 → 必须分批。
+  // 修法（2026-08-08 修复）：CHUNK=50 保守值（实测 100 也炸，故减半），不分批 LIMIT，
+  // 全部取回后在 JS 端 dedupe + 排序裁剪到 CANDIDATE_CAP。
+  // 并发：CONCURRENCY=6 控制 D1 连接池（与 getAdjacentPrompts 并行的 3 query 一起也在同一池里）。
+  const CHUNK = 50;
+  const CONCURRENCY = 6;
+  const chunks: number[][] = [];
+  for (let i = 0; i < candidateIdArr.length; i += CHUNK) {
+    chunks.push(candidateIdArr.slice(i, i + CHUNK));
+  }
+  const candidateRows: Array<typeof prompts.$inferSelect> = [];
+  for (let i = 0; i < chunks.length; i += CONCURRENCY) {
+    const batch = chunks.slice(i, i + CONCURRENCY);
+    const batchResults = await Promise.all(
+      batch.map((idChunk) =>
+        db
+          .select()
+          .from(prompts)
+          .where(
+            and(
+              inArray(prompts.id, idChunk),
+              eq(prompts.isDraft, 0),
+              ne(prompts.slug, sourcePrompt.slug),
+            ),
+          )
+          .orderBy(desc(prompts.promptDate), desc(prompts.id)),
+      ),
+    );
+    for (const r of batchResults) candidateRows.push(...r);
+  }
+
+  if (candidateRows.length === 0) return [];
+
+  // dedupe by id（一个 prompt 可能因多 tag 重复进候选）+ 按 prompt_date DESC 裁剪
+  // 3354 候选 → 1.6MB JSON，D1 完全能扛；JS 端 sort 3354 项也是 ms 级
+  const rows = Array.from(new Map(candidateRows.map((r) => [r.id, r])).values())
+    .sort(
+      (a, b) =>
+        (b.promptDate ?? '').localeCompare(a.promptDate ?? '') || b.id - a.id,
+    )
+    .slice(0, CANDIDATE_CAP);
 
   // 3) hydrate 候选（行数 ≤ 30，最多 1 chunk，2 次 D1 round-trip）
   const hydrated = await hydratePrompts(rows);
