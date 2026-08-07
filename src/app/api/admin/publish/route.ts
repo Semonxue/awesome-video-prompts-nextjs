@@ -46,6 +46,7 @@ import { prompts, tags, models, promptTags, promptModels } from '@/db/schema';
 import { deriveYearMonth, keyFromMediaUrl, R2_KEY_PREFIX } from '@/lib/r2-keys';
 import { invalidateCache, CACHE_KEYS } from '@/db/cache';
 import { rebuildAllAggregateCaches } from '@/db/queries';
+import { syncAllDicts, type DictSyncCombined } from '@/lib/dict-sync';
 
 // 显式标记使用 schema 里的 import（防止 lint 报 unused）
 void prompts; void tags; void models; void promptTags; void promptModels;
@@ -96,6 +97,8 @@ interface PublishResult {
   promptId: number;
   /** 3.4 发布前备份结果（仅 update 时存在） */
   backup?: { ok: boolean; key?: string; error?: string };
+  /** 发布时字典校准结果（data/yaml → D1 models/tags）。best-effort，失败不阻断发布 */
+  dictSync?: DictSyncCombined;
 }
 
 interface PublishError {
@@ -545,6 +548,36 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
     await resetAssociations(d1, promptId, [], modelIds);
   }
 
+  // 10.5) 字典校准（data/yaml → D1 models + tags）
+  //       best-effort：校准失败只 warn 不阻断发布（yaml 真源是人工维护的，
+  //       异步问题不该影响主发布流程；deploy.sh 还会跑一次保险）。
+  //       位置：必须在 rebuildAllAggregateCaches() 之前，否则缓存会基于旧字典。
+  let dictSync: DictSyncCombined | undefined;
+  try {
+    dictSync = await syncAllDicts(d1, db);
+    const totalChanged =
+      dictSync.models.summary.inserted +
+      dictSync.models.summary.updated +
+      dictSync.models.summary.deleted +
+      dictSync.tags.summary.inserted +
+      dictSync.tags.summary.deleted;
+    if (totalChanged > 0) {
+      console.log(
+        `[admin/publish] dictSync: models +${dictSync.models.summary.inserted}/` +
+          `~${dictSync.models.summary.updated}/-${dictSync.models.summary.deleted}, ` +
+          `tags +${dictSync.tags.summary.inserted}/-${dictSync.tags.summary.deleted}`,
+      );
+    }
+    if (!dictSync.models.ok) {
+      console.warn(`[admin/publish] dictSync.models failed: ${dictSync.models.error}`);
+    }
+    if (!dictSync.tags.ok) {
+      console.warn(`[admin/publish] dictSync.tags failed: ${dictSync.tags.error}`);
+    }
+  } catch (e) {
+    console.warn(`[admin/publish] dictSync threw: ${(e as Error).message}`);
+  }
+
   // 11) revalidate
   const revalidated = revalidatePromptPaths(slug);
 
@@ -573,6 +606,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
     revalidated,
     promptId,
     ...(backup ? { backup } : {}),
+    ...(dictSync ? { dictSync } : {}),
   });
 }
 

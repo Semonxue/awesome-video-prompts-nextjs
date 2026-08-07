@@ -38,6 +38,7 @@ import {
   writeAggregateCache,
   type CountsCache,
 } from './aggregate-cache';
+import { MODELS_DICT, TAGS_DICT } from '@/lib/dict-yaml';
 
 /** 拿 D1 binding（OpenNext 注入 env.DB） */
 async function getD1(): Promise<D1Database> {
@@ -118,16 +119,18 @@ async function hydratePrompts(
   }
 
   // 按 promptId 索引
+  // name 优先走 data/yaml 真源（与 src/lib/dict-sync.ts 同步结果一致）；
+  // yaml 未收录时回退到 slug / formatModelName 保留旧逻辑避免界面变成空白。
   const tagsByPromptId = new Map<number, TagRef[]>();
   for (const t of tagRows) {
     const arr = tagsByPromptId.get(t.promptId) ?? [];
-    arr.push({ slug: t.slug, name: t.slug });
+    arr.push({ slug: t.slug, name: TAGS_DICT[t.slug]?.en ?? t.slug });
     tagsByPromptId.set(t.promptId, arr);
   }
   const modelsByPromptId = new Map<number, ModelRef[]>();
   for (const m of modelRows) {
     const arr = modelsByPromptId.get(m.promptId) ?? [];
-    arr.push({ slug: m.slug, name: formatModelName(m.slug) });
+    arr.push({ slug: m.slug, name: MODELS_DICT[m.slug]?.name ?? formatModelName(m.slug) });
     modelsByPromptId.set(m.promptId, arr);
   }
 
@@ -327,7 +330,8 @@ async function queryAllTags(): Promise<{ slug: string; name: string; count: numb
     .groupBy(tags.name)
     .orderBy(desc(sql`count(${promptTags.promptId})`), tags.name);
 
-  return rows.map((r) => ({ slug: r.slug, name: r.slug, count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
+  // name 取 yaml 真源（data/tags.yaml 默认英文）；yaml 未收录时回退到 slug
+  return rows.map((r) => ({ slug: r.slug, name: TAGS_DICT[r.slug]?.en ?? r.slug, count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
 }
 
 export async function listAllTags(): Promise<{ slug: string; name: string; count: number; updatedAt: string }[]> {
@@ -365,7 +369,8 @@ async function queryAllModels(): Promise<{ slug: string; name: string; count: nu
     .groupBy(models.slug, models.name)
     .orderBy(desc(sql`count(${promptModels.promptId})`), models.name);
 
-  return rows.map((r) => ({ slug: r.slug, name: formatModelName(r.slug), count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
+  // name 取 yaml 真源（data/models.yaml）；yaml 未收录时回退到 formatModelName 规则
+  return rows.map((r) => ({ slug: r.slug, name: MODELS_DICT[r.slug]?.name ?? formatModelName(r.slug), count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
 }
 
 export async function listAllModels(): Promise<{ slug: string; name: string; count: number; updatedAt: string }[]> {
@@ -410,7 +415,8 @@ async function queryModelTagDistribution(
     .groupBy(tags.name)
     .orderBy(desc(sql`count(${promptTags.promptId})`), tags.name);
 
-  return rows.map((r) => ({ slug: r.slug, name: r.slug, count: Number(r.count) }));
+  // name 取 yaml 真源（data/tags.yaml 默认英文）
+  return rows.map((r) => ({ slug: r.slug, name: TAGS_DICT[r.slug]?.en ?? r.slug, count: Number(r.count) }));
 }
 
 export async function listModelTagDistribution(

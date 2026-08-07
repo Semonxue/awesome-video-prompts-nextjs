@@ -143,13 +143,15 @@ else
   warn "无法从输出中提取 URL，请手动验证"
 fi
 
-# ─── Step 5b: 模型校准（以 data/models.yaml 为准）──────
-log "Step 5b/6 — 模型校准 (data/models.yaml → D1 models)..."
+# ─── Step 5b: 字典校准（以 data/{models,tags}.yaml 为准）──────────
+# sync-models.ts 已扩展为同时处理 models + tags 双字典。
+# publish route 也会在发布时 best-effort 同步，这里是部署时的二次保险。
+log "Step 5b/6 — 字典校准 (data/*.yaml → D1 models + tags)..."
 if ! npx tsx scripts/sync-models.ts 2>&1; then
-  err "模型校准失败，停止部署"
+  err "字典校准失败，停止部署"
   exit 1
 fi
-log "模型校准 ✓"
+log "字典校准 ✓"
 
 # ─── Step 6: 冒烟验证 ────────────────────────────────
 SMOKE_URL="${DEPLOY_URL:-${NEXT_PUBLIC_SITE_URL}}"
