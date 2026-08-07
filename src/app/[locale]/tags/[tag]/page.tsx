@@ -16,6 +16,7 @@ import { Footer } from '@/components/Footer';
 import { GridEngine } from '@/components/GridEngine';
 import { HEADER_TAG_LIMIT } from '@/components/types';
 import { listAllModels, listAllTags, listPrompts } from '@/db/queries';
+import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
 import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
 
 export const revalidate = 3600;
@@ -86,15 +87,22 @@ export default async function TagPage({ params, searchParams }: Props) {
   // 全集 tagOptions（顶部 tag tabs，不分 locale）
   // 只传前 N 个：Header 是客户端组件，全量 1486 个 tag 会被序列化进 RSC 载荷
   // （实测占首页 HTML 的 77%）。详见 components/types.ts 的 HEADER_TAG_LIMIT。
-  const allTags = (await listAllTags()).slice(0, HEADER_TAG_LIMIT);
+  // counts 缓存：Header intro "Collected N prompts" 需要全站总数，result.total
+  // 在 tag 页是该 tag 下的数，不能直接传给 Header（2026-08-07 修复）。
+  const [allTags, counts] = await Promise.all([
+    listAllTags(),
+    readAggregateCache<CountsCache>(AGG_CACHE_KEYS.counts),
+  ]);
+  const allTagsSliced = allTags.slice(0, HEADER_TAG_LIMIT);
+  const totalCount = counts?.total ?? 0;
 
   return (
     <>
       <Header
         locale={locale}
         activeTag={tag}
-        tagOptions={allTags}
-        totalCount={result.total}
+        tagOptions={allTagsSliced}
+        totalCount={totalCount}
       />
 
       <main className="main-content model-tag-page">

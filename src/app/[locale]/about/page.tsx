@@ -6,6 +6,7 @@ import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { locales, type Locale } from '@/i18n/request';
 import { listAllModels, listAllTags } from '@/db/queries';
+import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
@@ -45,11 +46,13 @@ export default async function AboutPage({ params }: AboutPageProps) {
   if (!locales.includes(rawLocale as Locale)) notFound();
   const locale = rawLocale as Locale;
 
-  const [t, modelOptions, tagOptions] = await Promise.all([
+  const [t, modelOptions, tagOptions, counts] = await Promise.all([
     getTranslations('about'),
     listAllModels(),
     listAllTags(),
+    readAggregateCache<CountsCache>(AGG_CACHE_KEYS.counts),
   ]);
+  const totalCount = counts?.total ?? 0;
 
   return (
     <>
@@ -57,6 +60,7 @@ export default async function AboutPage({ params }: AboutPageProps) {
         locale={locale}
         modelOptions={modelOptions}
         tagOptions={tagOptions}
+        totalCount={totalCount}
       />
 
       <div className="main-content about-page">

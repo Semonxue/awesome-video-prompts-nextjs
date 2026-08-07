@@ -16,6 +16,7 @@ import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { GridEngine } from '@/components/GridEngine';
 import { listAllModels, listAllTags, listPrompts, listModelTagDistribution } from '@/db/queries';
+import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
 import { formatModelName } from '@/lib/format';
 import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
 
@@ -80,10 +81,14 @@ export default async function ModelPage({ params, searchParams }: Props) {
   // 该 model 下的 tag 分布（专门 SQL + 跨实例缓存，2026-08-07 替换 listPrompts({ model }) 的错误实现）
   // 之前用 listPrompts({ model }) 默认 limit=24 拿分布是逻辑 bug（不全），且要走 3 次 D1 + 完整 hydrate
   // 现改 1 次 JOIN GROUP BY，1 次 D1 round-trip 完成，5 分钟跨实例缓存
-  const tagOptions = await listModelTagDistribution(model);
-
-  // 全集 modelOptions（顶部 model tabs，不分 locale）
-  const modelOptions = await listAllModels();
+  // counts 缓存：Header intro "Collected N prompts" 需要全站总数，result.total
+  // 在 model 页是该 model 下的数，不能直接传给 Header（2026-08-07 修复）。
+  const [tagOptions, modelOptions, counts] = await Promise.all([
+    listModelTagDistribution(model),
+    listAllModels(),
+    readAggregateCache<CountsCache>(AGG_CACHE_KEYS.counts),
+  ]);
+  const totalCount = counts?.total ?? 0;
 
   return (
     <>
@@ -93,7 +98,7 @@ export default async function ModelPage({ params, searchParams }: Props) {
         activeTag={sp.tag}
         modelOptions={modelOptions}
         tagOptions={tagOptions.slice(0, 12)}
-        totalCount={result.total}
+        totalCount={totalCount}
       />
 
       <main className="main-content model-tag-page">

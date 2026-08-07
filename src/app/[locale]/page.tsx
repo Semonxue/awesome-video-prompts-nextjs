@@ -10,6 +10,7 @@ import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { locales, type Locale } from '@/i18n/request';
 import { listPrompts, listAllModels, listAllTags } from '@/db/queries';
+import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { GridEngine } from '@/components/GridEngine';
@@ -88,8 +89,15 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
   // tag 只传前 N 个：Header 是客户端组件，props 会全量序列化进 RSC 载荷。
   // 实测全量传 1486 个 tag 导致 HTML 303KB 中有 235KB 是这份载荷（77%），
   // 而页面只渲染 15 个 chip。详见 components/types.ts 的 HEADER_TAG_LIMIT。
-  const [allModels, allTags] = await Promise.all([listAllModels(), listAllTags()]);
+  // counts 缓存：Header intro "Collected N prompts" 需要的是全站总数，不能用 result.total
+  // （带 ?tag= / ?model= / ?q= 时 result.total 是子集数，2026-08-07 修复）。
+  const [allModels, allTags, counts] = await Promise.all([
+    listAllModels(),
+    listAllTags(),
+    readAggregateCache<CountsCache>(AGG_CACHE_KEYS.counts),
+  ]);
   const headerTags = allTags.slice(0, HEADER_TAG_LIMIT);
+  const totalCount = counts?.total ?? 0;
 
   // "view more" 入口需要的本地化名字
   const activeModel = sp.model
@@ -105,7 +113,7 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
         activeModel={sp.model}
         modelOptions={allModels}
         tagOptions={headerTags}
-        totalCount={result.total}
+        totalCount={totalCount}
       />
 
       <main className="main-content">
