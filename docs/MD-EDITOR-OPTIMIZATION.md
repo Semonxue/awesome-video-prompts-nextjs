@@ -91,3 +91,94 @@
 
 - **D1：单数 `model:` 不处理。** 属历史问题，实际取用模型只用 1 个；编辑器保存时自动归一化为 `models: [x]` 数组。配套地，`/api/admin/publish` 关联重置的 PATCH 语义不严格问题（2.14）也接受现状。
 - **D2：草稿生产不做全自动化。** 沿用 dl-x-videos 驱动 LLM 下载草稿的流程，保留约 20% 人工干预和决策环节；不为编辑器加"新建草稿"入口。
+---
+
+## 6. 2026-08-09 体验优化批次（A/B/C/D）
+
+> owner 反馈的 4 项体验问题；前后端都已落地。
+
+### A. 视频自动展示（待编辑即看到素材是否真的存在）
+
+**改动**：`tools/md-editor/templates/index.html` 的 `updateMedia(fm)` 重写为不再用「点击播放」占位符，prompt 加载后立即创建 `<video>` 元素：
+
+- `autoplay + muted + playsInline + loop=true`（静音自动播放，符合 chrome/safari 策略）
+- `preload="metadata"`（仅拉 metadata，不下载整段）
+- `poster` 用 `fm.image`（封面图先顶位，弱网也能看到缩略图）
+- 鼠标 hover 时显示「🔇 静音自动播放中 · 点击开启声音」半透明 overlay
+- 点击 `<video>` 切换 `muted`（即「点一下开启声音」）
+- 失败回退：素材缺失 / 路径 404 / mp4 编码不被浏览器支持时，显示「⚠️ 视频未设置」/「加载失败」+ 提示路径，**不再有孤零零的「加载失败」**
+
+**收益**：编辑打开 prompt 第一眼就能验证 cover.jpg + video.mp4 真的存在；不需要「点击 → 等待 → 才看到画面」的两段式交互。
+
+### B. 主操作区紧凑化（少滚屏）
+
+**改动**：表单布局由 4 行压成 2 行：
+
+- 第 1 行：模型（原 radio chips → `<select>` 下拉，一行结束）+ 作者 / 来源链接
+- 第 2 行：标签（保留逗号分隔）+ 发布日期（同一行）
+
+**实现细节**：
+
+- 模型用 `<select>` + 占位「— 无 —」选项；`selectedModel` 状态保留；`onchange` 直接更新；选择值写入 `fm.models = [selected]` 数组
+- 标签 / 日期输入形式不变（按 owner 修正指示）；保留原 input 行为，节省一行高度
+- 所有 input 加 `box-sizing: border-box`，与 panel 同步填满
+- `tags-col` flex: 1 + `date-col` width: 130px：一长一短，留出合理比例
+
+**收益**：以前必须滚屏才能填完日期；现在 1280×800 默认尺寸下 4 个字段全部在视口顶部，视频预览仍可同时看到。
+
+### C. 发布前先保存
+
+**改动**：`publishCurrent()` 流程改为「**先 doSave → 仅成功才入队**」：
+
+1. `await doSave({ path, data, body })` ← 编辑改动先写盘
+2. 看 `saveResult.ok` → false 直接 abort（toast 提示「保存失败，已中止发布」）
+3. 通过 → `await fetch(/api/publish)` 入队
+
+**UX 加强**：
+
+- toast 阶段化：「💾 正在保存...」→「✅ "xxx" 已入队（本次批次共 N 个）」
+- 失败时不再神秘地"看起来保存了但没发布"
+- `doSave()` 返回 `{ ok, status, error }` 让 `publishCurrent()` 能决策；之前成功路径无返回值
+
+**注意**：发布前已经是干净的 front matter，没有歧义（之前旧代码确实已经是「先保存再发布」，但失败时静默继续；本次加强错误反馈）。
+
+### D. 1 分钟延迟发布队列 + 立即发布按钮
+
+**改动**：
+
+**D1 前端 — 队列面板**（`templates/index.html`）：
+
+- 编辑区底部新增 `<div class="queue-panel" id="queuePanel">`：显示「N 个待发布 · 距下次发布 MM:SS」+「🚀 立即发布」按钮
+- 倒计时每秒更新（视觉 1s 节流，不调接口）
+- 队列里有任务时显示；队列为空时自动隐藏（不占位）
+- 「立即发布」点 2 次确认（避免误操作），成功后 toast：「🚀 立即发布：N 个（剩余 M）」
+- 调用 `/api/queue` 返回 `delay_seconds` / `earliest_publish_at` / `batch_size` / `fs_queued_count` 等
+- 调用 `/api/publish` 返回 `batch_size` 让前端 toast 显示「本次批次共 N 个」
+- `repubsubmitAllFailed` 流程文案内也同步说明「会进入 60s 延迟队列；可点编辑器底部立即发布跳过」
+
+**D2 后端 — worker 延迟逻辑**（`tools/md-editor/server.py`）：
+
+- 新增配置 `QUEUE_DELAY_SECONDS`（默认 60；可通过 `.dev.vars` 里 `MD_EDITOR_PUBLISH_DELAY_SECONDS=0` 关闭）
+- 新增 `scanned_queued()`：扫 fs 返回 `{count, earliest_publish_at, batch_size}`
+- 新增 `flush_queued_to_past()`：把所有 queued_at 改成 1970-01-01，唤醒 worker 立刻处理
+- 重写 `worker_loop()`：从「event-driven」改为「1s 扫描 + event 唤醒」。每秒扫 fs：
+  - 找 `earliest_publish_queued_at`
+  - 把 `publish_queued_at + QUEUE_DELAY <= earliest + DELAY` 的入内存队列（即同批次）
+  - 串行 `publish_one()` 调用
+- **crash recovery 跳过延迟**：服务重启时凡扫到 `publish_queued_at` 的直接入队（因为重启就是要尽力恢复，不应该再等 60s）
+- `/api/queue` 改返回 `delay_seconds` / `earliest_publish_at` / `now` 给前端做倒计时
+- `/api/publish` 改返回 `delay_seconds` / `batch_size` / `earliest_publish_at`
+- 新增 `/api/flush-queue` 路由（POST）；前端 `flushQueueNow()` 调用
+
+**收益**：频繁发布多个草稿时 1 分钟内能攒成单批次，节省 N 次「单文件 POST」+ R2 上传。同时所有发布结果统一收口到 front matter，故障排查更简单。
+
+---
+
+## 7. 验证方式（2026-08-09 批次）
+
+- A. 打开任意有 `video:` 字段的草稿 → 编辑区视频框立即自动开始播放（静音，但有首帧 + 实时画面）；点击 video 一次 → 出现声音控制；hover 显示提示；失败素材显示「⚠️ 视频未设置」红字
+- B. 1280×800 浏览器窗口：标题、模型、标签、日期、作者 5 个字段 + 视频预览全在视口顶部，不再滚屏
+- C. 编辑后未点保存直接点发布 → 状态：先「💾 正在保存」→ 然后「✅ 已入队」；故意把 path 改坏再点发布 → 弹 toast「保存失败，已中止发布」
+- D. 5 秒内点 3 个草稿的「发布」→ 底部面板出现「3 个待发布 · 距下次发布 01:00 · 倒计时逐秒减少」；点「🚀 立即发布」→ toast 显示「3 个」，3 个草稿几乎同时变 published 状态
+- D. `.dev.vars` 加 `MD_EDITOR_PUBLISH_DELAY_SECONDS=5`，重启服务 → 文件列表点发布后右下「下一批 00:05」
+

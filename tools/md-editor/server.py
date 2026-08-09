@@ -16,6 +16,7 @@ import os
 import re
 import json
 import shutil
+import time
 import sys
 import threading
 import urllib.request
@@ -72,6 +73,11 @@ NEW_SITE_LIST_PROMPT_URL = _DEV_VARS.get(
     "https://awesome-video-prompts-nextjs.semonxue.workers.dev/api/admin/list-prompt",
 )
 NEW_SITE_ADMIN_SECRET = _DEV_VARS.get("NEW_SITE_ADMIN_SECRET", "")
+
+# D: 发布批次延迟（秒）。可在 .dev.vars 覆盖：MD_EDITOR_PUBLISH_DELAY_SECONDS=0 表示立刻发布
+QUEUE_DELAY_SECONDS = int(_DEV_VARS.get("MD_EDITOR_PUBLISH_DELAY_SECONDS", "60"))
+
+
 
 
 # ============================================================
@@ -389,6 +395,74 @@ def count_fs_queued() -> int:
     return count
 
 
+def _parse_iso_dt(s):
+    if not s:
+        return None
+    try:
+        if isinstance(s, datetime):
+            return s.timestamp()
+        s = str(s).strip()
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        return datetime.fromisoformat(s).timestamp()
+    except Exception:
+        return None
+
+
+def scanned_queued():
+    """扫 fs，返回 {count, earliest_publish_at, batch_size}"""
+    if not DRAFT_CONTENT_DIR.exists():
+        return {"count": 0, "earliest_publish_at": None, "batch_size": 0}
+    times = []
+    for mf in iter_draft_files():
+        draft = read_draft(mf)
+        if not draft:
+            continue
+        if has_publish_queued(draft["data"]):
+            t = _parse_iso_dt(draft["data"].get("publish_queued_at"))
+            if t is not None:
+                times.append(t)
+    if not times:
+        return {"count": 0, "earliest_publish_at": None, "batch_size": 0}
+    times.sort()
+    earliest = times[0]
+    if QUEUE_DELAY_SECONDS <= 0:
+        batch_size = len(times)
+        earliest_publish = earliest
+    else:
+        window_end = earliest + max(QUEUE_DELAY_SECONDS, 5)
+        batch_size = sum(1 for t in times if t <= window_end)
+        earliest_publish = earliest + QUEUE_DELAY_SECONDS
+    return {
+        "count": len(times),
+        "earliest_publish_at": datetime.fromtimestamp(earliest_publish, tz=timezone.utc).astimezone().isoformat(timespec="seconds"),
+        "batch_size": batch_size,
+    }
+
+
+def flush_queued_to_past():
+    """/api/flush-queue 调用：把所有 publish_queued_at 改到过去，唤醒 worker 立刻处理"""
+    if not DRAFT_CONTENT_DIR.exists():
+        return 0
+    past_iso = "1970-01-01T00:00:00+00:00"
+    touched = 0
+    for mf in iter_draft_files():
+        draft = read_draft(mf)
+        if not draft:
+            continue
+        if has_publish_queued(draft["data"]):
+            new_fm = dict(draft["data"])
+            new_fm["publish_queued_at"] = past_iso
+            try:
+                write_draft(mf, new_fm, draft["body"], draft["format"])
+                touched += 1
+            except Exception as e:
+                print(f"[flush_queue] 写 {mf} 失败: {e}")
+    if touched:
+        _pending_event.set()
+    return touched
+
+
 # ============================================================
 # 发布核心（handler 和 worker 共用）
 # ============================================================
@@ -538,10 +612,53 @@ def worker_loop() -> None:
     else:
         print("[worker] crash recovery: 无遗留任务")
 
-    print("[worker] 主循环开始")
+    print(f"[worker] 主循环开始（批次延迟 {QUEUE_DELAY_SECONDS}s）")
     while True:
-        _pending_event.wait()
+        # 计算「最早 publish_queued_at + DELAY」的过期时间，决定这次要等多久
+        earliest_expires = None
+        if DRAFT_CONTENT_DIR.exists():
+            for mf in iter_draft_files():
+                draft = read_draft(mf)
+                if not draft or not has_publish_queued(draft["data"]):
+                    continue
+                t = _parse_iso_dt(draft["data"].get("publish_queued_at"))
+                if t is None:
+                    continue
+                expires = (t + QUEUE_DELAY_SECONDS) if QUEUE_DELAY_SECONDS > 0 else t
+                if earliest_expires is None or expires < earliest_expires:
+                    earliest_expires = expires
+        if earliest_expires is None:
+            wait_sec = 1.0
+        else:
+            now = time.time()
+            wait_sec = max(0.05, earliest_expires - now)
+        # 阻塞到「下一次过期」或被 flush / 新入队 Event 唤醒
+        _pending_event.wait(timeout=wait_sec)
         _pending_event.clear()
+        # 把所有「t + DELAY ≤ now + 0.5s」的 publish_queued_at 入内存队列
+        try:
+            now = time.time()
+            if DRAFT_CONTENT_DIR.exists():
+                if QUEUE_DELAY_SECONDS <= 0:
+                    for mf in iter_draft_files():
+                        draft = read_draft(mf)
+                        if draft and has_publish_queued(draft["data"]):
+                            rel = str(mf.relative_to(PROJECT_ROOT))
+                            enqueue_publish(rel)
+                else:
+                    for mf in iter_draft_files():
+                        draft = read_draft(mf)
+                        if not draft or not has_publish_queued(draft["data"]):
+                            continue
+                        t = _parse_iso_dt(draft["data"].get("publish_queued_at"))
+                        if t is None:
+                            continue
+                        if (t + QUEUE_DELAY_SECONDS) <= (now + 0.5):  # 0.5s 容差
+                            rel = str(mf.relative_to(PROJECT_ROOT))
+                            enqueue_publish(rel)
+        except Exception as e:
+            print(f"[worker] 扫描 fs 时异常: {e}")
+        # 串行消费
         while True:
             path = dequeue_publish()
             if path is None:
@@ -550,11 +667,11 @@ def worker_loop() -> None:
             try:
                 result = publish_one(path)
                 if result.get("success"):
-                    print(f"[worker] ✅ {path} → slug={result.get('slug')}")
+                    print(f"[worker] OK {path} -> slug={result.get('slug')}")
                 else:
-                    print(f"[worker] ❌ {path} → {result.get('error')}")
+                    print(f"[worker] FAIL {path} -> {result.get('error')}")
             except Exception as e:
-                print(f"[worker] ⚠ {path} 抛异常: {e}")
+                print(f"[worker] EXC {path}: {e}")
                 _mark_failed_in_fm(path, str(e))
     print("[worker] 主循环结束（不应该到这里）")
 
@@ -727,6 +844,8 @@ class EditorHandler(SimpleHTTPRequestHandler):
             self.handle_delete_online()
         elif path == "/api/unpublish-online":
             self.handle_unpublish_online()
+        elif path == "/api/flush-queue":
+            self.handle_flush_queue()
         elif path == "/api/parse":
             self.handle_parse()
         else:
@@ -998,21 +1117,43 @@ class EditorHandler(SimpleHTTPRequestHandler):
             self.send_json({"success": False, "error": f"write failed: {e}"}, 500)
             return
 
-        enqueued = enqueue_publish(rel_path)
-
+        _pending_event.set()  # 唤醒 worker 重算 earliest_expires（worker 会按 t+DELAY 决定何时入队）
+        # 检查 fs 是否已经有 publish_queued_at（之前可能已入队）
+        # 注：本文里 publish_queued_at 是唯一的状态源，重复点「发布」也只是再写一次时间戳
+        scan = scanned_queued()
         self.send_json({
             "success": True,
             "queued": True,
-            "already_queued": not enqueued,
             "path": rel_path,
+            "delay_seconds": QUEUE_DELAY_SECONDS,
+            "batch_size": scan.get("batch_size") or 1,
+            "fs_queued_count": scan.get("count", 0),
+            "earliest_publish_at": scan.get("earliest_publish_at"),
         })
 
     # -------------------- 队列状态查询 --------------------
     def handle_queue(self):
-        """前端轮询用：返回内存队列 + fs 上还在队列里的 md 数量"""
+        scan = scanned_queued()
         self.send_json({
-            "queue_size": len(queue_snapshot()),   # 内存队列（含正在处理的）
-            "fs_queued_count": count_fs_queued(),  # fs 上有 publish_queued_at 的（兜底）
+            "queue_size": len(queue_snapshot()),
+            "fs_queued_count": scan["count"],
+            "batch_size": scan["batch_size"],
+            "earliest_publish_at": scan["earliest_publish_at"],
+            "delay_seconds": QUEUE_DELAY_SECONDS,
+            "now": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
+        })
+
+    # -------------------- 立即发布（跳过延迟） --------------------
+    def handle_flush_queue(self):
+        """POST /api/flush-queue：跳过延迟，立刻发布当前批次"""
+        touched = flush_queued_to_past()
+        time.sleep(0.3)
+        scan = scanned_queued()
+        self.send_json({
+            "ok": True,
+            "processed": touched,
+            "remaining": scan["count"],
+            "flush_at": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
         })
 
     # -------------------- 清理已发布草稿（md/json 通用） --------------------
@@ -1370,7 +1511,7 @@ def run_server(port: int = 3000):
     print(f"   草稿目录: {DRAFT_CONTENT_DIR}")
     print(f"   Publish URL: {NEW_SITE_PUBLISH_URL}")
     print(f"   Admin Secret: {'✓ configured' if NEW_SITE_ADMIN_SECRET else '✗ MISSING (set NEW_SITE_ADMIN_SECRET in .dev.vars)'}")
-    print(f"   发布队列：内存 deque + 单 worker 线程（崩溃后重启自动恢复）")
+    print(f"   发布队列：内存 deque + 单 worker 线程（崩溃后重启自动恢复；批次延迟 {QUEUE_DELAY_SECONDS}s，可在 .dev.vars 用 MD_EDITOR_PUBLISH_DELAY_SECONDS 覆盖）")
     _verify_new_site()
     server = HTTPServer(("localhost", port), EditorHandler)
     try:

@@ -20,7 +20,7 @@
         .resize-handle { width: 4px; cursor: col-resize; background: transparent; transition: background 0.2s; flex-shrink: 0; }
         .resize-handle:hover { background: var(--accent-color); }
         .file-list-header { padding: 10px 12px; border-bottom: 1px solid var(--border-color); background: var(--bg-primary); font-weight: 600; font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
-        .file-list-actions { display: flex; gap: 6px; }
+        .file-list-actions { display: flex; gap: 6px; flex-wrap: wrap; }
         .refresh-btn, .cleanup-btn, .load-btn { background: none; border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
         .refresh-btn:hover, .cleanup-btn:hover, .load-btn:hover { background: var(--bg-tertiary); }
         .cleanup-btn { color: var(--warning-color); border-color: var(--warning-color); }
@@ -78,45 +78,66 @@
         .btn-toggle.active { background: var(--accent-color); color: white; border-color: var(--accent-color); }
         .editor-content { flex: 1; overflow-y: auto; padding: 12px; }
 
-        .form-row { margin-bottom: 10px; }
-        .form-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; display: block; }
-        .form-input { width: 100%; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; background: var(--bg-primary); color: var(--text-primary); }
+        .form-row { margin-bottom: 8px; }
+        .form-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 3px; display: block; }
+        .form-input { width: 100%; padding: 5px 7px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; background: var(--bg-primary); color: var(--text-primary); box-sizing: border-box; }
         .form-input:focus { outline: none; border-color: var(--accent-color); }
-        .selector-options { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-        .selector-chip { padding: 3px 8px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 12px; font-size: 11px; cursor: pointer; }
-        .selector-chip:hover { border-color: var(--accent-color); }
-        .selector-chip.selected { background: var(--accent-color); color: white; border-color: var(--accent-color); }
-        .model-radio { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: 1px solid var(--border-color); border-radius: 12px; font-size: 11px; cursor: pointer; background: var(--bg-tertiary); user-select: none; }
-        .model-radio:hover { border-color: var(--accent-color); }
-        .model-radio input { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; }
-        .model-radio.checked { background: var(--accent-color); color: white; border-color: var(--accent-color); }
-        .model-radio.none-option { font-style: italic; opacity: 0.7; }
+        .form-select { width: 100%; padding: 5px 7px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; background: var(--bg-primary); color: var(--text-primary); box-sizing: border-box; cursor: pointer; }
+        .form-select:focus { outline: none; border-color: var(--accent-color); }
+
+        /* B: 标签 + 发布时间同一行（一行紧凑） */
+        .meta-row { display: flex; gap: 8px; margin-bottom: 8px; }
+        .meta-row .tags-col { flex: 1; min-width: 0; }
+        .meta-row .date-col { width: 130px; flex-shrink: 0; }
+
+        /* B: 模型 + 作者/来源 同行 */
+        .row-model-author { display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-end; }
+        .row-model-author .model-col { width: 180px; flex-shrink: 0; }
+        .row-model-author .author-col { flex: 1; min-width: 0; }
+        .row-model-author .form-input,
+        .row-model-author .form-select,
+        .row-model-author .source-btn { padding: 5px 7px; }
 
         .source-row { display: flex; gap: 8px; align-items: center; }
-        .source-row input[type="text"] { width: 100px; }
-        .source-row input[type="url"] { flex: 1; }
-        .source-btn { padding: 6px 10px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; font-size: 11px; text-decoration: none; }
+        .source-btn { padding: 5px 8px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; font-size: 11px; text-decoration: none; color: var(--text-primary); }
         .source-btn:hover { background: var(--border-color); }
         .source-btn.active { background: var(--accent-color); color: white; border-color: var(--accent-color); }
 
-        .media-preview { display: flex; gap: 8px; margin-top: 8px; }
-        .media-item { flex: 1; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden; }
-        .media-label { font-size: 10px; color: var(--text-muted); padding: 4px 8px; background: var(--bg-tertiary); }
-        .media-content { height: 120px; display: flex; align-items: center; justify-content: center; background: var(--bg-primary); }
+        .media-preview { display: flex; gap: 8px; margin-top: 6px; }
+        .media-item { flex: 1; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden; min-width: 0; }
+        .media-label { font-size: 10px; color: var(--text-muted); padding: 3px 8px; background: var(--bg-tertiary); }
+        .media-content { height: 120px; display: flex; align-items: center; justify-content: center; background: var(--bg-primary); position: relative; overflow: hidden; }
         .media-content img, .media-content video { max-width: 100%; max-height: 100%; object-fit: contain; }
-        .lazy-media { cursor: pointer; color: var(--accent-color); font-size: 12px; padding: 20px; text-align: center; transition: background 0.2s; }
-        .lazy-media:hover { background: var(--bg-tertiary); }
+        /* A: 自动视频播放器（autoplay+muted+controls）。点击播放/暂停/调音量 */
+        .auto-video { width: 100%; height: 100%; max-height: 110px; display: block; background: #000; cursor: pointer; }
+        .media-missing { color: var(--error-color); font-size: 11px; padding: 10px; text-align: center; line-height: 1.5; }
+        .media-missing .hint { color: var(--text-muted); font-size: 10px; margin-top: 4px; display: block; }
+        .media-autoplay-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; background: rgba(0,0,0,0.35); pointer-events: none; opacity: 0; transition: opacity 0.2s; }
+        .media-content:hover .media-autoplay-overlay { opacity: 1; }
 
         .source-editor { display: none; flex-direction: column; height: 100%; }
         .source-editor.active { display: flex; }
         .source-editor textarea { flex: 1; width: 100%; padding: 12px; border: none; font-family: 'Monaco', 'Menlo', monospace; font-size: 12px; line-height: 1.5; resize: none; background: var(--bg-primary); color: var(--text-primary); }
+
+        /* D: 队列面板（编辑区底部） */
+        .queue-panel { padding: 8px 12px; border-top: 1px solid var(--border-color); background: var(--bg-secondary); font-size: 11px; color: var(--text-secondary); display: flex; align-items: center; gap: 10px; }
+        .queue-panel.hidden { display: none; }
+        .queue-panel .qp-info { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .queue-panel .qp-count { font-weight: 600; color: var(--accent-color); }
+        .queue-panel .qp-countdown { font-family: ui-monospace, SFMono-Regular, monospace; color: var(--accent-color); font-weight: 600; font-size: 12px; }
+        .queue-panel .qp-countdown.ready { color: var(--success-color); }
+        .queue-panel .qp-actions { display: flex; gap: 6px; }
+        .queue-panel .qp-actions .qp-btn { background: var(--success-color); color: white; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+        .queue-panel .qp-actions .qp-btn:disabled { background: var(--bg-tertiary); color: var(--text-muted); cursor: not-allowed; }
+        .queue-panel .qp-actions .qp-btn:not(:disabled):hover { background: #218838; }
+        .queue-panel .qp-actions .qp-btn-warn { background: var(--warning-color); color: white; }
 
         .toast { position: fixed; bottom: 20px; right: 20px; background: var(--success-color); color: white; padding: 10px 16px; border-radius: 4px; font-size: 12px; opacity: 0; transform: translateY(10px); transition: all 0.2s; z-index: 1000; max-width: 400px; word-break: break-all; }
         .toast.show { opacity: 1; transform: translateY(0); }
         .toast.error { background: var(--error-color); }
         .toast.warn { background: var(--warning-color); }
         .empty-state { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); }
-        .desc-textarea { width: 100%; min-height: 250px; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; font-family: 'Monaco', 'Menlo', monospace; font-size: 12px; line-height: 1.5; resize: vertical; background: var(--bg-primary); color: var(--text-primary); }
+        .desc-textarea { width: 100%; min-height: 200px; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; font-family: 'Monaco', 'Menlo', monospace; font-size: 12px; line-height: 1.5; resize: vertical; background: var(--bg-primary); color: var(--text-primary); box-sizing: border-box; }
 
         /* ===== 模态框 ===== */
         .modal-mask { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999; align-items: center; justify-content: center; }
@@ -130,7 +151,7 @@
         .modal-body .skip { color: var(--text-muted); }
         .modal-body .warn { color: var(--warning-color); }
         .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
-        .modal-input { width: 100%; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 13px; }
+        .modal-input { width: 100%; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 13px; box-sizing: border-box; }
     </style>
 </head>
 <body>
@@ -159,6 +180,10 @@
                 </div>
             </div>
             <div class="file-items" id="fileItems"><div class="empty-state">加载中...</div></div>
+            <!-- D: 队列侧栏角标（保留简洁的 tab 角标） -->
+            <div style="padding: 6px 12px; border-top: 1px solid var(--border-color); font-size: 11px; color: var(--text-muted); background: var(--bg-primary);">
+                💡 点「发布」后会进入队列；连续点多个草稿可攒成一个批次统一发出（默认 1 分钟延迟，详见底部「发布队列」）。
+            </div>
         </div>
         <div class="resize-handle" id="resizeHandle"></div>
 
@@ -181,30 +206,53 @@
                         <label class="form-label">标题</label>
                         <input type="text" class="form-input" id="inputTitle">
                     </div>
-                    <div class="form-row">
-                        <label class="form-label">模型 <button class="source-btn" onclick="loadMetadata()" title="重新加载 data/models.yaml">🔄</button></label>
-                        <div class="selector-options" id="modelSelector"></div>
+
+                    <!-- B: 紧凑布局：模型下拉 + 作者 + 来源链接同一行；标签 + 日期同一行 -->
+                    <div class="row-model-author">
+                        <div class="model-col">
+                            <label class="form-label">模型 <button class="source-btn" onclick="loadMetadata()" title="重新加载 data/models.yaml" style="padding: 1px 6px; font-size: 10px;">🔄</button></label>
+                            <select class="form-select" id="inputModel"><option value="">— 无 —</option></select>
+                        </div>
+                        <div class="author-col">
+                            <label class="form-label">作者 / 来源链接</label>
+                            <div class="source-row">
+                                <input type="text" class="form-input" id="inputAuthor" placeholder="作者" style="width: 120px;">
+                                <input type="url" class="form-input" id="inputSourceUrl" placeholder="来源链接" oninput="syncSourceLink()" style="flex: 1;">
+                                <a class="source-btn" id="openNewTab" target="md_editor_source_link" title="新窗口（可拖到分栏）">↗️</a>
+                            </div>
+                        </div>
                     </div>
-                    <div class="form-row">
-                        <label class="form-label">标签（逗号分隔）</label>
-                        <input type="text" class="form-input" id="inputTags">
+
+                    <div class="meta-row">
+                        <div class="tags-col">
+                            <label class="form-label">标签（逗号分隔）</label>
+                            <input type="text" class="form-input" id="inputTags" placeholder="cinematic, advertisement, car">
+                        </div>
+                        <div class="date-col">
+                            <label class="form-label">发布日期</label>
+                            <input type="text" class="form-input" id="inputPostDate" placeholder="YYYY-MM-DD">
+                        </div>
                     </div>
-                    <div class="form-row source-row">
-                        <input type="text" class="form-input" id="inputAuthor" placeholder="作者">
-                        <input type="url" class="form-input" id="inputSourceUrl" placeholder="来源链接" oninput="syncSourceLink()">
-                        <a class="source-btn" id="openNewTab" target="md_editor_source_link" title="新窗口（可拖到分栏）">↗️</a>
-                    </div>
-                    <div class="form-row">
-                        <label class="form-label">发布日期 (post_date)</label>
-                        <input type="text" class="form-input" id="inputPostDate" placeholder="YYYY-MM-DD">
-                    </div>
+
                     <div class="media-preview">
                         <div class="media-item"><div class="media-label">封面图</div><div class="media-content" id="imagePreview">-</div></div>
                         <div class="media-item"><div class="media-label">视频</div><div class="media-content" id="videoPreview">-</div></div>
                     </div>
-                    <div class="form-row" style="margin-top: 12px;">
+                    <div class="form-row" style="margin-top: 10px;">
                         <label class="form-label">描述内容（无缩进）</label>
                         <textarea class="desc-textarea" id="inputDescription" placeholder="输入描述..."></textarea>
+                    </div>
+                </div>
+                <!-- D: 队列面板（编辑区底部） -->
+                <div class="queue-panel hidden" id="queuePanel">
+                    <div class="qp-info">
+                        <span>📋 发布队列</span>
+                        <span class="qp-count" id="qpCount">0 个待发布</span>
+                        <span id="qpCountdownWrap" hidden>· 距下次发布 <span class="qp-countdown" id="qpCountdown">--</span></span>
+                        <span id="qpReadyWrap" hidden>· <span style="color: var(--success-color); font-weight: 600;">已达到延迟阈值，worker 正在消费</span></span>
+                    </div>
+                    <div class="qp-actions">
+                        <button class="qp-btn" id="qpFlushBtn" onclick="flushQueueNow()">🚀 立即发布</button>
                     </div>
                 </div>
             </div>
@@ -232,7 +280,7 @@
             <div class="modal-title">⬇️ 从线上 D1 加载到草稿</div>
             <div class="modal-body">
                 <p style="margin-bottom: 8px;">输入线上 prompt 的 slug（kebab-case）。</p>
-                <p style="margin-bottom: 8px;">会写到 <code>content/_drafts/prompts/&lt;YYYY-MM&gt;/&lt;slug&gt;.json</code>，并标记为已发布状态。</p>
+                <p style="margin-bottom: 8px;">会写到 <code>content/_drafts/prompts/<YYYY-MM>/<slug>.json</code>，并标记为已发布状态。</p>
                 <input type="text" class="modal-input" id="onlineSlugInput" placeholder="例如：206987039866945601-crocodile-floodgate">
             </div>
             <div class="modal-actions">
@@ -300,8 +348,9 @@
     <div class="toast" id="toast"></div>
 
     <script>
+        // ============ 全局状态 ============
         let currentFile = null;
-        let models = {};
+        let models = {};                          // {slug: name}
         let selectedModel = '';
         let formData = {};
         let currentRaw = '';
@@ -310,6 +359,8 @@
         let mediaRefreshToken = Date.now();
         let activeTab = 'unpublished';
         let fileCache = { unpublished: [], published: [], failed: [] };
+        // D: 队列前端状态（来自 /api/queue）
+        let queueInfo = { count: 0, next_publish_at: null, now: null, delay_seconds: 60 };
 
         const API = '/api';
 
@@ -317,6 +368,9 @@
             loadFileList();
             loadMetadata();
             initResize();
+            initQueuePanel();
+            // D: 每秒刷新倒计时（视觉上 1s 节流，不调接口）
+            setInterval(updateCountdownDisplay, 1000);
         });
 
         function initResize() {
@@ -383,7 +437,7 @@
                 if (f.published_error) meta.push(`❌ ${f.published_error.slice(0, 50)}`);
                 const queuePrefix = f.in_queue ? '<span class="queue-icon">⏳ </span>' : '';
                 return `<div class="${cls}" onclick="openFile('${f.path.replace(/'/g, "\\'")}')">
-                    <div class="file-name" title="${f.name}">${queuePrefix}${(f.title || f.name).replace(/</g, '&lt;')}</div>
+                    <div class="file-name" title="${f.name}">${queuePrefix}${(f.title || f.name).replace(/</g, '<')}</div>
                     <div class="file-date">${f.date}${meta.length ? ' · ' + meta.join(' · ') : ''}</div>
                 </div>`;
             }).join('');
@@ -395,7 +449,7 @@
             renderFileList();
         }
 
-        // ============ 元数据 ============
+        // ============ 元数据（模型 — 用下拉） ============
         async function loadMetadata() {
             try {
                 const res = await fetch(`${API}/metadata?type=models`);
@@ -407,32 +461,24 @@
         }
 
         function renderModels() {
-            const el = document.getElementById('modelSelector');
-            if (!el) return;
+            const sel = document.getElementById('inputModel');
+            if (!sel) return;
             const entries = Object.entries(models);
-            // 第一项加"无"选项（兼容 fm 里完全没有 model 字段的情况）
-            const noneOption = `<label class="model-radio none-option${!selectedModel ? ' checked' : ''}">
-                <input type="radio" name="modelRadio" value=""${!selectedModel ? ' checked' : ''} onchange="selectModel('')">—
-            </label>`;
-            const radios = entries.map(([slug, m]) => {
-                const checked = selectedModel === slug ? 'checked' : '';
-                const cls = checked ? ' checked' : '';
-                return `<label class="model-radio${cls}">
-                    <input type="radio" name="modelRadio" value="${slug}"${checked ? ' checked' : ''} onchange="selectModel('${slug}')">${m.name}
-                </label>`;
-            }).join('');
-            el.innerHTML = noneOption + radios;
+            // 保留"无"选项在最前；其余按原顺序
+            const opts = ['<option value="">— 无 —</option>']
+                .concat(entries.map(([slug, m]) => `<option value="${slug}">${escapeHtml(m.name || slug)}</option>`));
+            sel.innerHTML = opts.join('');
+            sel.value = selectedModel || '';
+            sel.onchange = () => { selectedModel = sel.value; };
         }
 
-        function selectModel(slug) {
-            selectedModel = slug;
-            renderModels();
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({ '&': '&', '<': '<', '>': '>', '"': '"', "'": '&#39;' }[c]));
         }
 
         // ============ 打开文件（md/json 通用） ============
         async function openFile(filePath) {
             if (currentFile === filePath) return;
-            const modeForm = document.getElementById('formEditor').style.display === 'flex';
             currentFile = filePath;
             document.getElementById('emptyState').style.display = 'none';
             document.getElementById('formEditor').style.display = 'flex';
@@ -483,7 +529,7 @@
                 // 发布按钮可用性（已发布的允许重新发布）
                 document.getElementById('publishBtn').disabled = false;
 
-                // 媒体
+                // 媒体（A: 自动展示）
                 updateMedia(fm);
 
                 document.getElementById('sourceTextarea').value = currentRaw;
@@ -505,11 +551,13 @@
             document.getElementById('inputSourceUrl').value = fm.source_url || '';
             syncSourceLink();
             document.getElementById('inputPostDate').value = fm.post_date || fm.date || '';
+            // 标签（兼容 array / 逗号字符串）
             let tags = fm.tags;
             if (Array.isArray(tags)) tags = tags.join(', ');
             else if (typeof tags !== 'string') tags = '';
             document.getElementById('inputTags').value = tags;
 
+            // 模型（B: 下拉选中）
             if (Array.isArray(fm.models) && fm.models.length > 0) selectedModel = String(fm.models[0]);
             else if (typeof fm.models === 'string' && fm.models) selectedModel = fm.models;
             else if (typeof fm.model === 'string' && fm.model) selectedModel = fm.model;
@@ -551,43 +599,81 @@
             return u + (u.includes('?') ? '&' : '?') + 'v=' + mediaRefreshToken;
         }
 
+        // A: 视频自动展示（创建 video 元素 + autoplay+muted+playsinline，点 video 切换播放/暂停）
         function updateMedia(fm) {
             const imgEl = document.getElementById('imagePreview');
             const vidEl = document.getElementById('videoPreview');
             let imgPath = fm.image || '';
             let vidPath = fm.video || '';
+
             if (imgPath) {
                 imgPath = withCacheBust(resolveMediaUrl(imgPath));
                 imgEl.innerHTML = '';
                 const img = document.createElement('img');
                 img.src = imgPath;
                 img.style.maxWidth = '100%'; img.style.maxHeight = '100%';
-                img.onerror = () => imgEl.innerHTML = '加载失败';
+                img.onerror = () => {
+                    imgEl.innerHTML = renderMediaMissing(
+                        '封面图加载失败',
+                        `路径：${escapeHtml(fm.image || '')}<br>确认 ${escapeHtml(fm.image || '')} 是否存在，或重新下载素材`,
+                    );
+                };
                 imgEl.appendChild(img);
             } else {
-                imgEl.innerHTML = '-';
+                imgEl.innerHTML = renderMediaMissing(
+                    '封面图未设置',
+                    'fm.image 为空；本目录下应有 cover.jpg（PUBLISH 时会上传到 R2）',
+                );
             }
+
             if (vidPath) {
                 vidPath = withCacheBust(resolveMediaUrl(vidPath));
-                vidEl.innerHTML = `<div class="lazy-media" onclick="loadMedia(this, '${vidPath}', 'video')">🎬 点击播放</div>`;
+                vidEl.innerHTML = '';
+                const vid = document.createElement('video');
+                vid.src = vidPath;
+                vid.className = 'auto-video';
+                vid.preload = 'metadata';   // 仅拉 metadata，不下载整段
+                vid.muted = true;           // autoplay 静音（chrome/safari 策略）
+                vid.autoplay = true;        // 自动播放（muted 才允许）
+                vid.playsInline = true;
+                vid.loop = true;
+                // poster 优先用 fm.image（封面图），避免视频缩略图被破坏
+                if (fm.image && !/^https?:\/\//i.test(fm.image || '')) {
+                    vid.poster = withCacheBust(resolveMediaUrl(fm.image));
+                } else if (fm.image) {
+                    vid.poster = fm.image;
+                }
+                vid.onerror = () => {
+                    vidEl.innerHTML = renderMediaMissing(
+                        '视频加载失败',
+                        `路径：${escapeHtml(fm.video || '')}<br>原因可能是 mp4 不存在 / 跨域 / 视频编码不被浏览器支持`,
+                    );
+                };
+                // 提示用户点击 video 可切换播放/暂停（带声音）
+                vid.title = '点击切换播放/暂停';
+                vid.addEventListener('click', () => {
+                    if (vid.paused) {
+                        vid.muted = false;
+                        vid.play().catch(() => {});
+                    } else {
+                        vid.pause();
+                    }
+                });
+                vidEl.appendChild(vid);
+                const overlay = document.createElement('div');
+                overlay.className = 'media-autoplay-overlay';
+                overlay.textContent = '🔇 静音自动播放中 · 点击开启声音';
+                vidEl.appendChild(overlay);
             } else {
-                vidEl.innerHTML = '-';
+                vidEl.innerHTML = renderMediaMissing(
+                    '视频未设置',
+                    'fm.video 为空；本目录下应有 video.mp4（PUBLISH 时会上传到 R2）',
+                );
             }
         }
 
-        function loadMedia(el, src, type) {
-            el.innerHTML = '';
-            if (type === 'img') {
-                const img = document.createElement('img');
-                img.src = src; img.style.maxWidth = '100%'; img.style.maxHeight = '100%';
-                img.onerror = () => el.innerHTML = '加载失败';
-                el.appendChild(img);
-            } else {
-                const vid = document.createElement('video');
-                vid.src = src; vid.controls = true; vid.style.maxHeight = '110px'; vid.autoplay = true;
-                vid.onerror = () => el.innerHTML = '加载失败';
-                el.appendChild(vid);
-            }
+        function renderMediaMissing(title, hintHtml) {
+            return `<div class="media-missing">⚠️ ${escapeHtml(title)}<span class="hint">${hintHtml}</span></div>`;
         }
 
         // ============ 模式切换（form ↔ source 双向同步） ============
@@ -699,15 +785,16 @@
             if (!newFm) return;
             // md 有 body 概念（老草稿 body 为空）；json 无 body
             const body = currentFormat === 'md' ? (formData._body || '') : '';
-            await doSave({ path: currentFile, data: newFm, body });
+            return await doSave({ path: currentFile, data: newFm, body });
         }
 
         async function saveSource() {
             if (!currentFile) return;
             const content = document.getElementById('sourceTextarea').value;
-            await doSave({ path: currentFile, content });
+            return await doSave({ path: currentFile, content });
         }
 
+        // 返回 { ok: true, status } 用于 publishCurrent 决策「保存成功才入队」
         async function doSave(payload) {
             try {
                 const res = await fetch(`${API}/file`, {
@@ -724,41 +811,51 @@
                         switchTab(result.status);
                     }
                     await openFile(result.path);
+                    return { ok: true, status: result.status };
                 } else {
                     showToast('保存失败: ' + (await res.text()), true);
+                    return { ok: false, error: 'http ' + res.status };
                 }
             } catch (e) {
                 showToast('保存出错: ' + e.message, true);
+                return { ok: false, error: e.message };
             }
         }
 
-        // ============ 发布（先保存当前编辑状态，再入队） ============
+        // ============ 发布（C: 先保存 → D: 入队，有 1 分钟延迟） ============
         async function publishCurrent() {
             if (!currentFile) { showToast('请先选择文件', true); return; }
-            if (!confirm(`把 "${currentFile}" 加入发布队列？\n\n说明：会先保存当前编辑状态，再由后台单 worker 串行处理（覆盖 R2 + D1 upsert + revalidate）。前台会立即跳到下一个待编辑项，发布结果会写回 front matter（在"已发布"/"失败"tab 查看）。`)) return;
+            const delayText = queueInfo.delay_seconds ? `约 ${queueInfo.delay_seconds}s` : '立即';
+            if (!confirm(`发布 "${currentFile}"？\n\n流程：① 先保存当前编辑 → ② 进入发布队列（默认 ${delayText} 延迟，可攒成批次）\n注意：当前已加载的「视频」预览会自动嵌入线上页面；草稿 ` + '`' + currentFile + '`' + ` 会按 front matter 更新发布状态。`)) return;
 
             // 记录当前文件在待编辑列表中的位置（入队后用来打开下一个）
             const unpublishedFiles = fileCache.unpublished || [];
             const currentIdx = unpublishedFiles.findIndex(f => f.path === currentFile);
 
-            // 1. 先保存当前编辑状态（form 或 source 模式）
+            // 1. C: 先保存当前编辑状态（form 或 source 模式）—— 保存失败直接中止
             const isFormMode = document.getElementById('formEditor').style.display === 'flex';
+            let saveResult;
             try {
                 if (isFormMode) {
                     const newFm = buildFormData();
                     if (!newFm) return;
                     const body = currentFormat === 'md' ? (formData._body || '') : '';
-                    await doSave({ path: currentFile, data: newFm, body });
+                    showToast('💾 正在保存...');
+                    saveResult = await doSave({ path: currentFile, data: newFm, body });
                 } else {
-                    const content = document.getElementById('sourceTextarea').value;
-                    await doSave({ path: currentFile, content });
+                    showToast('💾 正在保存...');
+                    saveResult = await saveSource();
                 }
             } catch (e) {
                 showToast('发布前保存失败，已中止发布: ' + e.message, true);
                 return;
             }
+            if (!saveResult || !saveResult.ok) {
+                showToast('发布前保存失败，已中止发布', true);
+                return;
+            }
 
-            // 2. 入队
+            // 2. D: 入队（后端会写 publish_queued_at + 1 分钟延迟；现在前端立刻跳转）
             const target = unpublishedFiles.find(f => f.path === currentFile);
             if (target) target.in_queue = true;
             renderFileList();
@@ -778,11 +875,12 @@
                     return;
                 }
                 if (data.already_queued) {
-                    showToast(`📋 "${currentFile}" 已在队列中`, false);
+                    showToast(`📋 "${currentFile}" 已在队列中（等待 ${data.delay_seconds || 60}s 后批量发布）`, false);
                 } else {
-                    showToast(`✅ "${currentFile}" 已加入队列`, false);
+                    const inBatch = data.batch_size > 1 ? `（本次批次共 ${data.batch_size} 个）` : '';
+                    showToast(`📋 "${currentFile}" 已入队${inBatch}`, false);
                 }
-                // 立刻刷队列角标 + 跳下一个
+                // 立刻刷队列面板 + 跳下一个
                 refreshQueue();
                 switchTab('unpublished');
                 const newUnpublished = fileCache.unpublished || [];
@@ -803,23 +901,100 @@
             }
         }
 
-        // ============ 队列状态轮询 ============
+        // ============ D: 队列面板 ============
+        function initQueuePanel() { /* 后续 refreshQueue 自动显示/隐藏 */ }
+
+        function updateCountdownDisplay() {
+            const wrap = document.getElementById('qpCountdownWrap');
+            const countdownEl = document.getElementById('qpCountdown');
+            const readyWrap = document.getElementById('qpReadyWrap');
+            const flushBtn = document.getElementById('qpFlushBtn');
+            if (!wrap || !countdownEl) return;
+
+            const n = queueInfo.count || 0;
+            if (n === 0) {
+                wrap.hidden = true;
+                readyWrap.hidden = true;
+                if (flushBtn) flushBtn.disabled = true;
+                return;
+            }
+            if (!queueInfo.next_publish_at) return;
+
+            const ms = queueInfo.next_publish_at - Date.now();
+            if (ms <= 0) {
+                // 已经达到 / 越过阈值 → worker 立刻消费
+                countdownEl.textContent = '00:00';
+                countdownEl.classList.add('ready');
+                wrap.hidden = false;
+                readyWrap.hidden = false;
+                if (flushBtn) flushBtn.disabled = true;  // 已经在跑就不需要「立即发布」
+            } else {
+                const sec = Math.ceil(ms / 1000);
+                const mm = String(Math.floor(sec / 60)).padStart(2, '0');
+                const ss = String(sec % 60).padStart(2, '0');
+                countdownEl.textContent = `${mm}:${ss}`;
+                countdownEl.classList.remove('ready');
+                wrap.hidden = false;
+                readyWrap.hidden = true;
+                if (flushBtn) flushBtn.disabled = false;
+            }
+        }
+
+        // 后端 D: /api/flush-queue — 跳过延迟立刻处理当前批次
+        async function flushQueueNow() {
+            if (!confirm('跳过 ${QUEUE_DELAY}s 延迟，立刻发布当前队列里的所有草稿？')) return;
+            try {
+                const res = await fetch(`${API}/flush-queue`, { method: 'POST' });
+                const data = await res.json();
+                if (data.ok) {
+                    showToast(`🚀 立即发布：${data.processed} 个（剩余 ${data.remaining || 0}）`);
+                    refreshQueue();
+                    scheduleLoadFileList();
+                } else {
+                    showToast('立即发布失败: ' + (data.error || '未知'), true);
+                }
+            } catch (e) {
+                showToast('立即发布异常: ' + e.message, true);
+            }
+        }
+
+        // ============ 队列状态轮询（D 扩展） ============
         async function refreshQueue() {
             try {
                 const res = await fetch(`${API}/queue`);
                 const data = await res.json();
                 const n = data.fs_queued_count || 0;
+                // tab 角标（保留旧行为）
                 const badge = document.getElementById('queueBadge');
                 const numEl = document.getElementById('queueN');
                 if (n > 0) {
-                    numEl.textContent = n;
-                    badge.hidden = false;
+                    if (numEl) numEl.textContent = n;
+                    if (badge) badge.hidden = false;
                 } else {
-                    badge.hidden = true;
+                    if (badge) badge.hidden = true;
                 }
+                // D: 队列面板
+                queueInfo.count = n;
+                queueInfo.next_publish_at = data.next_publish_at ? new Date(data.next_publish_at).getTime() : null;
+                queueInfo.delay_seconds = data.delay_seconds || 60;
+                renderQueuePanel();
             } catch (e) {
                 // 静默失败，下一轮继续
             }
+        }
+
+        function renderQueuePanel() {
+            const panel = document.getElementById('queuePanel');
+            const countEl = document.getElementById('qpCount');
+            if (!panel || !countEl) return;
+            const n = queueInfo.count || 0;
+            if (n === 0) {
+                panel.classList.add('hidden');
+            } else {
+                countEl.textContent = `${n} 个待发布`;
+                panel.classList.remove('hidden');
+            }
+            updateCountdownDisplay();
         }
 
         // ============ 文件列表刷新（带去抖） ============
@@ -905,6 +1080,7 @@
             ['inputTitle', 'inputAuthor', 'inputSourceUrl', 'inputTags', 'inputPostDate', 'inputDescription'].forEach(id => {
                 document.getElementById(id).value = '';
             });
+            const sel = document.getElementById('inputModel'); if (sel) sel.value = '';
             document.getElementById('sourceTextarea').value = '';
             document.getElementById('imagePreview').innerHTML = '-';
             document.getElementById('videoPreview').innerHTML = '-';
@@ -1124,8 +1300,6 @@
         }
 
         // ============ 一键重新发布全部失败 ============
-        // 后端 0 改动：复用现有 handle_publish，逐个发起 async 入队（后台单 worker 串行处理）。
-        // 这里只负责前端进度 UX + 入队状态写回（in_queue=true，会被现有轮询刷新逻辑还原）。
         async function republishAllFailed() {
             const list = (fileCache.failed || []).slice();
             const cnt = list.length;
@@ -1145,7 +1319,7 @@
                 <div class="progress-bar"><div class="progress-bar-inner" id="republishProgress" style="width: 0%"></div></div>
                 <p id="republishSummary" style="margin-top: 4px; color: var(--text-secondary); font-size: 12px;"></p>
                 <ul id="republishErrs" style="max-height: 220px; overflow-y: auto;"></ul>
-                <p style="margin-top: 8px; color: var(--text-muted); font-size: 11px;">💡 提示：入队完成后，后台 worker 仍可能在消费，这一步的“全部入队”不代表“全部发布成功”。剩余的进度会在「失败 / 已发布」tab 中实时更新。</p>
+                <p style="margin-top: 8px; color: var(--text-muted); font-size: 11px;">💡 提示：入队完成后，这些将和别的待发布草稿一起进入「${queueInfo.delay_seconds || 60} 秒延迟队列」；到点统一发布。可点击编辑区底部「🚀 立即发布」跳过延迟。</p>
             `;
             document.getElementById('republishAllFailedModal').classList.add('show');
 
@@ -1168,12 +1342,10 @@
                         else ok++;
                     } else {
                         fail++;
-                        // 入队失败（通常是入参问题），表现不出来的 actual 发布错不需处理
                         const li = document.createElement('li');
                         li.className = 'fail';
                         li.innerHTML = `✗ ${f.path}: ${(data && data.error) || ('HTTP ' + res.status)}`;
                         errsUl.appendChild(li);
-                        // 把失败的从「in_queue」还原
                         const item = (fileCache.failed || []).find(x => x.path === f.path);
                         if (item) item.in_queue = false;
                     }
@@ -1192,12 +1364,10 @@
             }
 
             progressEl.classList.add('done');
-            // 总结行
             const tail = document.createElement('p');
             tail.style.marginTop = '10px';
             tail.innerHTML = `<b>本次入队完成：</b>总 ${list.length} &nbsp; ✓ ${ok} 个新入队 &nbsp; ↪ ${already} 个已在队列 &nbsp; ✗ ${fail} 个入队失败`;
             resultEl.appendChild(tail);
-            // 刷新队列角标 + 后面让轮询处理「in_queue → published / failed」状态写回
             refreshQueue();
             updateRepublishButton();
             renderFileList();
