@@ -15,9 +15,8 @@ import { getTranslations } from 'next-intl/server';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { GridEngine } from '@/components/GridEngine';
-import { listAllModels, listAllTags, listPrompts, listModelTagDistribution } from '@/db/queries';
+import { listAllModels, listAllTags, listPrompts, listModelTagDistribution, getModelName } from '@/db/queries';
 import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
-import { formatModelName } from '@/lib/format';
 import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
 
 export const revalidate = 3600;
@@ -32,7 +31,7 @@ interface Props {
 export async function generateMetadata({ params, searchParams }: Props) {
   const { locale, model } = await params;
   const sp = await searchParams;
-  const name = formatModelName(model);
+  const name = await getModelName(model);
   const canonical = `${SITE_URL}/${locale}/models/${model}`;
 
   // 低质量页面 noindex：分页 >1 / tag 筛选（与独立 tag 页重复）
@@ -68,7 +67,7 @@ export default async function ModelPage({ params, searchParams }: Props) {
   const t = await getTranslations('model');
   if (!['en', 'zh', 'ja'].includes(locale)) notFound();
 
-  const modelName = formatModelName(model);
+  const modelName = await getModelName(model);
 
   // 分页
   const page = Math.max(1, parseInt(sp.page ?? '1', 10) || 1);

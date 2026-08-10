@@ -1,37 +1,12 @@
 /**
  * format.ts 单元测试
- * 覆盖 formatModelName / tagHref / modelHref
+ * 覆盖 tagHref / modelHref
+ *
+ * formatModelName 已删除（2026-08-09）：model 显示名改由 db/queries.ts 的 getModelName 从 D1 拿，
+ * 详见 lib/dict-yaml.ts 的真源 + lib/dict-sync.ts 的同步保证。
  */
 import { describe, it, expect } from 'vitest';
-import { formatModelName, tagHref, modelHref } from './format';
-
-describe('formatModelName', () => {
-  it('converts simple slugs to Title Case + space', () => {
-    expect(formatModelName('grok')).toBe('Grok');
-    expect(formatModelName('sora')).toBe('Sora');
-  });
-
-  it('formats Seedance series with implicit .0', () => {
-    expect(formatModelName('seedance2')).toBe('Seedance 2.0');
-    expect(formatModelName('seedance1.5pro')).toBe('Seedance 1.5 Pro');
-  });
-
-  it('formats Kling series with two-digit decoding', () => {
-    expect(formatModelName('kling26')).toBe('Kling 2.6');
-    expect(formatModelName('kling3')).toBe('Kling 3.0');
-  });
-
-  it('falls through to default capitalization when regex does not match', () => {
-    // 'klingo1' 走不到 oVer 分支，最后落入「首字母大写」通用规则。
-    // 文档说应该返回 'Kling O1'，但实际是 'Klingo 1'（已知不一致，保留现状以免回归）。
-    expect(formatModelName('klingo1')).toBe('Klingo 1');
-  });
-
-
-  it('handles empty input', () => {
-    expect(formatModelName('')).toBe('');
-  });
-});
+import { tagHref, modelHref } from './format';
 
 describe('tagHref', () => {
   it('returns canonical path for ASCII slugs', () => {

@@ -30,7 +30,6 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 import type { PromptCardData, ModelRef, TagRef } from '@/components/types';
 import { getDb } from './index';
 import { prompts, tags, models, promptTags, promptModels } from './schema';
-import { formatModelName } from '@/lib/format';
 import { getCachedData, CACHE_KEYS } from './cache';
 import {
   AGG_CACHE_KEYS,
@@ -47,6 +46,23 @@ async function getD1(): Promise<D1Database> {
   const db = ctx.env.DB;
   if (!db) throw new Error('D1 binding (env.DB) not found in Cloudflare context');
   return db;
+}
+
+/**
+ * 查单个 model 的显示名（model 详情页用）。
+ *
+ * D1 models.name = 渲染真源（dict-sync 跟 yaml 100% 对齐）。
+ * fallback 链：D1 → yaml MODELS_DICT → slug。绝不用 formatModelName 杜撰逻辑。
+ * 不走 INNER JOIN（listAllModels/queryAllModels 限制只返回有 prompt 关联的 model，
+ * 全新 model 还没 prompt 时也必须能拿到 name）。
+ */
+export async function getModelName(slug: string): Promise<string> {
+  const d1 = await getD1();
+  const row = await d1
+    .prepare('SELECT name FROM models WHERE slug = ?')
+    .bind(slug)
+    .first<{ name: string }>();
+  return row?.name || MODELS_DICT[slug]?.name || slug;
 }
 
 /**
@@ -120,8 +136,9 @@ export async function hydratePrompts(
   }
 
   // 按 promptId 索引
-  // name 优先走 data/yaml 真源（与 src/lib/dict-sync.ts 同步结果一致）；
-  // yaml 未收录时回退到 slug / formatModelName 保留旧逻辑避免界面变成空白。
+  // name 直接用 D1 models.name（渲染真源）。D1 跟 yaml 100% 对齐由 dict-sync 保证
+  // （publish route + deploy.sh 双保险）。早期 import 残条（无 yaml slug）兜底到 yaml，
+  // 仍找不到才回退 slug —— 绝不再走 formatModelName 这种杜撰逻辑。
   const tagsByPromptId = new Map<number, TagRef[]>();
   for (const t of tagRows) {
     const arr = tagsByPromptId.get(t.promptId) ?? [];
@@ -131,7 +148,7 @@ export async function hydratePrompts(
   const modelsByPromptId = new Map<number, ModelRef[]>();
   for (const m of modelRows) {
     const arr = modelsByPromptId.get(m.promptId) ?? [];
-    arr.push({ slug: m.slug, name: MODELS_DICT[m.slug]?.name ?? formatModelName(m.slug) });
+    arr.push({ slug: m.slug, name: m.name || MODELS_DICT[m.slug]?.name || m.slug });
     modelsByPromptId.set(m.promptId, arr);
   }
 
@@ -374,8 +391,9 @@ async function queryAllModels(): Promise<{ slug: string; name: string; count: nu
     .groupBy(models.slug, models.name)
     .orderBy(desc(sql`count(${promptModels.promptId})`), models.name);
 
-  // name 取 yaml 真源（data/models.yaml）；yaml 未收录时回退到 formatModelName 规则
-  return rows.map((r) => ({ slug: r.slug, name: MODELS_DICT[r.slug]?.name ?? formatModelName(r.slug), count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
+  // name 直接用 D1 models.name（渲染真源）。yaml 兜底仅针对早期 import 残条（无 yaml slug），
+  // 仍找不到才回退 slug —— 绝不再走 formatModelName 这种杜撰逻辑。
+  return rows.map((r) => ({ slug: r.slug, name: r.name || MODELS_DICT[r.slug]?.name || r.slug, count: Number(r.count), updatedAt: r.updatedAt ?? '' }));
 }
 
 export async function listAllModels(): Promise<{ slug: string; name: string; count: number; updatedAt: string }[]> {

@@ -21,7 +21,7 @@ import CopyButton from '@/components/CopyButton';
 import { GridEngine } from '@/components/GridEngine';
 import { getPromptBySlugCached, getAdjacentPrompts, getRelatedPrompts } from '@/db/queries';
 import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
-import { formatModelName, tagHref, modelHref } from '@/lib/format';
+import { tagHref, modelHref } from '@/lib/format';
 import { SITE_URL, R2_PUBLIC_URL } from '@/lib/site';
 
 
@@ -236,7 +236,7 @@ export default async function PromptDetailPage({ params }: Props) {
               <div className="meta-value meta-models">
                 {prompt.models.map((m) => (
                   <Link key={m.slug} href={modelHref(locale, m.slug)} className="meta-link meta-link--model">
-                    {formatModelName(m.slug)}
+                    {m.name}
                   </Link>
                 ))}
               </div>
