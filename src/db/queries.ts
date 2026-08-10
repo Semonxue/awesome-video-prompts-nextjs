@@ -522,6 +522,13 @@ export async function rebuildAllAggregateCaches(): Promise<void> {
     modelTags[m.slug] = await queryModelTagDistribution(m.slug);
   }
   await writeAggregateCache(AGG_CACHE_KEYS.modelTags, modelTags);
+
+  // 修复（2026-08-10）：补写 tags.json / models.json
+  // 之前只重算并写 counts.json + model-tags.json，漏了 listAllTags/listAllModels 用的
+  // 两个完整数组（带 slug+name+count+updatedAt），导致 Header 的 model/tag tabs
+  // 永远停在首次部署的 R2 快照上。
+  await writeAggregateCache(AGG_CACHE_KEYS.tags, tags);
+  await writeAggregateCache(AGG_CACHE_KEYS.models, models);
 }
 
 /**
