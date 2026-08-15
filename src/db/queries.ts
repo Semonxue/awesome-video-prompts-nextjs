@@ -30,7 +30,7 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 import type { PromptCardData, ModelRef, TagRef } from '@/components/types';
 import { getDb } from './index';
 import { prompts, tags, models, promptTags, promptModels } from './schema';
-import { getCachedData, CACHE_KEYS } from './cache';
+import { getCachedData, CACHE_KEYS, getNamespacedCachedData } from './cache';
 import {
   AGG_CACHE_KEYS,
   readAggregateCache,
@@ -711,4 +711,54 @@ export async function getRelatedPrompts(
     .map((x) => x.p);
 
   return scored;
+}
+
+/**
+ * getRelatedPrompts 的跨实例缓存版本（namespace: 'related'）
+ *
+ * 背景（2026-08-15 D1 cost 优化）：
+ *   - 详情页每次 ISR 刷新都调 getRelatedPrompts，2-12 D1 round-trips
+ *   - 13,437 detail URL × 1h ISR × 24h = 322K/天 D1 调用，~1B rows read
+ *   - 占 D1 Rows Read 总成本的主体
+ *
+ * 缓存策略：
+ *   - 用 namespace version stamp（见 cache.ts NAMESPACE_VERSION_KEYS）
+ *   - key = `related-v${VERSION}-${slug}-${limit}`
+ *   - publish/unpublish/delete 调 bumpNamespaceVersion('related') 让旧 key 不可达
+ *   - L1+L2 共享 version stamp，跨实例一致
+ *
+ * 调用方：详情页
+ */
+export async function getRelatedPromptsCached(
+  sourcePrompt: PromptCardData,
+  limit: number = 6,
+): Promise<PromptCardData[]> {
+  return getNamespacedCachedData<PromptCardData[]>(
+    'related',
+    `${sourcePrompt.slug}-${limit}`,
+    () => getRelatedPrompts(sourcePrompt, limit),
+  );
+}
+
+/**
+ * getAdjacentPrompts 的跨实例缓存版本（namespace: 'adjacent'）
+ *
+ * 背景（2026-08-15 D1 cost 优化）：
+ *   - 详情页每次 ISR 刷新都调 getAdjacentPrompts，3 D1 round-trips
+ *   - 13,437 detail URL × 1h ISR × 24h = 322K/天 D1 调用
+ *
+ * 缓存策略：同 getRelatedPromptsCached（namespace version stamp）
+ *   - publish/unpublish/delete 调 bumpNamespaceVersion('adjacent')
+ *   - key = `adjacent-v${VERSION}-${slug}`
+ *
+ * 调用方：详情页
+ */
+export async function getAdjacentPromptsCached(
+  slug: string,
+): Promise<{ prev: AdjacentPrompt | null; next: AdjacentPrompt | null }> {
+  return getNamespacedCachedData<{ prev: AdjacentPrompt | null; next: AdjacentPrompt | null }>(
+    'adjacent',
+    slug,
+    () => getAdjacentPrompts(slug),
+  );
 }

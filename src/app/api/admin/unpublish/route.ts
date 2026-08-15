@@ -25,7 +25,7 @@
  *   500: { error: "..." }
  */
 import { revalidatePath } from 'next/cache';
-import { invalidateCache, CACHE_KEYS } from '@/db/cache';
+import { invalidateCache, CACHE_KEYS, bumpNamespaceVersion } from '@/db/cache';
 import { rebuildAllAggregateCaches } from '@/db/queries';
 import { eq } from 'drizzle-orm';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -140,6 +140,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   await Promise.allSettled([
     invalidateCache(`${CACHE_KEYS.recentPrompts}-48`),
     invalidateCache(`${CACHE_KEYS.promptBySlug}-${slug}`),
+    // 2026-08-15 D1 cost 优化：下架会让任意 slug 的相关/上下篇结果变化
+    bumpNamespaceVersion('related'),
+    bumpNamespaceVersion('adjacent'),
   ]);
 
   console.log(`[admin/unpublish] slug=${slug} changed=${!alreadyDraft}`);

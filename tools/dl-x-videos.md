@@ -12,7 +12,7 @@
 
 - 批量处理多个帖子时，**先收集所有帖子的 twitter id**，一次性调用线上查重接口，跳过已存在的：
   ```
-  GET https://awesome-video-prompts-nextjs.semonxue.workers.dev/api/prompts/check-duplicates?ids=<id1>,<id2>,<id3>...
+  GET https://awesomevideoprompts.com/api/prompts/check-duplicates?ids=<id1>,<id2>,<id3>...
   ```
 - 返回 `{ existing: [...], missing: [...] }`：
   - `existing`：线上已存在对应 prompt 的 twitter id → **跳过，不下载不生成**
@@ -69,15 +69,37 @@
   ```
 
 - 字段约束：
-  - `title`：3-7 个单词，语义完整且吸引人，不含模型名，英文
+  - `title`：3-7 个单词，语义完整且吸引人，不含模型名，英文。**统一由 LLM 理解生成**（见下方「标题生成」章节）
   - `description`：从 full_text 提取完整提示词；不要有遗漏、截取或提炼；不要翻译；若 full_text 不完整看上下文；多行直接换行（JSON 字符串天然支持 `\n`，无需 YAML 块语法）
   - `models`：数组，自动匹配 1 个视频模型，优先 `data/models.yaml` 关键词
-  - `tags`：数组，最匹配，不超过 5 个，不包含 model；优先 `data/tags.yaml`；如必要才新增
+  - `tags`：数组，最匹配，不超过 5 个，llm理解生成，不包含 model；优先 `data/tags.yaml`；如必要才新增
   - 如果新增标签或模型，更新 `data/models.yaml` 和 `data/tags.yaml`
   - `source_url`：原帖链接（**注意：不要用 url 字段，因为那是 Hugo 保留字段**）
   - `post_date`：ISO 8601 YYYY-MM-DD
   - `image` / `video`：指向素材目录的相对路径（`/prompts/<YYYY-MM>/<Slug>/...`）
   - `draft: true` 默认；`published` / `published_at` / `published_slug` / `published_error` / `publish_queued_at` 为发布状态字段，初始为 false / null
+
+### 标题生成（统一做法）
+
+`title` 字段**统一由 LLM 理解生成**（不再依赖纯启发式）。具体规则：
+
+- **统一实现位置**：`tools/dl-x-videos.py` 的 `gen_title_via_llm(text)` 函数（`process-bookmarks.py` 通过 importlib 复用）
+- **触发条件**：`process-bookmarks.py` 的 `gen_title()` 在启发式提取不到 ≥3 词时，自动调 LLM
+- **统一命令**（推荐，每次跑批都加）：
+  ```bash
+  LLM_TITLE=1 python3 tools/process-bookmarks.py
+  ```
+  > 注：当前版本 `gen_title()` 已默认走 LLM 兜底，理论上不加 env 也行；保留 `LLM_TITLE=1` 是显式标注，方便排查。
+  > 设 `LLM_TITLE=0` 可强制只走启发式（不推荐）。
+- **依赖**：`~/.minimax/.builtin-skills/llm-call/scripts/llm_call.py`
+  - 默认模型 `minimax/MiniMax-M3`（可用 `LLM_TITLE_MODEL` 覆盖）
+  - 默认 bin 路径（可用 `LLM_CALL_BIN` 覆盖）
+  - 失败/超时/LLM 输出不合规 → 自动 fallback 到 `Video <id>`（`gen_title_via_llm` 返回 `None`）
+- **Prompt 策略**：
+  - 输入 `text[:1200]`（够产生好 title 又不浪费 token）
+  - 指令：3-7 词、Title Case、无标点、聚焦 subject/scene/action
+  - 兜底：纯成本/工作流类内容用 "Budget XXX" 之类的描述
+- **缓存**：进程内字典缓存 `text[:1200] → title`，同一批处理中相同文本只调一次 LLM
 
 ### 清理与验证 (Cleanup)
 

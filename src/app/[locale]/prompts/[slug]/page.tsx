@@ -19,7 +19,7 @@ import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import CopyButton from '@/components/CopyButton';
 import { GridEngine } from '@/components/GridEngine';
-import { getPromptBySlugCached, getAdjacentPrompts, getRelatedPrompts } from '@/db/queries';
+import { getPromptBySlugCached, getAdjacentPromptsCached, getRelatedPromptsCached } from '@/db/queries';
 import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
 import { tagHref, modelHref } from '@/lib/format';
 import { SITE_URL, R2_PUBLIC_URL } from '@/lib/site';
@@ -108,8 +108,8 @@ export default async function PromptDetailPage({ params }: Props) {
   //     → 详情页不再背全局数据，SSR CPU 大幅下降
   //   并发取：两个查询无依赖，并发执行
   const [related, { prev, next }] = await Promise.all([
-    getRelatedPrompts(prompt),
-    getAdjacentPrompts(slug),
+    getRelatedPromptsCached(prompt),
+    getAdjacentPromptsCached(slug),
   ]);
 
   // Header 数据（不分 locale）

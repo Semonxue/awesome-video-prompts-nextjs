@@ -44,7 +44,7 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { getDb } from '@/db';
 import { prompts, tags, models, promptTags, promptModels } from '@/db/schema';
 import { deriveYearMonth, keyFromMediaUrl, R2_KEY_PREFIX } from '@/lib/r2-keys';
-import { invalidateCache, CACHE_KEYS } from '@/db/cache';
+import { invalidateCache, CACHE_KEYS, bumpNamespaceVersion } from '@/db/cache';
 import { rebuildAllAggregateCaches } from '@/db/queries';
 import { syncAllDicts, type DictSyncCombined } from '@/lib/dict-sync';
 
@@ -590,6 +590,10 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
   await Promise.allSettled([
     invalidateCache(`${CACHE_KEYS.recentPrompts}-48`),
     invalidateCache(`${CACHE_KEYS.promptBySlug}-${slug}`),
+    // 2026-08-15 D1 cost 优化：任何 publish 都可能让任意 slug 的相关/上下篇结果变化
+    // (namespace version stamp：bump 后所有旧 key 不可达)
+    bumpNamespaceVersion('related'),
+    bumpNamespaceVersion('adjacent'),
   ]);
 
   const elapsed = Date.now() - startTime;

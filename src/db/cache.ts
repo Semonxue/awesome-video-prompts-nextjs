@@ -156,3 +156,84 @@ export const CACHE_KEYS = {
   /** 整个 sitemap 输出（避免每次请求都重新构造 18000+ 对象） */
   sitemapOutput: 'sitemap-output',
 } as const;
+
+// ============================================================
+// 命名空间版本（namespace version stamp）
+// ============================================================
+// 背景：getRelatedPrompts / getAdjacentPrompts 的结果依赖"全表 prompts 当前状态"，
+//       任何一次 publish/unpublish/delete 都可能让任意 slug 的相关/上下篇结果变化。
+//       但 Cache API 没有"按前缀批量失效"能力，逐个失效 O(N) 不可能（N = 全部 slug）。
+//
+// 方案：用 namespace version stamp 把"全表当前状态"编码进 cache key：
+//       key = `related-prompts-v${VERSION}-${slug}-${limit}`
+//       - VERSION 是个独立 L1+L2 缓存的计数器
+//       - 任何 publish/unpublish/delete 调用 bumpNamespaceVersion() 把 VERSION 写为 +1
+//       - 旧 VERSION 下的所有 cache entry 自动变成不可达 → 5min TTL 后 GC
+//       - 新读请求用新 VERSION 走 getCachedData 重新计算
+//
+// 与 invalidateCache(单 key) 的区别：本机制用 key 变化实现"全清"，无需遍历
+// ============================================================
+
+/** namespace version 的 L1/L2 key */
+const NAMESPACE_VERSION_KEYS = {
+  related: 'ns-version:related-prompts',
+  adjacent: 'ns-version:adjacent-prompts',
+} as const;
+
+export type CacheNamespace = keyof typeof NAMESPACE_VERSION_KEYS;
+
+/** 读当前 namespace version（缺省返回 1） */
+async function readNamespaceVersion(ns: CacheNamespace): Promise<number> {
+  const v = await getCachedData<number>(NAMESPACE_VERSION_KEYS[ns], async () => 1);
+  return v ?? 1;
+}
+
+/**
+ * 写一个比当前大 1 的新 version（直接覆盖 L1 + L2，不走 read-modify-write）
+ *
+ * 注意：必须用直接 writeCache，不能用 invalidateCache —— 后者会让读端回到 1，
+ *       无法表达"已 bump"。
+ */
+async function writeNamespaceVersion(ns: CacheNamespace, newVersion: number): Promise<void> {
+  l1Cache.set(NAMESPACE_VERSION_KEYS[ns], { value: newVersion, expiresAt: Date.now() + L1_TTL_MS });
+  const cache = getCacheApi();
+  if (cache) {
+    try {
+      const res = new Response(JSON.stringify(newVersion), {
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': `public, max-age=${L2_TTL_S}`,
+        },
+      });
+      await cache.put(cacheKey(NAMESPACE_VERSION_KEYS[ns]), res);
+    } catch {
+      // 忽略
+    }
+  }
+}
+
+/**
+ * 发布/删除/下架时调用：让所有 related/adjacent cache 立刻失效（语义上）。
+ *
+ * 实现：把 namespace version +1 → 所有旧 cache key 不可达 → 下次读走新 version 重新计算。
+ * 旧 key 保留在 L2 但 5min TTL 后自然 GC，无需遍历清理。
+ */
+export async function bumpNamespaceVersion(ns: CacheNamespace): Promise<void> {
+  const current = await readNamespaceVersion(ns);
+  await writeNamespaceVersion(ns, current + 1);
+}
+
+/**
+ * 通用：读 namespace 下的 cache data（自动嵌入当前 version）
+ *
+ * 与 getCachedData 的区别：key 嵌入了 namespace version，
+ *       publish/unpublish/delete 后版本变化 → 自动 miss 旧 entry
+ */
+export async function getNamespacedCachedData<T>(
+  ns: CacheNamespace,
+  suffixKey: string,
+  fetcher: () => Promise<T>,
+): Promise<T> {
+  const version = await readNamespaceVersion(ns);
+  return getCachedData<T>(`${ns}-v${version}-${suffixKey}`, fetcher);
+}

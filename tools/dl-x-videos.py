@@ -203,7 +203,10 @@ def process_download(metadata: dict, url: str) -> dict:
     # 使用 stderr 输出日志，以免污染 stdout 的 JSON 输出
     print(f"Downloading video(s) and thumbnail(s) to {output_dir}...", file=sys.stderr)
     try:
-        subprocess.run(cmd, check=True, timeout=300)
+        subprocess.run(cmd, check=True, timeout=900)
+    except subprocess.TimeoutExpired as e:
+        metadata["download_error"] = f"yt-dlp timeout: {e}"
+        return metadata
     except subprocess.CalledProcessError as e:
         metadata["download_error"] = str(e)
         return metadata
@@ -279,6 +282,87 @@ def process_download(metadata: dict, url: str) -> dict:
     metadata["local_json_path"] = os.path.abspath(json_path)
 
     return metadata
+
+
+# ---------------------------------------------------------------------------
+# LLM title generation (shared utility)
+# ---------------------------------------------------------------------------
+# 被 process-bookmarks.py 复用,作为统一生成英文 title 的标准做法。
+# 调用方传 text, 返回 3-7 词的英文 title (Title Case); 失败返回 None。
+
+from typing import Dict as _Dict, Optional  # Py3.8 compat: dict[str,str] / str|None 都不在 3.8 runtime 求值
+_LLM_TITLE_CACHE: "_Dict[str, str]" = {}
+
+
+def _has_cjk(text: str) -> bool:
+    """检测文本是否含中日韩字符"""
+    return any("\u4e00" <= ch <= "\u9fff" for ch in text)
+
+
+def gen_title_via_llm(
+    text: str,
+    *,
+    model: Optional[str] = None,
+    max_tokens: int = 60,
+    timeout: float = 60.0,
+    llm_bin: Optional[str] = None,
+) -> Optional[str]:
+    """通过 LLM 理解文本内容,生成 3-7 词的英文 title (Title Case)。
+
+    适用于: 中文为主、emoji 起头、Prompt: 起头、启发式提取不出像样 title 的场景。
+    失败/超时/LLM 输出不合规 → 返回 None (由调用方 fallback)。
+
+    Env overrides:
+      LLM_CALL_BIN      llm_call.py 路径 (默认 ~/.minimax/.builtin-skills/llm-call/scripts/llm_call.py)
+      LLM_TITLE_MODEL   模型 (默认 minimax/MiniMax-M3)
+    """
+    if not text or not _has_cjk(text) and len(text.strip()) < 20:
+        # 太短或非 CJK, 启发式已经够用, 不浪费 LLM
+        return None
+    llm_bin = llm_bin or os.environ.get(
+        "LLM_CALL_BIN",
+        "/Users/semonxue/.minimax/.builtin-skills/llm-call/scripts/llm_call.py",
+    )
+    if not os.path.exists(llm_bin):
+        return None
+    model = model or os.environ.get("LLM_TITLE_MODEL", "minimax/MiniMax-M3")
+    excerpt = text[:1200]
+    cache_key = f"{model}:{excerpt}"
+    if cache_key in _LLM_TITLE_CACHE:
+        return _LLM_TITLE_CACHE[cache_key]
+    prompt = (
+        "You are generating short video titles for an AI video prompts gallery.\n"
+        "Read the post below (it may be in Chinese, English, or mixed) and output ONE\n"
+        "concise English title, 3-7 words, Title Case, no punctuation, no quotes.\n"
+        "Focus on the subject, scene, or action — not the model name or hashtags.\n"
+        "If the post is purely meta-talk about cost/workflow and not a visual scene,\n"
+        "reflect that in the title (e.g. 'Budget 1080P Video Cost').\n"
+        "Output ONLY the title line, nothing else.\n\n"
+        f"POST:\n{excerpt}"
+    )
+    try:
+        result = subprocess.run(
+            ["python3", llm_bin, "--model", model, "--max-tokens", str(max_tokens), "--prompt", prompt],
+            capture_output=True, text=True, timeout=timeout,
+        )
+        if result.returncode != 0:
+            print(f"  ! llm_call failed rc={result.returncode}: {result.stderr[:200]}", file=sys.stderr)
+            return None
+        out = result.stdout.strip().strip('"').strip("'").strip()
+        if not out or _has_cjk(out):
+            return None
+        words = out.split()
+        if not (3 <= len(words) <= 7):
+            return None
+        title = " ".join(words).title()
+        _LLM_TITLE_CACHE[cache_key] = title
+        return title
+    except subprocess.TimeoutExpired:
+        print(f"  ! llm_call timeout after {timeout}s", file=sys.stderr)
+        return None
+    except Exception as e:
+        print(f"  ! llm_call exception: {e}", file=sys.stderr)
+        return None
 
 
 def main():
