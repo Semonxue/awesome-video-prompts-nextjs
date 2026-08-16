@@ -38,6 +38,42 @@ grep "s-maxage=3600" node_modules/@opennextjs/aws/dist/overrides/wrappers/cloudf
 # 没结果 = wrapper 没装，CDN 边缘缓存不会生效，每次请求都打 worker
 ```
 
+## Namespace Version Cache TTL（必读 + 关键坑）
+
+`src/db/cache.ts` 的 `getNamespacedCachedData` / `bumpNamespaceVersion` 用 namespace version stamp 做"全表数据变化时整批失效"。
+
+**核心铁律**：
+
+- **namespace version 自身 TTL 必须 24h+**（不是默认 5min）
+- **namespaced entry TTL 也必须 24h+**（不是默认 5min）
+- 失效**完全靠 publish/unpublish/delete 调 `bumpNamespaceVersion`** 让 version+1 → 旧 key 不可达
+
+**为什么不能用 5min 默认 TTL**：
+
+1. **namespace version 5min 过期 → fetcher 返回 1 → 旧 v=1 entry 又"复活"读到 publish 前的旧数据**
+   - bump 时 version=2 写入，5min 后过期被 fetcher 写回 v=1
+   - v=1 旧 entry（publish 之前的 stale 数据）仍然在 cache 中（24h 还在）
+   - 后续读拿到 v=1 → 命中 stale entry → 数据不一致
+
+2. **entry 5min TTL < ISR 1h 周期 → 每次 refresh 都 miss**
+   - middleware s-maxage=3600 → ISR refresh 1h 一次
+   - 5min TTL 远短于 1h → 每次 refresh 都要重新调 D1 → cache 形同虚设
+
+**正确配置**（在 `src/db/cache.ts`）：
+
+```ts
+const NAMESPACE_L1_TTL_MS = 24 * 60 * 60 * 1000;  // 24h
+const NAMESPACE_L2_TTL_S  = 24 * 60 * 60;          // 24h
+// 写入时显式传这两个 TTL，不要用默认
+```
+
+**添加新 namespace 缓存类型时的检查清单**：
+1. ✅ 写 entry 时显式传 `l2TtlS = 24*60*60` + `l1TtlMs = 24*60*60*1000`
+2. ✅ publish/unpublish/delete 路由都调 `bumpNamespaceVersion('yourNs')`
+3. ✅ 写完跑 `wrangler d1 insights` 看对应 query 的 `numberOfTimesRun` 是否停止增长
+
+**踩坑实录（2026-08-17）**：fix 用 5min 默认 TTL 部署后，Q1 rate 仍 71K/小时（fix 无效），改为 24h 后降到 432/小时（164x 改善）。累计数字看起来"还在涨"是误导，要看「单位时间增量」。
+
 ## 关键架构备忘
 
 - **D1 + R2 + Cloudflare Workers**（via OpenNext）
