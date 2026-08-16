@@ -75,10 +75,19 @@ async function readCache<T>(key: string): Promise<T | null> {
 
 /**
  * 写入缓存：L2 Cache API + L1 内存
+ *
+ * l1TtlMs / l2TtlS 默认沿用全局（5min）。namespace-versioned cache 传 24h，
+ *   因为失效机制靠 namespace version（publish/unpublish/delete bump），
+ *   entry 自身 TTL 应该长到不依赖自动过期。
  */
-async function writeCache<T>(key: string, value: T): Promise<void> {
+async function writeCache<T>(
+  key: string,
+  value: T,
+  l2TtlS: number = L2_TTL_S,
+  l1TtlMs: number = L1_TTL_MS,
+): Promise<void> {
   // L1
-  l1Cache.set(key, { value, expiresAt: Date.now() + L1_TTL_MS });
+  l1Cache.set(key, { value, expiresAt: Date.now() + l1TtlMs });
 
   // L2
   const cache = getCacheApi();
@@ -87,7 +96,7 @@ async function writeCache<T>(key: string, value: T): Promise<void> {
       const res = new Response(JSON.stringify(value), {
         headers: {
           'Content-Type': 'application/json',
-          'Cache-Control': `public, max-age=${L2_TTL_S}`,
+          'Cache-Control': `public, max-age=${l2TtlS}`,
         },
       });
       await cache.put(cacheKey(key), res);
@@ -121,10 +130,15 @@ const inflightPromises = new Map<string, Promise<unknown>>();
 /**
  * 通用缓存读取：命中返回缓存值，未命中调用 fetcher 并写入缓存
  * 包含 single-flight：同 key 并发请求共享同一个 in-flight Promise
+ *
+ * l1TtlMs / l2TtlS 可选：传入则用指定 TTL 写 cache（namespace-versioned cache 传 24h），
+ *   默认沿用全局（5min）。
  */
 export async function getCachedData<T>(
   key: string,
   fetcher: () => Promise<T>,
+  l2TtlS?: number,
+  l1TtlMs?: number,
 ): Promise<T> {
   const cached = await readCache<T>(key);
   if (cached !== null) return cached;
@@ -137,7 +151,7 @@ export async function getCachedData<T>(
   const promise = (async () => {
     try {
       const value = await fetcher();
-      await writeCache(key, value);
+      await writeCache(key, value, l2TtlS, l1TtlMs);
       return value;
     } finally {
       inflightPromises.delete(key);
@@ -182,9 +196,22 @@ const NAMESPACE_VERSION_KEYS = {
 
 export type CacheNamespace = keyof typeof NAMESPACE_VERSION_KEYS;
 
-/** 读当前 namespace version（缺省返回 1） */
+// namespace version 和它对应的 entry 都用 24h TTL：
+// - 短 TTL（5min）会让 version 5min 后回到 fetcher 默认值 1，导致 bump 之前
+//   写的 v=1 entry 又"复活"——5min 前 publish 的话，5min 后 cache 仍返回旧值
+// - 24h TTL 保证：bump 后所有 v=N-1 entry 不可达，v=N entry 24h 持续有效
+// - publish 频率低（人工），version 不会无限增长
+const NAMESPACE_L1_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const NAMESPACE_L2_TTL_S = 24 * 60 * 60; // 24h
+
+/** 读当前 namespace version（缺省返回 1，写时用 24h TTL） */
 async function readNamespaceVersion(ns: CacheNamespace): Promise<number> {
-  const v = await getCachedData<number>(NAMESPACE_VERSION_KEYS[ns], async () => 1);
+  const v = await getCachedData<number>(
+    NAMESPACE_VERSION_KEYS[ns],
+    async () => 1,
+    NAMESPACE_L2_TTL_S,
+    NAMESPACE_L1_TTL_MS,
+  );
   return v ?? 1;
 }
 
@@ -192,17 +219,20 @@ async function readNamespaceVersion(ns: CacheNamespace): Promise<number> {
  * 写一个比当前大 1 的新 version（直接覆盖 L1 + L2，不走 read-modify-write）
  *
  * 注意：必须用直接 writeCache，不能用 invalidateCache —— 后者会让读端回到 1，
- *       无法表达"已 bump"。
+ *       无法表达"已 bump"。L1+L2 用 24h TTL 保证 bump 后不被自动重置回 1。
  */
 async function writeNamespaceVersion(ns: CacheNamespace, newVersion: number): Promise<void> {
-  l1Cache.set(NAMESPACE_VERSION_KEYS[ns], { value: newVersion, expiresAt: Date.now() + L1_TTL_MS });
+  l1Cache.set(
+    NAMESPACE_VERSION_KEYS[ns],
+    { value: newVersion, expiresAt: Date.now() + NAMESPACE_L1_TTL_MS },
+  );
   const cache = getCacheApi();
   if (cache) {
     try {
       const res = new Response(JSON.stringify(newVersion), {
         headers: {
           'Content-Type': 'application/json',
-          'Cache-Control': `public, max-age=${L2_TTL_S}`,
+          'Cache-Control': `public, max-age=${NAMESPACE_L2_TTL_S}`,
         },
       });
       await cache.put(cacheKey(NAMESPACE_VERSION_KEYS[ns]), res);
@@ -226,8 +256,12 @@ export async function bumpNamespaceVersion(ns: CacheNamespace): Promise<void> {
 /**
  * 通用：读 namespace 下的 cache data（自动嵌入当前 version）
  *
- * 与 getCachedData 的区别：key 嵌入了 namespace version，
- *       publish/unpublish/delete 后版本变化 → 自动 miss 旧 entry
+ * 与 getCachedData 的区别：
+ *   - key 嵌入了 namespace version，publish/unpublish/delete 后版本变化 → 自动 miss 旧 entry
+ *   - L1+L2 entry 用 24h TTL（不被 5min 默认 TTL 限制）—— 失效完全靠 namespace version stamp
+ *
+ * 背景（2026-08-17 D1 cost 复盘）：默认 5min L2 TTL 太短，ISR refresh 周期 1h 远大于 5min，
+ *   每次 refresh 都 miss 缓存。namespace-versioned entry 必须长寿。
  */
 export async function getNamespacedCachedData<T>(
   ns: CacheNamespace,
@@ -235,5 +269,10 @@ export async function getNamespacedCachedData<T>(
   fetcher: () => Promise<T>,
 ): Promise<T> {
   const version = await readNamespaceVersion(ns);
-  return getCachedData<T>(`${ns}-v${version}-${suffixKey}`, fetcher);
+  return getCachedData<T>(
+    `${ns}-v${version}-${suffixKey}`,
+    fetcher,
+    NAMESPACE_L2_TTL_S,
+    NAMESPACE_L1_TTL_MS,
+  );
 }
