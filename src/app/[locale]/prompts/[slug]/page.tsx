@@ -30,7 +30,7 @@ function r2Webp(url: string | null, _width: number): string | null {
   return url;
 }
 
-export const revalidate = 3600;
+export const revalidate = 14400; // 4h（2026-08-17 优化：prompt 内容 publish 后基本不变，4x 降 ISR 频率）
 
 interface Props {
   params: Promise<{ locale: string; slug: string }>;
