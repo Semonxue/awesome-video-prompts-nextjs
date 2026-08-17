@@ -20,25 +20,27 @@ const intlMiddleware = createMiddleware({
 });
 
 /**
- * 边缘缓存策略（2026-06-26 P0 perf 优化）
+ * 边缘缓存策略（2026-06-26 P0 perf 优化，2026-08-18 D1 cost 优化）
  *
  * 现象：默认 Next.js 对 SSR 页发 `cache-control: private, no-cache, no-store, max-age=0, must-revalidate`
  *       + next-intl 发 set-cookie → 边缘完全无法命中缓存，每次请求都回源 → LCP 8.3s
  *
  * 修法：
  * 1. 关掉 localeCookie（已上）
- * 2. 对 HTML 页 GET 请求覆盖 cache-control 为 `public, s-maxage=3600, stale-while-revalidate=86400`
- *    - s-maxage=3600：CF 边缘 1h 命中（同 URL 直接返回，0 次 D1 调用）
- *    - stale-while-revalidate=86400：1h 后边缘自动 stale-while-revalidate 异步刷新，不阻塞用户
+ * 2. 对 HTML 页 GET 请求覆盖 cache-control 为 `public, s-maxage=28800, stale-while-revalidate=86400`
+ *    - s-maxage=28800：CF 边缘 8h 命中（同 URL 直接返回，0 次 D1 调用）
+ *      [2026-08-18 改动：从 3600 提到 28800。1h 后 SWR 触发的 worker ISR refresh 是 Q1 (getRelatedPrompts) 50K/h calls 的主因。提到 8h 预计 Q1 降至 ~6K/h (8x 降)]
+ *    - stale-while-revalidate=86400：8h 后边缘自动 stale-while-revalidate 异步刷新，不阻塞用户
+ *    - publish/unpublish 不会卡 8h：namespace version stamp 让 cache key 跟 version 走，admin 操作立即穿透
  * 3. 兜底删除 set-cookie（如果未来某路径又出现）
  *
  * 不影响的路径：
  * - /api/*：保持动态（默认行为）
  * - _next/static/* / favicon / 含扩展名文件：被 matcher 排除
  */
-const ONE_HOUR = 3600;
+const EIGHT_HOURS = 28800;
 const ONE_DAY = 86400;
-const CDN_CACHE_CONTROL = `public, s-maxage=${ONE_HOUR}, stale-while-revalidate=${ONE_DAY}`;
+const CDN_CACHE_CONTROL = `public, s-maxage=${EIGHT_HOURS}, stale-while-revalidate=${ONE_DAY}`;
 
 function isLocalePage(pathname: string): boolean {
   // 匹配 /en, /en/page/2, /en/prompts/slug, /en/tags/foo 等
