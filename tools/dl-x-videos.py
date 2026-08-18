@@ -299,6 +299,43 @@ def _has_cjk(text: str) -> bool:
     return any("\u4e00" <= ch <= "\u9fff" for ch in text)
 
 
+# Title 禁用词: 模型名 / 平台名 / 品牌名 / 通用停用词 / 数字 ID 类 fallback
+# 任何命中这里面的 title 都不合规 (slug 阶段会过滤, 这里只做 LLM 输出检查)
+_TITLE_BANNED = {
+    # 模型/产品
+    "seedance", "seedance2", "kling", "gemini", "gemini-omni", "midjourney",
+    "sora", "veo", "veo3", "runway", "hailuo", "pika", "hunyuan", "minimax",
+    "gpt-image", "gpt", "chatgpt", "higgsfield", "medeo", "grok",
+    "codex", "aigc", "v0", "imagen", "flux", "banana",
+    # 品牌
+    "mcdonald", "mcdonalds", "kfc", "coca-cola", "cocacola", "starbucks",
+    "disney", "marvel", "nike", "adidas",
+    # 平台/URL 残片
+    "https", "http", "t-co", "tco",
+    # "Video" 词: 用户强调 title 里不要 video (如 "Image To Video Payload Test")
+    "video", "videos",
+}
+
+
+def _title_is_bad(title: str) -> bool:
+    """校验 LLM 输出的 title 是否含 banned 词或不合规模式。命中返回 True。
+    不合规模式: 'Video <id>' / 'Made With <X>' / 'Created With <X>' 等 fallback。
+    """
+    if not title:
+        return True
+    words = re.findall(r"[A-Za-z][A-Za-z0-9]+", title)
+    words_lower = [w.lower() for w in words]
+    # banned 词命中
+    if any(w in _TITLE_BANNED for w in words_lower):
+        return True
+    # fallback 模式: "Video <id>" / "Made With X" / "Created With X"
+    if re.match(r"^Video\s+\d+\s*$", title, re.IGNORECASE):
+        return True
+    if re.match(r"^(Made|Created)\s+With\b", title, re.IGNORECASE):
+        return True
+    return False
+
+
 def gen_title_via_llm(
     text: str,
     *,
@@ -334,10 +371,24 @@ def gen_title_via_llm(
         "You are generating short video titles for an AI video prompts gallery.\n"
         "Read the post below (it may be in Chinese, English, or mixed) and output ONE\n"
         "concise English title, 3-7 words, Title Case, no punctuation, no quotes.\n"
-        "Focus on the subject, scene, or action — not the model name or hashtags.\n"
+        "\n"
+        "HARD RULES (output is rejected if any is violated):\n"
+        "  - NEVER include any AI model / product / platform name: seedance, kling, gemini, midjourney, sora, veo, runway, hailuo, pika, hunyuan, hailuo, gpt, gpt-image, chatgpt, higgsfield, medeo, grok, codex, imagen, flux, v0, minimax, aigc, banana, or any similar tool name.\n"
+        "  - NEVER include the word 'video' or 'videos' (e.g. NEVER write 'Image To Video' or 'Generation Video').\n"
+        "  - NEVER start with 'Video <id>', 'Made With <X>', 'Created With <X>', or any fallback template.\n"
+        "  - NEVER include brand names (McDonald, KFC, Coca-Cola, Starbucks, Disney, Nike, etc.).\n"
+        "  - NEVER include URLs, hashtags, or @mentions.\n"
+        "\n"
+        "GOOD titles focus on the subject, scene, or action visible in the post:\n"
+        "  - 'Cyberpunk Duel Photo To Combat'\n"
+        "  - 'Kyoto Travel Solo Date Cinematic'\n"
+        "  - 'Viking Warrior Bio Mech Duel'\n"
+        "\n"
         "If the post is purely meta-talk about cost/workflow and not a visual scene,\n"
-        "reflect that in the title (e.g. 'Budget 1080P Video Cost').\n"
-        "Output ONLY the title line, nothing else.\n\n"
+        "reflect that in the title (e.g. 'Budget 1080P Cinematic Cost').\n"
+        "If you cannot extract a clean title from the post, output the single word 'UNSURE'.\n"
+        "\n"
+        "Output ONLY the title line (or 'UNSURE'), nothing else.\n\n"
         f"POST:\n{excerpt}"
     )
     try:
@@ -351,10 +402,18 @@ def gen_title_via_llm(
         out = result.stdout.strip().strip('"').strip("'").strip()
         if not out or _has_cjk(out):
             return None
+        # LLM 主动拒绝 (UNSURE) → fallback
+        if out.upper() == "UNSURE":
+            print(f"  ! llm_call UNSURE, fallback", file=sys.stderr)
+            return None
         words = out.split()
         if not (3 <= len(words) <= 7):
             return None
         title = " ".join(words).title()
+        # 校验: 含 banned 词 或 fallback 模式 → 拒绝
+        if _title_is_bad(title):
+            print(f"  ! llm_call output rejected (banned/fallback): {title!r}", file=sys.stderr)
+            return None
         _LLM_TITLE_CACHE[cache_key] = title
         return title
     except subprocess.TimeoutExpired:

@@ -302,7 +302,7 @@ def _gen_title_via_llm(text: str) -> Optional[str]:
 def gen_title(text: str, fallback_id: str) -> str:
     """从 text 开头生成 3-7 词的英文 title。
 
-    标准做法:启发式 (英文 a-z 提取) → LLM 理解 (中文/混合/emoji 起头) → 兜底。
+    标准做法:启发式 (英文 a-z 提取 + banned 词过滤) → LLM 理解 (中文/混合/emoji 起头) → 兜底。
     默认走 LLM 兜底,无需 env 开关。设 LLM_TITLE=0 可强制只用启发式(不推荐)。
     """
     # 启发式:从 text 提取开头的英文 3-7 词
@@ -318,22 +318,28 @@ def gen_title(text: str, fallback_id: str) -> str:
             break
     first_line = first_line[:80]
     first_line = re.sub(r"[^a-zA-Z0-9 \-]", "", first_line)
-    words = first_line.split()
+    # 只保留英文词 (数字串如 "25" "4k" 不算 title 词)
+    words = re.findall(r"[A-Za-z][A-Za-z]+", first_line)
     if len(words) > 7:
         words = words[:7]
     if len(words) >= 3:
-        return " ".join(words).title()
-    # 启发式不足 3 词 — 统一做法:用 LLM 理解 (默认开启,LLM_TITLE=0 关闭)
+        # 过滤 banned 词 (避免启发式提取出模型名/品牌/URL/Video 词)
+        words = [w for w in words if w.lower() not in _BANNED_SLUG_WORDS and len(w) > 1]
+        if len(words) >= 3:
+            return " ".join(words).title()
+    # 启发式不足 3 词 (或全部被 banned 过滤掉) — 统一做法:用 LLM 理解
     if os.environ.get("LLM_TITLE") != "0":
         llm_title = _gen_title_via_llm(text)
         if llm_title:
             return llm_title
     return f"Video {fallback_id}"
-    return f"Video {fallback_id}"
 
 
 def kebab_slug(text: str, max_words: int = 4) -> str:
-    """从文本中取关键名词生成 kebab 段"""
+    """DEPRECATED: 旧版从原 text 抽词,会带入模型名/品牌/URL/外语。
+    新版用 kebab_slug_from_title(title) 基于 LLM 生成的 title 生成。
+    保留此函数仅供旧调用方兼容,新代码请用 kebab_slug_from_title。
+    """
     cleaned = re.sub(r"[^a-zA-Z\s]", " ", text.lower())
     words = cleaned.split()
     # 去掉停用词
@@ -342,6 +348,52 @@ def kebab_slug(text: str, max_words: int = 4) -> str:
     if not filtered:
         return "video"
     return "-".join(filtered[:max_words])
+
+
+# 模型名/品牌名/平台名 — 强制不进 slug (即便误在 title 里)
+_BANNED_SLUG_WORDS = {
+    # 模型/产品
+    "seedance", "seedance2", "kling", "gemini", "gemini-omni", "midjourney",
+    "sora", "veo", "veo3", "runway", "hailuo", "pika", "hunyuan", "minimax",
+    "gpt-image", "gpt", "chatgpt", "higgsfield", "medeo", "grok",
+    "codex", "aigc", "v0", "imagen", "flux",
+    # 品牌
+    "mcdonald", "mcdonalds", "kfc", "coca-cola", "cocacola", "starbucks",
+    "disney", "marvel", "nike", "adidas",
+    # 平台/URL 残片
+    "https", "http", "t-co", "tco",
+    # 常见停用
+    "the", "a", "an", "in", "on", "at", "to", "of", "for", "and", "or", "with",
+    "is", "are", "be", "this", "that", "as", "by", "from", "it", "into",
+    "over", "under", "between", "while", "during", "but", "not", "so",
+    "if", "then", "than", "very", "just", "also", "even", "such",
+}
+
+
+def kebab_slug_from_title(title: str, max_words: int = 4) -> str:
+    """基于 LLM 生成的 title 抽取 kebab slug。
+    跳过的词: 模型名 / 品牌 / URL 残片 / 停用词。
+    若 title 是 LLM fallback (e.g. "Video <id>") 或 < 2 词,返回 "video" 兜底。
+    """
+    if not title or not title.strip():
+        return "video"
+    t = title.strip()
+    # LLM fallback 模式: "Video <id>" / "Made With Seedance X" → 退到 video
+    if re.match(r"^Video\s+\d+$", t, re.IGNORECASE):
+        return "video"
+    if re.match(r"^Made With", t, re.IGNORECASE):
+        return "video"
+    if re.match(r"^Created With", t, re.IGNORECASE):
+        return "video"
+    # 拆词 (Title Case)
+    words = re.findall(r"[A-Za-z][A-Za-z0-9]+", t)
+    # 跳过 banned
+    words = [w.lower() for w in words if w.lower() not in _BANNED_SLUG_WORDS]
+    # 跳过单字母
+    words = [w for w in words if len(w) > 1]
+    if not words:
+        return "video"
+    return "-".join(words[:max_words])
 
 
 def parse_post_date(date_str: str) -> Tuple[str, str]:
@@ -440,7 +492,7 @@ def process_one(tweet_id: str) -> Optional[dict]:
     model = detect_model(text)
     tags = detect_tags(text, model)
     title = gen_title(text, tweet_id)
-    kebab = kebab_slug(text)
+    kebab = kebab_slug_from_title(title)  # 基于 title 生成（不是原文 text）
     slug = f"{tweet_id}-{kebab}"
 
     # 目标路径
