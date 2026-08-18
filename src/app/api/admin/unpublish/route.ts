@@ -27,6 +27,7 @@
 import { revalidatePath } from 'next/cache';
 import { invalidateCache, CACHE_KEYS, bumpNamespaceVersion } from '@/db/cache';
 import { rebuildAllAggregateCaches } from '@/db/queries';
+import { AGG_CACHE_KEYS, invalidateAggregateCache } from '@/db/aggregate-cache';
 import { eq } from 'drizzle-orm';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
@@ -128,13 +129,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // 5) revalidate（下架后立即刷新缓存）
-  const revalidated = revalidatePromptPaths(slug);
-
-  // 6) 重建 R2 聚合缓存（仅当数据实际变化；已是草稿则跳过）
+  // 5) 重建 R2 聚合缓存 — 必须在 revalidate 之前（2026-08-18 修复，同 publish）
   if (!alreadyDraft) {
     await rebuildAllAggregateCaches();
+    await Promise.allSettled([
+      invalidateAggregateCache(AGG_CACHE_KEYS.relatedMap),
+      invalidateAggregateCache(AGG_CACHE_KEYS.adjacentMap),
+    ]);
   }
+
+  // 6) revalidate（下架后立即刷新缓存）
+  const revalidated = revalidatePromptPaths(slug);
 
   // 7) 失效内存级缓存（recentPrompts / promptBySlug 仍走 cache.ts）
   await Promise.allSettled([

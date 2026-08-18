@@ -46,6 +46,7 @@ import { prompts, tags, models, promptTags, promptModels } from '@/db/schema';
 import { deriveYearMonth, keyFromMediaUrl, R2_KEY_PREFIX } from '@/lib/r2-keys';
 import { invalidateCache, CACHE_KEYS, bumpNamespaceVersion } from '@/db/cache';
 import { rebuildAllAggregateCaches } from '@/db/queries';
+import { AGG_CACHE_KEYS, invalidateAggregateCache } from '@/db/aggregate-cache';
 import { syncAllDicts, type DictSyncCombined } from '@/lib/dict-sync';
 
 // 显式标记使用 schema 里的 import（防止 lint 报 unused）
@@ -578,13 +579,20 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
     console.warn(`[admin/publish] dictSync threw: ${(e as Error).message}`);
   }
 
-  // 11) revalidate
-  const revalidated = revalidatePromptPaths(slug);
-
-  // 12) 重建 R2 聚合缓存（tags/models/model-tag-dist/counts 全量重算覆盖写，保证发布后立即可见）
-  //     listAllTags/listAllModels/listModelTagDistribution/listPrompts 的 count 都改读 R2，
-  //     不再需要遍历失效 model-tag-dist-*（R2 覆盖写即最新）
+  // 11) 重建 R2 聚合缓存 — 必须在 revalidate 之前！
+  //     背景（2026-08-18 修复）：之前 revalidate 在前，ISR 触发详情页渲染时
+  //     getRelatedPromptsFromMap → readAggregateCache(related-map) → R2 还没文件
+  //     → 写 null 进 L1+L2（5min TTL）→ fallback D1。即使 rebuild 写了 R2，5min 内
+  //     L1+L2 仍返回 null，导致静态化失效。
+  //     修法：先写 R2 → invalidate 可能已有的 null → 再 revalidate。
   await rebuildAllAggregateCaches();
+  await Promise.allSettled([
+    invalidateAggregateCache(AGG_CACHE_KEYS.relatedMap),
+    invalidateAggregateCache(AGG_CACHE_KEYS.adjacentMap),
+  ]);
+
+  // 12) revalidate
+  const revalidated = revalidatePromptPaths(slug);
 
   // 13) 失效内存级缓存（recentPrompts / promptBySlug 仍走 cache.ts）
   await Promise.allSettled([

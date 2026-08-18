@@ -23,6 +23,7 @@
 import { revalidatePath } from 'next/cache';
 import { invalidateCache, CACHE_KEYS, bumpNamespaceVersion } from '@/db/cache';
 import { rebuildAllAggregateCaches } from '@/db/queries';
+import { AGG_CACHE_KEYS, invalidateAggregateCache } from '@/db/aggregate-cache';
 import { eq } from 'drizzle-orm';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
@@ -148,7 +149,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'D1 delete reported 0 changes (row already gone?)' }, { status: 500 });
   }
 
-  // 7) revalidate（清理后立即刷新缓存）
+  // 7) 重建 R2 聚合缓存 — 必须在 revalidate 之前（2026-08-18 修复，同 publish）
+  await rebuildAllAggregateCaches();
+  await Promise.allSettled([
+    invalidateAggregateCache(AGG_CACHE_KEYS.relatedMap),
+    invalidateAggregateCache(AGG_CACHE_KEYS.adjacentMap),
+  ]);
+
+  // 8) revalidate（清理后立即刷新缓存）
   try {
     revalidatePath('/en');
     revalidatePath('/zh');
@@ -160,9 +168,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   } catch (err) {
     console.warn('[delete] revalidate error:', err);
   }
-
-  // 重建 R2 聚合缓存（tags/models/model-tag-dist/counts 全量重算覆盖写，保证删除后立即可见）
-  await rebuildAllAggregateCaches();
 
   // 失效内存级缓存（recentPrompts / promptBySlug 仍走 cache.ts）
   await Promise.allSettled([
