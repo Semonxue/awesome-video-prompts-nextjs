@@ -27,7 +27,7 @@ import { Writable } from "node:stream";
 // Response with null body status (101, 204, 205, or 304) cannot have a body.
 const NULL_BODY_STATUSES = new Set([101, 204, 205, 304]);
 const CDN_CACHE_CONTROL =
-  "public, s-maxage=3600, stale-while-revalidate=86400";
+  "public, s-maxage=28800, stale-while-revalidate=86400";
 // 匹配 /en, /zh, /ja 及其下子路径（不带 api 前缀）
 const LOCALE_PATH_REGEX = /^\/(en|zh|ja)(\/|\?|$)/;
 // sitemap.xml / robots.txt 也需要走 CDN 缓存（否则 Googlebot 每次抓取都打 D1）

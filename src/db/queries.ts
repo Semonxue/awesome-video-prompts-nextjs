@@ -37,6 +37,9 @@ import {
   writeAggregateCache,
   invalidateAggregateCache,
   type CountsCache,
+  type AdjacentMapCache,
+  type AdjacentEntry,
+  type RelatedMapCache,
 } from './aggregate-cache';
 import { MODELS_DICT, TAGS_DICT } from '@/lib/dict-yaml';
 
@@ -529,6 +532,16 @@ export async function rebuildAllAggregateCaches(): Promise<void> {
   // 永远停在首次部署的 R2 快照上。
   await writeAggregateCache(AGG_CACHE_KEYS.tags, tags);
   await writeAggregateCache(AGG_CACHE_KEYS.models, models);
+
+  // 2026-08-18 D1 cost 静态化：预计算 related-map + adjacent-map
+  // 这两个聚合输入只在 publish 时变化，运行时从 R2 读完全消除 D1 扫描
+  // （Query 1: 1.48M runs / 7.6B rows read → 0）
+  const [relatedMap, adjacentMap] = await Promise.all([
+    computeRelatedMap(),
+    computeAdjacentMap(),
+  ]);
+  await writeAggregateCache(AGG_CACHE_KEYS.relatedMap, relatedMap);
+  await writeAggregateCache(AGG_CACHE_KEYS.adjacentMap, adjacentMap);
 }
 
 /**
@@ -761,4 +774,219 @@ export async function getAdjacentPromptsCached(
     slug,
     () => getAdjacentPrompts(slug),
   );
+}
+
+// ============================================================
+// 预计算：Related + Adjacent Maps（2026-08-18 D1 cost 静态化）
+// ============================================================
+// 背景：getRelatedPrompts 是 D1 cost 的头号杀手（Query 1: 1.48M runs, 7.6B rows read）。
+//       related/adjacent 结果的输入（全表 prompts + 关联）只在 publish 时变化，
+//       却每次 ISR refresh 都在 Worker 运行时实时计算。
+//
+// 方案：在 publish 时全量预计算一次，存 R2 聚合缓存。详情页读 R2 → 零 D1 扫描。
+//       related-map.json：slug → top 6 related slug[]
+//       adjacent-map.json：slug → { prev, next }（含 title/coverUrl 导航字段）
+//
+// 打分规则（与 getRelatedPrompts 一致）：
+//   - 共享 model：+10/个
+//   - 共享 tag：+2/个
+//   - 排序：分数 DESC，再 promptDate DESC
+//
+// 性能：~13,500 prompts × avg ~300 候选 → JS 端全量打分 ~5-10s，
+//       只在 publish 时执行一次（人工低频操作），完全可接受。
+// ============================================================
+
+/** 预计算所有 prompt 的 top 6 related slugs（全量内存打分，不走 D1 per-prompt 查询） */
+async function computeRelatedMap(): Promise<RelatedMapCache> {
+  const d1 = await getD1();
+  const db = getDb(d1);
+
+  // 1) 一次性加载全表（3 次 D1 round-trip，替代 13,500 次 per-slug round-trip）
+  const [allPrompts, allPromptTags, allPromptModels] = await Promise.all([
+    db
+      .select({ id: prompts.id, slug: prompts.slug, promptDate: prompts.promptDate })
+      .from(prompts)
+      .where(eq(prompts.isDraft, 0))
+      .orderBy(desc(prompts.promptDate), desc(prompts.id)),
+    db
+      .select({ promptId: promptTags.promptId, tagName: tags.name })
+      .from(promptTags)
+      .innerJoin(tags, eq(promptTags.tagId, tags.id)),
+    db
+      .select({ promptId: promptModels.promptId, modelSlug: models.slug })
+      .from(promptModels)
+      .innerJoin(models, eq(promptModels.modelId, models.id)),
+  ]);
+
+  // 2) 构建正向索引：promptId → tags / models
+  const promptTagsMap = new Map<number, Set<string>>();
+  for (const pt of allPromptTags) {
+    const s = promptTagsMap.get(pt.promptId) ?? new Set<string>();
+    s.add(pt.tagName);
+    promptTagsMap.set(pt.promptId, s);
+  }
+  const promptModelsMap = new Map<number, Set<string>>();
+  for (const pm of allPromptModels) {
+    const s = promptModelsMap.get(pm.promptId) ?? new Set<string>();
+    s.add(pm.modelSlug);
+    promptModelsMap.set(pm.promptId, s);
+  }
+
+  // 3) 构建反向索引：tag/model → promptIds（用于快速找候选）
+  const tagToPromptIds = new Map<string, Set<number>>();
+  for (const pt of allPromptTags) {
+    const s = tagToPromptIds.get(pt.tagName) ?? new Set<number>();
+    s.add(pt.promptId);
+    tagToPromptIds.set(pt.tagName, s);
+  }
+  const modelToPromptIds = new Map<string, Set<number>>();
+  for (const pm of allPromptModels) {
+    const s = modelToPromptIds.get(pm.modelSlug) ?? new Set<number>();
+    s.add(pm.promptId);
+    modelToPromptIds.set(pm.modelSlug, s);
+  }
+
+  // 4) 构建 promptDate 查找表 + id→slug 映射 + 全局 ranking（按 promptDate DESC）
+  const idToSlug = new Map<number, string>();
+  const promptDateMap = new Map<number, string>();
+  const rankMap = new Map<number, number>(); // id → global rank (0 = most recent)
+  for (let i = 0; i < allPrompts.length; i++) {
+    const p = allPrompts[i];
+    idToSlug.set(p.id, p.slug);
+    promptDateMap.set(p.id, p.promptDate ?? '');
+    rankMap.set(p.id, i);
+  }
+
+  // 5) 为每个 prompt 计算 top 6 related slugs
+  const result: RelatedMapCache = {};
+
+  for (const prompt of allPrompts) {
+    const myTags = promptTagsMap.get(prompt.id) ?? new Set<string>();
+    const myModels = promptModelsMap.get(prompt.id) ?? new Set<string>();
+
+    // 收集候选 promptIds（共享任一 tag 或 model）
+    const candidateIds = new Set<number>();
+    for (const tag of myTags) {
+      const ids = tagToPromptIds.get(tag);
+      if (ids) for (const pid of ids) { if (pid !== prompt.id) candidateIds.add(pid); }
+    }
+    for (const model of myModels) {
+      const ids = modelToPromptIds.get(model);
+      if (ids) for (const pid of ids) { if (pid !== prompt.id) candidateIds.add(pid); }
+    }
+
+    if (candidateIds.size === 0) {
+      result[prompt.slug] = [];
+      continue;
+    }
+
+    // 裁到最新 100 个候选后打分（避免 3000+ 候选全部评分）
+    const sortedCandidates = Array.from(candidateIds)
+      .sort((a, b) => (rankMap.get(a) ?? Infinity) - (rankMap.get(b) ?? Infinity))
+      .slice(0, 100);
+
+    // 打分
+    const scored = sortedCandidates.map((cid) => {
+      const cTags = promptTagsMap.get(cid) ?? new Set<string>();
+      const cModels = promptModelsMap.get(cid) ?? new Set<string>();
+      let score = 0;
+      for (const m of myModels) { if (cModels.has(m)) score += 10; }
+      for (const t of myTags) { if (cTags.has(t)) score += 2; }
+      return { id: cid, score, promptDate: promptDateMap.get(cid) ?? '' };
+    });
+
+    scored.sort(
+      (a, b) =>
+        b.score - a.score ||
+        (b.promptDate ?? '').localeCompare(a.promptDate ?? ''),
+    );
+
+    result[prompt.slug] = scored
+      .slice(0, 6)
+      .map((s) => idToSlug.get(s.id)!)
+      .filter(Boolean);
+  }
+
+  return result;
+}
+
+/** 预计算所有 prompt 的上下篇（按 id 排序，取导航字段） */
+async function computeAdjacentMap(): Promise<AdjacentMapCache> {
+  const d1 = await getD1();
+  const db = getDb(d1);
+
+  const rows = await db
+    .select({ id: prompts.id, slug: prompts.slug, title: prompts.title, coverUrl: prompts.coverUrl })
+    .from(prompts)
+    .where(eq(prompts.isDraft, 0))
+    .orderBy(prompts.id);
+
+  const result: AdjacentMapCache = {};
+
+  for (let i = 0; i < rows.length; i++) {
+    const prev: AdjacentEntry | null =
+      i > 0
+        ? { slug: rows[i - 1].slug, title: rows[i - 1].title, coverUrl: rows[i - 1].coverUrl }
+        : null;
+    const next: AdjacentEntry | null =
+      i < rows.length - 1
+        ? { slug: rows[i + 1].slug, title: rows[i + 1].title, coverUrl: rows[i + 1].coverUrl }
+        : null;
+    result[rows[i].slug] = { prev, next };
+  }
+
+  return result;
+}
+
+/**
+ * 从预计算 related-map 读 related prompts（2026-08-18 D1 cost 静态化）
+ *
+ * 替代 getRelatedPromptsCached：不再运行时调 D1 计算，改为读 publish 时预计算好的
+ * R2 related-map.json → 拿 6 个 slug → 调 getPromptBySlugCached（已有 per-slug 缓存）
+ *
+ * 容错：map 不存在（首次部署尚未 rebuild）→ fallback 到旧的 getRelatedPromptsCached
+ */
+export async function getRelatedPromptsFromMap(
+  sourcePrompt: PromptCardData,
+  limit: number = 6,
+): Promise<PromptCardData[]> {
+  const map = await readAggregateCache<RelatedMapCache>(AGG_CACHE_KEYS.relatedMap);
+  if (!map) {
+    // 兜底：R2 没有预计算结果（首次部署）→ 走旧的 namespace cache
+    return getRelatedPromptsCached(sourcePrompt, limit);
+  }
+
+  const relatedSlugs = map[sourcePrompt.slug];
+  if (!relatedSlugs || relatedSlugs.length === 0) return [];
+
+  // 批量取详情（per-slug cache 已覆盖，多次调用共享 L1+L2）
+  const items = await Promise.all(
+    relatedSlugs.slice(0, limit).map((s) => getPromptBySlugCached(s)),
+  );
+  return items.filter((p): p is PromptCardData => p !== null);
+}
+
+/**
+ * 从预计算 adjacent-map 读上下篇（2026-08-18 D1 cost 静态化）
+ *
+ * 替代 getAdjacentPromptsCached：不再运行时调 D1，改为读 publish 时预计算的
+ * R2 adjacent-map.json（已含 title/coverUrl 导航字段）
+ *
+ * 容错：map 不存在 → fallback 到旧的 getAdjacentPromptsCached
+ */
+export async function getAdjacentPromptsFromMap(
+  slug: string,
+): Promise<{ prev: AdjacentPrompt | null; next: AdjacentPrompt | null }> {
+  const map = await readAggregateCache<AdjacentMapCache>(AGG_CACHE_KEYS.adjacentMap);
+  if (!map) {
+    return getAdjacentPromptsCached(slug);
+  }
+
+  const entry = map[slug];
+  if (!entry) return { prev: null, next: null };
+
+  return {
+    prev: entry.prev ? { slug: entry.prev.slug, title: entry.prev.title, coverUrl: entry.prev.coverUrl } : null,
+    next: entry.next ? { slug: entry.next.slug, title: entry.next.title, coverUrl: entry.next.coverUrl } : null,
+  };
 }

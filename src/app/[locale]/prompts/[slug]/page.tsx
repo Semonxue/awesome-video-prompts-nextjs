@@ -19,7 +19,7 @@ import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import CopyButton from '@/components/CopyButton';
 import { GridEngine } from '@/components/GridEngine';
-import { getPromptBySlugCached, getAdjacentPromptsCached, getRelatedPromptsCached } from '@/db/queries';
+import { getPromptBySlugCached, getAdjacentPromptsFromMap, getRelatedPromptsFromMap } from '@/db/queries';
 import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
 import { tagHref, modelHref } from '@/lib/format';
 import { SITE_URL, R2_PUBLIC_URL } from '@/lib/site';
@@ -101,15 +101,15 @@ export default async function PromptDetailPage({ params }: Props) {
   const prompt = await getPromptBySlugCached(slug);
   if (!prompt) notFound();
 
-  // 相关推荐 + 上下篇 — 详情页 Phase 2 优化（2026-08-07 Error 1102 修复）：
-  //   旧路径：listRecentPromptsCached(48) → hydrate 48 份 tags/models → 内存打分
-  //     → 详情页 RSC 载荷背 1520 个 tag/model 对象，SSR CPU 超限主因之一
-  //   新路径：两条专用 SQL，仅取真正需要的少量候选 + 上下篇各 1 行
-  //     → 详情页不再背全局数据，SSR CPU 大幅下降
+  // 相关推荐 + 上下篇 — 2026-08-18 D1 cost 静态化：
+  //   旧路径：getRelatedPromptsCached / getAdjacentPromptsCached → namespace cache → D1
+  //     → Query 1 (1.48M runs / 7.6B rows read) + Queries 2-5
+  //   新路径：publish 时预计算存 R2 → 读 R2 aggregate cache → 零 D1 扫描
+  //     容错：R2 miss 时自动 fallback 到旧 namespace cache
   //   并发取：两个查询无依赖，并发执行
   const [related, { prev, next }] = await Promise.all([
-    getRelatedPromptsCached(prompt),
-    getAdjacentPromptsCached(slug),
+    getRelatedPromptsFromMap(prompt),
+    getAdjacentPromptsFromMap(slug),
   ]);
 
   // Header 数据（不分 locale）

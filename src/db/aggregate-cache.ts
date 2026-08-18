@@ -26,6 +26,16 @@ export const AGG_CACHE_KEYS = {
   modelTags: '_cache/model-tags.json',
   /** 各筛选维度 count（total / tags / models） */
   counts: '_cache/counts.json',
+  /**
+   * Related prompts 预计算（2026-08-18 D1 cost 静态化）
+   * slug → 6 个 related slug（按共享 tag/model 打分，已排序）
+   */
+  relatedMap: '_cache/related-map.json',
+  /**
+   * Adjacent prompts 预计算（2026-08-18 D1 cost 静态化）
+   * slug → { prev: {slug,title,coverUrl} | null, next: {slug,title,coverUrl} | null }
+   */
+  adjacentMap: '_cache/adjacent-map.json',
 } as const;
 
 /** counts.json 结构 */
@@ -36,6 +46,23 @@ export interface CountsCache {
   tags: Record<string, number>;
   /** model slug -> count */
   models: Record<string, number>;
+}
+
+/** adjacent-map.json 的 prev/next 条目（仅 3 个导航字段，不含完整 PromptCardData） */
+export interface AdjacentEntry {
+  slug: string;
+  title: string;
+  coverUrl: string | null;
+}
+
+/** adjacent-map.json 结构 */
+export interface AdjacentMapCache {
+  [slug: string]: { prev: AdjacentEntry | null; next: AdjacentEntry | null };
+}
+
+/** related-map.json 结构：slug → 6 个 related slug */
+export interface RelatedMapCache {
+  [slug: string]: string[];
 }
 
 /** R2 binding 类型（来自 CloudflareEnv，与 admin 路由一致，避免全局 R2Bucket 类型冲突） */
