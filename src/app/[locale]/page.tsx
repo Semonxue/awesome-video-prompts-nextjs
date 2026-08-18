@@ -23,8 +23,8 @@ interface HomePageProps {
   searchParams: Promise<{ tag?: string; model?: string; q?: string; page?: string }>;
 }
 
-// ISR 1h — 1 小时内同 URL 0 次 D1 调用
-export const revalidate = 3600;
+// ISR 24h — publish/delete 时 revalidatePath 主动失效，无需短 TTL
+export const revalidate = 86400;
 
 const PAGE_SIZE = 24;
 

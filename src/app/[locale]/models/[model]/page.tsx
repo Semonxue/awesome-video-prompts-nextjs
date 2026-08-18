@@ -19,7 +19,7 @@ import { listAllModels, listAllTags, listPrompts, listModelTagDistribution, getM
 import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
 import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 const PAGE_SIZE = 24;
 

@@ -7,6 +7,8 @@ import { notFound } from 'next/navigation';
 import { listAllModels } from '@/db/queries';
 import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
 
+export const revalidate = 86400;
+
 interface ModelsPageProps {
   params: Promise<{ locale: string }>;
 }
