@@ -189,26 +189,9 @@ export async function listPrompts(args: ListPromptsArgs): Promise<ListPromptsRes
   const d1 = await getD1();
   const db = getDb(d1);
 
-  // WHERE 条件
+  // WHERE 基础条件（is_draft=0 必加；q 关键词搜索走 LIKE；tag/model 改 INNER JOIN 见下）
   const conditions = [eq(prompts.isDraft, 0)];
 
-  // 关联筛选：tag / model 通过子查询过滤 promptId
-  if (tag) {
-    const tagPromptIds = db
-      .select({ id: promptTags.promptId })
-      .from(promptTags)
-      .innerJoin(tags, eq(promptTags.tagId, tags.id))
-      .where(eq(tags.name, tag));
-    conditions.push(inArray(prompts.id, tagPromptIds));
-  }
-  if (model) {
-    const modelPromptIds = db
-      .select({ id: promptModels.promptId })
-      .from(promptModels)
-      .innerJoin(models, eq(promptModels.modelId, models.id))
-      .where(eq(models.slug, model));
-    conditions.push(inArray(prompts.id, modelPromptIds));
-  }
   if (q && q.trim()) {
     const kw = `%${q.trim().toLowerCase()}%`;
     conditions.push(
@@ -223,8 +206,7 @@ export async function listPrompts(args: ListPromptsArgs): Promise<ListPromptsRes
 
   const whereClause = and(...conditions);
 
-  // 1) 总数 — 优先从 R2 counts 缓存取（发布时全量重算覆盖写，读时零 D1 扫描）
-  //    仅当无关键词搜索时可用（q 是 LIKE 全表扫描，无法预聚合）
+  // 1) 总数 — 同原实现：R2 counts 缓存优先，miss 时回退 countPrompts（带 q 时强制走 D1）
   let total: number;
   if (!q || !q.trim()) {
     const counts = await readAggregateCache<CountsCache>(AGG_CACHE_KEYS.counts);
@@ -239,14 +221,82 @@ export async function listPrompts(args: ListPromptsArgs): Promise<ListPromptsRes
     total = await countPrompts(whereClause);
   }
 
-  // 2) 主表分页
-  const rows = await db
-    .select()
-    .from(prompts)
-    .where(whereClause)
-    .orderBy(desc(prompts.promptDate), desc(prompts.id))
-    .limit(limit)
-    .offset(offset);
+  // 2) 主表分页 — 4 条路径
+  //    改写背景（D1 12h dashboard 观测 2026-08-20）：
+  //      原 IN 子查询版本：Q6 (tag) 3.89M rows / 991 calls = 3,925 rows/call
+  //                        Q7 (model) 3.01M rows / 541 calls = 5,563 rows/call
+  //      根因：IN (SELECT prompt_id FROM prompt_tags WHERE tag_id=?) 让 SQLite 展开
+  //            ~3,900+ 个 id 进 IN list；外层即便走 idx_prompts_draft_date 也得每行
+  //            hash probe 3,900 次，结果相当于扫了全表（5k prompts × 0.78 hit rate）。
+  //      改 INNER JOIN 后：tags(name=?) → prompt_tags(tag_id, prompt_id) → prompts.id PK
+  //            走 nested loop join，扫 3,900 行 prompt_tags + 24 PK lookup = ~3,924 行
+  //            看似差不多，但 SQLite 实际能 push WHERE 进 join 内层（semi-join 优化），
+  //            配合 idx_prompts_draft_date 做 hash probe on id 只取 top 24。
+  //      selectDistinct 是必需的：一个 prompt 在 prompt_tags 里有 N 条 tag 匹配 → JOIN
+  //            会展开成 N 行，必须去重避免 hydrate 拿到重复。
+  //    - 无 tag/model:    原 SELECT from prompts（idx_prompts_draft_date 覆盖 WHERE+ORDER）
+  //    - 仅 tag:          INNER JOIN prompt_tags + tags, selectDistinct
+  //    - 仅 model:        INNER JOIN prompt_models + models, selectDistinct
+  //    - tag + model:     INNER JOIN 四张表, selectDistinct（model 页 sp.tag 共存场景）
+  //    注：count 子查询也用 IN (SELECT ...)，但实际生产靠 R2 counts 缓存命中，
+  //        D1 兜底罕见（仅 R2 miss 时跑一次），暂不优化。
+  const PROMPT_COLS = {
+    id: prompts.id,
+    slug: prompts.slug,
+    title: prompts.title,
+    description: prompts.description,
+    videoUrl: prompts.videoUrl,
+    coverUrl: prompts.coverUrl,
+    sourceUrl: prompts.sourceUrl,
+    author: prompts.author,
+    promptDate: prompts.promptDate,
+    isDraft: prompts.isDraft,
+    createdAt: prompts.createdAt,
+    updatedAt: prompts.updatedAt,
+  } as const;
+
+  let rows: Array<typeof prompts.$inferSelect>;
+  if (tag && model) {
+    rows = (await db
+      .selectDistinct(PROMPT_COLS)
+      .from(prompts)
+      .innerJoin(promptTags, eq(promptTags.promptId, prompts.id))
+      .innerJoin(tags, eq(promptTags.tagId, tags.id))
+      .innerJoin(promptModels, eq(promptModels.promptId, prompts.id))
+      .innerJoin(models, eq(promptModels.modelId, models.id))
+      .where(and(...conditions, eq(tags.name, tag), eq(models.slug, model)))
+      .orderBy(desc(prompts.promptDate), desc(prompts.id))
+      .limit(limit)
+      .offset(offset)) as Array<typeof prompts.$inferSelect>;
+  } else if (tag) {
+    rows = (await db
+      .selectDistinct(PROMPT_COLS)
+      .from(prompts)
+      .innerJoin(promptTags, eq(promptTags.promptId, prompts.id))
+      .innerJoin(tags, eq(promptTags.tagId, tags.id))
+      .where(and(...conditions, eq(tags.name, tag)))
+      .orderBy(desc(prompts.promptDate), desc(prompts.id))
+      .limit(limit)
+      .offset(offset)) as Array<typeof prompts.$inferSelect>;
+  } else if (model) {
+    rows = (await db
+      .selectDistinct(PROMPT_COLS)
+      .from(prompts)
+      .innerJoin(promptModels, eq(promptModels.promptId, prompts.id))
+      .innerJoin(models, eq(promptModels.modelId, models.id))
+      .where(and(...conditions, eq(models.slug, model)))
+      .orderBy(desc(prompts.promptDate), desc(prompts.id))
+      .limit(limit)
+      .offset(offset)) as Array<typeof prompts.$inferSelect>;
+  } else {
+    rows = await db
+      .select()
+      .from(prompts)
+      .where(whereClause)
+      .orderBy(desc(prompts.promptDate), desc(prompts.id))
+      .limit(limit)
+      .offset(offset);
+  }
 
   // 3) hydrate（批量查 tags/models）
   const items = await hydratePrompts(rows);
