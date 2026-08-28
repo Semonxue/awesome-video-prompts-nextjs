@@ -1,251 +1,577 @@
 {
   "ok": true,
-  "total": 15,
+  "total": 34,
   "items": [
     {
-      "tweet_id": "2091093399084708112",
-      "slug": "2091093399084708112-snow-cafe-vlog-created",
-      "ym": "2026-08",
-      "title": "Snow Cafe Vlog Created",
-      "model": "hailuo",
-      "tags": [
-        "snow"
-      ],
-      "source_url": "https://x.com/i/status/2091093399084708112",
-      "cover_kb": 17.8,
-      "video_kb": 304.3
-    },
-    {
-      "tweet_id": "2091103231753457853",
-      "slug": "2091103231753457853-first-test-using-wan",
-      "ym": "2026-08",
-      "title": "First Test Using Wan Need Test",
-      "model": "wan26",
+      "tweet_id": "2072899113893691485",
+      "slug": "2072899113893691485-video",
+      "ym": "2026-07",
+      "title": "Video 2072899113893691485",
+      "model": "seedance2",
       "tags": [
         "cinematic",
         "realistic",
         "portrait",
-        "tracking",
-        "minimalist"
+        "anime",
+        "macro"
       ],
-      "source_url": "https://x.com/i/status/2091103231753457853",
-      "cover_kb": 27.3,
-      "video_kb": 1014.5
+      "source_url": "https://x.com/i/status/2072899113893691485",
+      "cover_kb": 21.0,
+      "video_kb": 180.5
     },
     {
-      "tweet_id": "2091153699070746795",
-      "slug": "2091153699070746795-video",
-      "ym": "2026-08",
-      "title": "Video 2091153699070746795",
-      "model": "seedance25",
-      "tags": [
-        "motion_blur",
-        "cinematic",
-        "realistic",
-        "colorful",
-        "hallway"
-      ],
-      "source_url": "https://x.com/i/status/2091153699070746795",
-      "cover_kb": 24.6,
-      "video_kb": 1030.7
-    },
-    {
-      "tweet_id": "2091167207262929339",
-      "slug": "2091167207262929339-can-you-feel-vibe",
-      "ym": "2026-08",
-      "title": "Can You Feel Vibe",
-      "model": "seedance25",
-      "tags": [
-        "realistic",
-        "motion_blur",
-        "cinematic",
-        "silhouette",
-        "landscape"
-      ],
-      "source_url": "https://x.com/i/status/2091167207262929339",
-      "cover_kb": 21.3,
-      "video_kb": 1029.0
-    },
-    {
-      "tweet_id": "2091215674286940264",
-      "slug": "2091215674286940264-video",
-      "ym": "2026-08",
-      "title": "Video 2091215674286940264",
-      "model": "seedance25",
+      "tweet_id": "2072993724137709975",
+      "slug": "2072993724137709975-summer-heat-meets-its",
+      "ym": "2026-07",
+      "title": "Summer Heat Meets Its Match One Sip",
+      "model": "kling3",
       "tags": [
         "cinematic",
-        "realistic",
         "portrait",
-        "tracking",
-        "multi-shot"
+        "bright",
+        "motion_blur",
+        "macro"
       ],
-      "source_url": "https://x.com/i/status/2091215674286940264",
-      "cover_kb": 8.6,
-      "video_kb": 388.1
+      "source_url": "https://x.com/i/status/2072993724137709975",
+      "cover_kb": 18.7,
+      "video_kb": 239.2
     },
     {
-      "tweet_id": "2091310111486599454",
-      "slug": "2091310111486599454-video",
-      "ym": "2026-08",
-      "title": "Video 2091310111486599454",
+      "tweet_id": "2073005071516999925",
+      "slug": "2073005071516999925-video",
+      "ym": "2026-07",
+      "title": "Video 2073005071516999925",
       "model": "seedance2",
       "tags": [
         "motion_blur",
-        "minimalist",
-        "urban",
-        "nature",
-        "sunset"
-      ],
-      "source_url": "https://x.com/i/status/2091310111486599454",
-      "cover_kb": 14.1,
-      "video_kb": 126.9
-    },
-    {
-      "tweet_id": "2091339810053255171",
-      "slug": "2091339810053255171-meetlclat-flora-fragrance-brand",
-      "ym": "2026-08",
-      "title": "Meetlclat Flora Fragrance Brand Doesnt Exist",
-      "model": "seedance25",
-      "tags": [
-        "minimalist",
-        "silhouette",
         "cinematic",
-        "realistic",
-        "tracking"
-      ],
-      "source_url": "https://x.com/i/status/2091339810053255171",
-      "cover_kb": 17.7,
-      "video_kb": 678.6
-    },
-    {
-      "tweet_id": "2091385137133219971",
-      "slug": "2091385137133219971-normal-day-life",
-      "ym": "2026-08",
-      "title": "Normal Day Life",
-      "model": "seedance25",
-      "tags": [
-        "cinematic",
-        "realistic",
-        "multi-shot",
-        "night",
-        "rally"
-      ],
-      "source_url": "https://x.com/i/status/2091385137133219971",
-      "cover_kb": 13.2,
-      "video_kb": 1030.5
-    },
-    {
-      "tweet_id": "2091388398153994395",
-      "slug": "2091388398153994395-super-woman-finally-revealed",
-      "ym": "2026-08",
-      "title": "Super Woman Finally Revealed Her Powers",
-      "model": "seedance25",
-      "tags": [
         "realistic",
         "tracking",
-        "multi-shot",
-        "fantasy",
-        "motion_blur"
+        "minimalist"
       ],
-      "source_url": "https://x.com/i/status/2091388398153994395",
-      "cover_kb": 13.6,
-      "video_kb": 745.2
+      "source_url": "https://x.com/i/status/2073005071516999925",
+      "cover_kb": 14.1,
+      "video_kb": 451.5
     },
     {
-      "tweet_id": "2091403033817272690",
-      "slug": "2091403033817272690-video",
-      "ym": "2026-08",
-      "title": "Video 2091403033817272690",
-      "model": "seedance25",
+      "tweet_id": "2074172461063762298",
+      "slug": "2074172461063762298-what-tribes-rode-war",
+      "ym": "2026-07",
+      "title": "What Tribes Rode War Dinosaurs",
+      "model": "seedance2",
+      "tags": [
+        "realistic",
+        "military",
+        "cinematic",
+        "anime",
+        "tracking"
+      ],
+      "source_url": "https://x.com/i/status/2074172461063762298",
+      "cover_kb": 18.1,
+      "video_kb": 549.3
+    },
+    {
+      "tweet_id": "2074290550115823854",
+      "slug": "2074290550115823854-second-cinematic-sci-fi",
+      "ym": "2026-07",
+      "title": "Second Cinematic Sci Fi Action Sequence Ultra",
+      "model": "seedance2",
+      "tags": [
+        "cinematic",
+        "realistic",
+        "landscape",
+        "futuristic",
+        "multi-shot"
+      ],
+      "source_url": "https://x.com/i/status/2074290550115823854",
+      "cover_kb": 16.0,
+      "video_kb": 191.1
+    },
+    {
+      "tweet_id": "2074337922493636892",
+      "slug": "2074337922493636892-stay-fresh-stay-sharp",
+      "ym": "2026-07",
+      "title": "Stay Fresh Stay Sharp Every Battle Begins",
+      "model": "seedance2",
+      "tags": [
+        "cinematic",
+        "realistic",
+        "forest",
+        "multi-shot",
+        "fantasy"
+      ],
+      "source_url": "https://x.com/i/status/2074337922493636892",
+      "cover_kb": 13.2,
+      "video_kb": 407.3
+    },
+    {
+      "tweet_id": "2074345452208882098",
+      "slug": "2074345452208882098-ice-cream-date-grwm",
+      "ym": "2026-07",
+      "title": "Ice Cream Date Grwm",
+      "model": "seedance2",
+      "tags": [
+        "realistic",
+        "transitions",
+        "cinematic",
+        "colorful",
+        "bright"
+      ],
+      "source_url": "https://x.com/i/status/2074345452208882098",
+      "cover_kb": 17.4,
+      "video_kb": 436.5
+    },
+    {
+      "tweet_id": "2074347648908427503",
+      "slug": "2074347648908427503-morning-routine-no-music",
+      "ym": "2026-07",
+      "title": "Morning Routine No Music Vibes Only",
+      "model": "seedance2",
+      "tags": [
+        "cinematic",
+        "realistic",
+        "colorful",
+        "bright",
+        "rally"
+      ],
+      "source_url": "https://x.com/i/status/2074347648908427503",
+      "cover_kb": 19.8,
+      "video_kb": 462.4
+    },
+    {
+      "tweet_id": "2074362327835857027",
+      "slug": "2074362327835857027-video-generated-fast",
+      "ym": "2026-07",
+      "title": "Video Generated Fast",
+      "model": "seedance2",
+      "tags": [
+        "realistic",
+        "cinematic",
+        "colorful",
+        "tracking",
+        "dreamy"
+      ],
+      "source_url": "https://x.com/i/status/2074362327835857027",
+      "cover_kb": 27.6,
+      "video_kb": 348.3
+    },
+    {
+      "tweet_id": "2074386736332030452",
+      "slug": "2074386736332030452-video",
+      "ym": "2026-07",
+      "title": "Video 2074386736332030452",
+      "model": "seedance2",
       "tags": [
         "motion_blur",
         "cinematic",
         "realistic",
         "minimalist",
-        "sunset"
+        "alley"
       ],
-      "source_url": "https://x.com/i/status/2091403033817272690",
-      "cover_kb": 18.9,
-      "video_kb": 314.1
+      "source_url": "https://x.com/i/status/2074386736332030452",
+      "cover_kb": 18.4,
+      "video_kb": 161.9
     },
     {
-      "tweet_id": "2091413802390806558",
-      "slug": "2091413802390806558-seconds-fictional-live-news",
+      "tweet_id": "2074427103186235461",
+      "slug": "2074427103186235461-high-speed-cinematic-mission",
+      "ym": "2026-07",
+      "title": "High Speed Cinematic Mission Brought Life",
+      "model": "seedance2",
+      "tags": [
+        "cinematic",
+        "realistic",
+        "portrait",
+        "racing",
+        "multi-shot"
+      ],
+      "source_url": "https://x.com/i/status/2074427103186235461",
+      "cover_kb": 16.9,
+      "video_kb": 607.3
+    },
+    {
+      "tweet_id": "2074433270003970226",
+      "slug": "2074433270003970226-extreme-macro-shot-single",
+      "ym": "2026-07",
+      "title": "Extreme Macro Shot Single Candle Flame",
+      "model": "seedance2",
+      "tags": [
+        "abstract",
+        "macro",
+        "motion_blur",
+        "dark",
+        "snow"
+      ],
+      "source_url": "https://x.com/i/status/2074433270003970226",
+      "cover_kb": 7.6,
+      "video_kb": 603.7
+    },
+    {
+      "tweet_id": "2074433310227677187",
+      "slug": "2074433310227677187-rooftop-laundry-drying",
+      "ym": "2026-07",
+      "title": "Rooftop Laundry Drying",
+      "model": "seedance2",
+      "tags": [
+        "cinematic",
+        "realistic",
+        "bright",
+        "motion_blur",
+        "military"
+      ],
+      "source_url": "https://x.com/i/status/2074433310227677187",
+      "cover_kb": 19.7,
+      "video_kb": 490.7
+    },
+    {
+      "tweet_id": "2074441553469116470",
+      "slug": "2074441553469116470-cooking-meets-cinematic-ai",
+      "ym": "2026-07",
+      "title": "Cooking Meets Cinematic Ai",
+      "model": "seedance2",
+      "tags": [
+        "realistic",
+        "transitions",
+        "silhouette",
+        "cinematic",
+        "tracking"
+      ],
+      "source_url": "https://x.com/i/status/2074441553469116470",
+      "cover_kb": 13.5,
+      "video_kb": 490.2
+    },
+    {
+      "tweet_id": "2074444476354101574",
+      "slug": "2074444476354101574-countdown-chaos-begins",
+      "ym": "2026-07",
+      "title": "Countdown Chaos Begins",
+      "model": "seedance2",
+      "tags": [
+        "realistic",
+        "motion_blur",
+        "transitions",
+        "futuristic",
+        "silhouette"
+      ],
+      "source_url": "https://x.com/i/status/2074444476354101574",
+      "cover_kb": 51.8,
+      "video_kb": 186.8
+    },
+    {
+      "tweet_id": "2074460170218832184",
+      "slug": "2074460170218832184-video",
+      "ym": "2026-07",
+      "title": "Video 2074460170218832184",
+      "model": "seedance2",
+      "tags": [
+        "cinematic",
+        "anime",
+        "dark",
+        "snow"
+      ],
+      "source_url": "https://x.com/i/status/2074460170218832184",
+      "cover_kb": 20.0,
+      "video_kb": 68.6
+    },
+    {
+      "tweet_id": "2074465678514442542",
+      "slug": "2074465678514442542-cant-believe-ai-made",
+      "ym": "2026-07",
+      "title": "Cant Believe Ai Made Seednace",
+      "model": "seedance2",
+      "tags": [
+        "cinematic",
+        "ice",
+        "car",
+        "military"
+      ],
+      "source_url": "https://x.com/i/status/2074465678514442542",
+      "cover_kb": 14.7,
+      "video_kb": 258.8
+    },
+    {
+      "tweet_id": "2074466678550020295",
+      "slug": "2074466678550020295-video",
+      "ym": "2026-07",
+      "title": "Video 2074466678550020295",
+      "model": "seedance2",
+      "tags": [
+        "realistic",
+        "motion_blur",
+        "cinematic",
+        "portrait",
+        "bright"
+      ],
+      "source_url": "https://x.com/i/status/2074466678550020295",
+      "cover_kb": 15.9,
+      "video_kb": 182.6
+    },
+    {
+      "tweet_id": "2074476347351769446",
+      "slug": "2074476347351769446-video",
+      "ym": "2026-07",
+      "title": "Video 2074476347351769446",
+      "model": "seedance2",
+      "tags": [
+        "motion_blur",
+        "cinematic",
+        "realistic",
+        "nature",
+        "sunset"
+      ],
+      "source_url": "https://x.com/i/status/2074476347351769446",
+      "cover_kb": 20.8,
+      "video_kb": 548.4
+    },
+    {
+      "tweet_id": "2074482918727254106",
+      "slug": "2074482918727254106-classical-beauty-product-commercial",
+      "ym": "2026-07",
+      "title": "Classical Beauty Product Commercial",
+      "model": "seedance2",
+      "tags": [
+        "realistic",
+        "transitions",
+        "minimalist",
+        "cinematic",
+        "nature"
+      ],
+      "source_url": "https://x.com/i/status/2074482918727254106",
+      "cover_kb": 32.7,
+      "video_kb": 147.2
+    },
+    {
+      "tweet_id": "2074504383723962645",
+      "slug": "2074504383723962645-knight-tried-his-best",
+      "ym": "2026-07",
+      "title": "Knight Tried His Best Ran Out",
+      "model": "seedance2",
+      "tags": [
+        "realistic",
+        "cinematic",
+        "fantasy",
+        "nature",
+        "multi-shot"
+      ],
+      "source_url": "https://x.com/i/status/2074504383723962645",
+      "cover_kb": 20.5,
+      "video_kb": 483.1
+    },
+    {
+      "tweet_id": "2092784038939656536",
+      "slug": "2092784038939656536-video",
       "ym": "2026-08",
-      "title": "Seconds Fictional Live News Reporting",
+      "title": "Video 2092784038939656536",
+      "model": "seedance2",
+      "tags": [
+        "pov",
+        "cinematic",
+        "realistic",
+        "portrait"
+      ],
+      "source_url": "https://x.com/i/status/2092784038939656536",
+      "cover_kb": 24.7,
+      "video_kb": 184.0
+    },
+    {
+      "tweet_id": "2092793943599755621",
+      "slug": "2092793943599755621-falling-skyline-landing-like",
+      "ym": "2026-08",
+      "title": "Falling Skyline Landing Like Legend",
+      "model": "seedance2",
+      "tags": [
+        "motion_blur",
+        "futuristic",
+        "cinematic",
+        "multi-shot",
+        "anime"
+      ],
+      "source_url": "https://x.com/i/status/2092793943599755621",
+      "cover_kb": 12.2,
+      "video_kb": 236.2
+    },
+    {
+      "tweet_id": "2092818081039179894",
+      "slug": "2092818081039179894-video",
+      "ym": "2026-08",
+      "title": "Video 2092818081039179894",
+      "model": "seedance25",
+      "tags": [
+        "cinematic",
+        "anime",
+        "portrait",
+        "colorful",
+        "bright"
+      ],
+      "source_url": "https://x.com/i/status/2092818081039179894",
+      "cover_kb": 29.1,
+      "video_kb": 310.5
+    },
+    {
+      "tweet_id": "2092833390890541138",
+      "slug": "2092833390890541138-video",
+      "ym": "2026-08",
+      "title": "Video 2092833390890541138",
+      "model": "seedance25",
+      "tags": [
+        "realistic",
+        "transitions",
+        "cinematic",
+        "multi-shot",
+        "night"
+      ],
+      "source_url": "https://x.com/i/status/2092833390890541138",
+      "cover_kb": 17.9,
+      "video_kb": 648.9
+    },
+    {
+      "tweet_id": "2092873962640519385",
+      "slug": "2092873962640519385-fast-paced-action-cinematic",
+      "ym": "2026-08",
+      "title": "Fast Paced Action Cinematic Atmosphere Intense",
       "model": "seedance25",
       "tags": [
         "realistic",
         "motion_blur",
         "transitions",
         "cinematic",
-        "futuristic"
+        "tracking"
       ],
-      "source_url": "https://x.com/i/status/2091413802390806558",
-      "cover_kb": 24.6,
-      "video_kb": 586.3
+      "source_url": "https://x.com/i/status/2092873962640519385",
+      "cover_kb": 10.0,
+      "video_kb": 567.8
     },
     {
-      "tweet_id": "2091426550285824071",
-      "slug": "2091426550285824071-video",
+      "tweet_id": "2092900718294548762",
+      "slug": "2092900718294548762-video",
       "ym": "2026-08",
-      "title": "Video 2091426550285824071",
-      "model": "seedance25",
+      "title": "Video 2092900718294548762",
+      "model": "seedance2",
       "tags": [
+        "futuristic",
+        "cinematic",
+        "fantasy",
         "motion_blur"
       ],
-      "source_url": "https://x.com/i/status/2091426550285824071",
-      "cover_kb": 13.4,
-      "video_kb": 354.9
+      "source_url": "https://x.com/i/status/2092900718294548762",
+      "cover_kb": 16.2,
+      "video_kb": 697.2
     },
     {
-      "tweet_id": "2091432392758034866",
-      "slug": "2091432392758034866-romantic-comedy-twist",
+      "tweet_id": "2092910912349053035",
+      "slug": "2092910912349053035-video",
       "ym": "2026-08",
-      "title": "Romantic Comedy Twist",
-      "model": "minimaxh3",
+      "title": "Video 2092910912349053035",
+      "model": "seedance2",
       "tags": [
         "realistic",
         "cinematic",
+        "fantasy",
         "multi-shot",
-        "colorful",
-        "urban"
+        "night"
       ],
-      "source_url": "https://x.com/i/status/2091432392758034866",
-      "cover_kb": 27.9,
-      "video_kb": 203.3
+      "source_url": "https://x.com/i/status/2092910912349053035",
+      "cover_kb": 27.4,
+      "video_kb": 612.5
     },
     {
-      "tweet_id": "2091477403239596328",
-      "slug": "2091477403239596328-video",
+      "tweet_id": "2092911609471815890",
+      "slug": "2092911609471815890-create-image-omni-flash",
       "ym": "2026-08",
-      "title": "Video 2091477403239596328",
+      "title": "Create Image Omni Flash",
+      "model": "seedance2",
+      "tags": [
+        "realistic",
+        "transitions",
+        "cinematic",
+        "tracking",
+        "motion_blur"
+      ],
+      "source_url": "https://x.com/i/status/2092911609471815890",
+      "cover_kb": 13.3,
+      "video_kb": 165.2
+    },
+    {
+      "tweet_id": "2092938736317366484",
+      "slug": "2092938736317366484-camera-cinematic-macro-close",
+      "ym": "2026-08",
+      "title": "Camera Cinematic Macro Close Ups Slow Push",
+      "model": "seedance2",
+      "tags": [
+        "realistic",
+        "cinematic",
+        "macro",
+        "dark",
+        "car"
+      ],
+      "source_url": "https://x.com/i/status/2092938736317366484",
+      "cover_kb": 13.9,
+      "video_kb": 102.2
+    },
+    {
+      "tweet_id": "2092938848091144618",
+      "slug": "2092938848091144618-was-going-scroll-few",
+      "ym": "2026-08",
+      "title": "Was Going Scroll Few",
+      "model": "seedance2",
+      "tags": [
+        "transitions",
+        "cinematic",
+        "realistic",
+        "anime",
+        "multi-shot"
+      ],
+      "source_url": "https://x.com/i/status/2092938848091144618",
+      "cover_kb": 17.9,
+      "video_kb": 270.6
+    },
+    {
+      "tweet_id": "2092940255989313693",
+      "slug": "2092940255989313693-kind-slow-life",
+      "ym": "2026-08",
+      "title": "Kind Slow Life",
       "model": "seedance25",
       "tags": [
         "motion_blur",
-        "nature",
-        "portrait",
-        "tracking"
+        "military"
       ],
-      "source_url": "https://x.com/i/status/2091477403239596328",
-      "cover_kb": 13.0,
-      "video_kb": 14.0
+      "source_url": "https://x.com/i/status/2092940255989313693",
+      "cover_kb": 16.5,
+      "video_kb": 375.6
     },
     {
-      "tweet_id": "2091484026515177769",
-      "slug": "2091484026515177769-meet-newest-recruits-bug",
+      "tweet_id": "2092940899412316438",
+      "slug": "2092940899412316438-video",
       "ym": "2026-08",
-      "title": "Meet Newest Recruits Bug League",
+      "title": "Video 2092940899412316438",
       "model": "seedance25",
       "tags": [
-        "multi-shot",
-        "anime",
-        "portrait",
-        "motion_blur"
+        "night",
+        "motion_blur",
+        "pov",
+        "realistic",
+        "anime"
       ],
-      "source_url": "https://x.com/i/status/2091484026515177769",
-      "cover_kb": 14.1,
-      "video_kb": 657.6
+      "source_url": "https://x.com/i/status/2092940899412316438",
+      "cover_kb": 17.5,
+      "video_kb": 100.3
+    },
+    {
+      "tweet_id": "2092955130521944151",
+      "slug": "2092955130521944151-video",
+      "ym": "2026-08",
+      "title": "Video 2092955130521944151",
+      "model": "seedance2",
+      "tags": [
+        "realistic",
+        "motion_blur",
+        "transitions",
+        "cinematic",
+        "portrait"
+      ],
+      "source_url": "https://x.com/i/status/2092955130521944151",
+      "cover_kb": 13.7,
+      "video_kb": 269.1
     }
   ]
 }
