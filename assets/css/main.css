@@ -850,9 +850,9 @@
 
     .model-badge {
       position: absolute;
-      top: 12px;
-      left: 12px;
-      padding: 6px 10px;
+      top: 8px;
+      left: 8px;
+      padding: 3px 10px;
       background-color:  rgba(255, 255, 255, 0.8);
       border: none;
       border-radius: 8px;
@@ -862,7 +862,7 @@
       text-decoration: none;
       z-index: 10;
       /* A11y target-size: >= 44×44px (WCAG 2.5.8) */
-      min-height: 32px;
+      min-height: 16px;
       min-width: 44px;
       display: inline-flex;
       align-items: center;
@@ -1059,7 +1059,7 @@
 
     .prompt-tag {
       font-size: 10px;
-      padding: 6px 12px;
+      padding: 3px 12px;
       background: var(--bg-muted);
       border-radius: 100px;
       color: var(--text-secondary);
@@ -1067,7 +1067,7 @@
       transition: background 0.15s, color 0.15s;
       line-height: 1.4;
       /* A11y target-size: >= 44×44px (WCAG 2.5.8) */
-      min-height: 32px;
+      min-height: 16px;
       min-width: 44px;
       display: inline-flex;
       align-items: center;
