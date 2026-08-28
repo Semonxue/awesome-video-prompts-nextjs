@@ -861,7 +861,7 @@
       color: var(--accent-primary);
       text-decoration: none;
       z-index: 10;
-      /* A11y target-size: >= 44×44px (WCAG 2.5.8) */
+      /* A11y target-size: width >= 44px (WCAG 2.5.8)；height 由 padding 决定  */
       min-height: 16px;
       min-width: 44px;
       display: inline-flex;
@@ -1066,7 +1066,7 @@
       text-decoration: none;
       transition: background 0.15s, color 0.15s;
       line-height: 1.4;
-      /* A11y target-size: >= 44×44px (WCAG 2.5.8) */
+      /* A11y target-size: width >= 44px (WCAG 2.5.8)；height 由 padding 决定 */
       min-height: 16px;
       min-width: 44px;
       display: inline-flex;
