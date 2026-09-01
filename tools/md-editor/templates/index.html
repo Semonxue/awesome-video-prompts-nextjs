@@ -76,7 +76,11 @@
         .btn-danger:disabled { background: #e8a0a0; cursor: not-allowed; }
         .btn-toggle { background: var(--bg-tertiary); border: 1px solid var(--border-color); }
         .btn-toggle.active { background: var(--accent-color); color: white; border-color: var(--accent-color); }
-        .editor-content { flex: 1; overflow-y: auto; padding: 12px; }
+        /* editor-content 是 flex column，描述 textarea 用 flex: 1 撑满剩余空间（不再外层 page scroll，textarea 自身 overflow） */
+        .editor-content { flex: 1; overflow: hidden; padding: 12px; display: flex; flex-direction: column; min-height: 0; }
+        /* 描述行是唯一 flex: 1 子元素 → 自动撑满可用高度，又不挤压上方其他行 */
+        .form-row.desc-row { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-bottom: 0; }
+        .form-row.desc-row .form-label { flex-shrink: 0; margin-bottom: 3px; }
 
         .form-row { margin-bottom: 8px; }
         .form-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 3px; display: block; }
@@ -137,7 +141,8 @@
         .toast.error { background: var(--error-color); }
         .toast.warn { background: var(--warning-color); }
         .empty-state { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); }
-        .desc-textarea { width: 100%; min-height: 200px; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; font-family: 'Monaco', 'Menlo', monospace; font-size: 12px; line-height: 1.5; resize: vertical; background: var(--bg-primary); color: var(--text-primary); box-sizing: border-box; }
+        /* 描述 textarea：flex: 1 撑满父容器剩余空间，min-height 200px 保证可点击区域；overflow 在自身滚动，避免挤压上方表单 */
+        .desc-textarea { width: 100%; flex: 1; min-height: 200px; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; font-family: 'Monaco', 'Menlo', monospace; font-size: 12px; line-height: 1.5; resize: none; background: var(--bg-primary); color: var(--text-primary); box-sizing: border-box; overflow-y: auto; }
 
         /* ===== 模态框 ===== */
         .modal-mask { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999; align-items: center; justify-content: center; }
@@ -238,7 +243,7 @@
                         <div class="media-item"><div class="media-label">封面图</div><div class="media-content" id="imagePreview">-</div></div>
                         <div class="media-item"><div class="media-label">视频</div><div class="media-content" id="videoPreview">-</div></div>
                     </div>
-                    <div class="form-row" style="margin-top: 10px;">
+                    <div class="form-row desc-row" style="margin-top: 10px;">
                         <label class="form-label">描述内容（无缩进）</label>
                         <textarea class="desc-textarea" id="inputDescription" placeholder="输入描述..."></textarea>
                     </div>
@@ -574,6 +579,17 @@
                 }
             }
             document.getElementById('inputDescription').value = desc;
+            // 初始化（openFile / source→form 切换 / 加载线上）时让 textarea 滚到开头，避免上次的滚动位置干扰
+            resetDescScroll();
+        }
+
+        // 让描述 textarea 自动滚到开头（fillForm 后或初始化时调用）
+        // 配合 flex: 1 撑满空间，内容超长时 textarea 自身滚动到顶部
+        function resetDescScroll() {
+            const ta = document.getElementById('inputDescription');
+            if (!ta) return;
+            // textarea.value = ... 已经触发布局；下一帧再设 scrollTop 才生效
+            requestAnimationFrame(() => { ta.scrollTop = 0; });
         }
 
         function updateStatusBadge(status) {
