@@ -31,7 +31,14 @@ interface Props {
 export async function generateMetadata({ params, searchParams }: Props) {
   const { locale, model } = await params;
   const sp = await searchParams;
-  const name = await getModelName(model);
+
+  // B2：meta 三语化 + 带上该 model 的 prompt 数（listAllModels 走 R2 聚合缓存，不额外打 D1）
+  const [t, name, models] = await Promise.all([
+    getTranslations({ locale, namespace: 'seo' }),
+    getModelName(model),
+    listAllModels(),
+  ]);
+  const count = models.find((m) => m.slug === model)?.count ?? 0;
   const canonical = `${SITE_URL}/${locale}/models/${model}`;
 
   // 低质量页面 noindex：分页 >1 / tag 筛选（与独立 tag 页重复）
@@ -39,9 +46,9 @@ export async function generateMetadata({ params, searchParams }: Props) {
     (sp.page && parseInt(sp.page, 10) > 1) || Boolean(sp.tag);
 
   return {
-    // 不要手写站点名后缀：根 layout 的 template 会再拼一次（曾出现 "x | AVP | AVP"）
-    title: `${name} Prompts`,
-    description: `Browse ${name} video prompts on Awesome Video Prompts`,
+    // 不要手写站点名后缀：layout 的 title 模板会再拼一次（曾出现 "x | AVP | AVP"）
+    title: t('modelTitle', { name }),
+    description: t('modelDescription', { name, count }),
     alternates: {
       canonical,
       languages: {
@@ -53,9 +60,10 @@ export async function generateMetadata({ params, searchParams }: Props) {
     },
     robots: isLowValue ? { index: false, follow: true } : undefined,
     openGraph: {
-      title: `${name} Prompts`,
-      description: `Browse ${name} video prompts on Awesome Video Prompts`,
+      title: t('modelTitle', { name }),
+      description: t('modelDescription', { name, count }),
       url: canonical,
+      locale: t('ogLocale'),
       images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }],
       type: 'website',
     },

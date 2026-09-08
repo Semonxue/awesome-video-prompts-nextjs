@@ -147,5 +147,21 @@
     "tagsDescription": "テーマとスタイル別にプロンプトを探索。",
     "modelsTitle": "モデルで探す",
     "modelsDescription": "お気に入りの動画生成モデルのプロンプトを見つける。"
+  },
+  "seo": {
+    "titleTemplate": "%s | 素晴らしい動画プロンプト",
+    "ogLocale": "ja_JP",
+    "homeTitle": "素晴らしい動画プロンプト — AI動画プロンプトライブラリ",
+    "homeDescription": "Seedance、Kling、Veo、Sora などの AI 動画生成プロンプトを集めたオープンソースライブラリ。モデル別・タグ別に探してコピーするだけ。",
+    "tagTitle": "{name} の AI動画プロンプト",
+    "tagDescription": "{name} に関する AI動画プロンプト {count} 件。Seedance・Kling・Veo・Sora などでそのまま使えます。",
+    "modelTitle": "{name} プロンプト — AI動画プロンプトライブラリ",
+    "modelDescription": "コピーしてすぐ使える {name} の動画プロンプト {count} 件。作例とプロンプト全文付き。",
+    "promptTitleSuffix": "AI動画プロンプト",
+    "promptDescriptionPrefix": "AI動画プロンプト：",
+    "tagsIndexTitle": "AI動画プロンプトのタグ — テーマ別に探す",
+    "tagsIndexDescription": "シネマティック、アクション、ポートレート、アニメ、商品動画など、テーマ別に AI 動画プロンプトを探せます。Seedance・Kling・Veo・Sora 対応。",
+    "modelsIndexTitle": "AI動画モデル — モデル別にプロンプトを探す",
+    "modelsIndexDescription": "Seedance、Kling、Veo、Sora、Runway、MiniMax など、AI 動画モデル別の即戦力プロンプト。"
   }
 }

@@ -33,13 +33,22 @@ export async function generateMetadata({ params, searchParams }: Props) {
   const sp = await searchParams;
   const canonical = `${SITE_URL}/${locale}/tags/${tag}`;
 
+  // B2：meta 三语化 + 用 yaml 显示名（D1 里 tags.name 是原始串，如 motion_blur / martial-arts）
+  const [t, tags] = await Promise.all([
+    getTranslations({ locale, namespace: 'seo' }),
+    listAllTags(),
+  ]);
+  const hit = tags.find((x) => x.slug === tag);
+  const displayName = hit?.name ?? tag;
+  const count = hit?.count ?? 0;
+
   // 低质量页面 noindex：分页 >1
   const isLowValue = sp.page && parseInt(sp.page, 10) > 1;
 
   return {
-    // 不要手写站点名后缀：根 layout 的 template 会再拼一次（曾出现 "x | AVP | AVP"）
-    title: tag,
-    description: `Browse ${tag} video prompts on Awesome Video Prompts`,
+    // 不要手写站点名后缀：layout 的 title 模板会再拼一次（曾出现 "x | AVP | AVP"）
+    title: t('tagTitle', { name: displayName }),
+    description: t('tagDescription', { name: displayName, count }),
     alternates: {
       canonical,
       languages: {
@@ -51,9 +60,10 @@ export async function generateMetadata({ params, searchParams }: Props) {
     },
     robots: isLowValue ? { index: false, follow: true } : undefined,
     openGraph: {
-      title: tag,
-      description: `Browse ${tag} video prompts on Awesome Video Prompts`,
+      title: t('tagTitle', { name: displayName }),
+      description: t('tagDescription', { name: displayName, count }),
       url: canonical,
+      locale: t('ogLocale'),
       images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }],
       type: 'website',
     },
@@ -96,6 +106,8 @@ export default async function TagPage({ params, searchParams }: Props) {
   ]);
   const allTagsSliced = allTags.slice(0, HEADER_TAG_LIMIT);
   const totalCount = counts?.total ?? 0;
+  // B2/D2：H1 用 yaml 显示名（D1 里 tags.name 是原始串，如 motion_blur）
+  const displayName = allTags.find((x) => x.slug === tag)?.name ?? tag;
 
   return (
     <>
@@ -112,11 +124,11 @@ export default async function TagPage({ params, searchParams }: Props) {
           <span className="breadcrumb-sep">›</span>
           <Link href={`/${locale}/tags/`}>{t('breadcrumbTags')}</Link>
           <span className="breadcrumb-sep">›</span>
-          <span>{tag}</span>
+          <span>{displayName}</span>
         </nav>
 
         <section className="model-hero">
-          <h1 className="model-hero__title">{tag}</h1>
+          <h1 className="model-hero__title">{displayName}</h1>
           <div className="model-hero__stats">
             <span className="model-hero__count">{t('promptsFound', { count: result.total.toLocaleString() })}</span>
             <Link href={`/${locale}/tags/`} className="model-hero__back">{t('backToTags')}</Link>

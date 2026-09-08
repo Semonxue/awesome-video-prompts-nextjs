@@ -29,9 +29,11 @@ interface ModelsPageProps {
 export async function generateMetadata({ params }: ModelsPageProps) {
   const { locale } = await params;
   const canonical = `${SITE_URL}/${locale}/models`;
+  // B2：meta 三语化
+  const t = await getTranslations({ locale, namespace: 'seo' });
   return {
-    title: 'Browse by model',
-    description: 'Find prompts for your favorite video generation models.',
+    title: t('modelsIndexTitle'),
+    description: t('modelsIndexDescription'),
     alternates: {
       canonical,
       languages: {
@@ -42,9 +44,10 @@ export async function generateMetadata({ params }: ModelsPageProps) {
       },
     },
     openGraph: {
-      title: 'Browse by model',
-      description: 'Find prompts for your favorite video generation models.',
+      title: t('modelsIndexTitle'),
+      description: t('modelsIndexDescription'),
       url: canonical,
+      locale: t('ogLocale'),
       images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }],
       type: 'website',
     },

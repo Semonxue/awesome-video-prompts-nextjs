@@ -59,14 +59,26 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!['en', 'zh', 'ja'].includes(locale)) return {};
   const prompt = await getPromptBySlugCached(slug);
   if (!prompt) return { title: 'Prompt not found' };
+  // B2：meta 三语化 —— prompt 正文是英文原文（不改数据），但 title/description
+  // 带上目标语言的标识与引导语，让 zh/ja 页面不再是 en 的近似重复。
+  const t = await getTranslations({ locale, namespace: 'seo' });
   const canonical = `${SITE_URL}/${locale}/prompts/${slug}`;
-  const description = prompt.description.replace(/\s+/g, ' ').trim().slice(0, 160);
+
+  // 按词边界截断（原实现 slice(0,160) 会截出半个单词，线上曾出现 "... jungle. Extremely"）
+  const prefix = t('promptDescriptionPrefix');
+  const body = prompt.description.replace(/\s+/g, ' ').trim();
+  const budget = Math.max(40, 160 - prefix.length - 1);
+  const clipped =
+    body.length <= budget ? body : `${body.slice(0, budget).replace(/\s+\S*$/, '')}…`;
+  const description = `${prefix} ${clipped}`;
+  const metaTitle = `${prompt.title} — ${t('promptTitleSuffix')}`;
+
   // 无封面时回退到默认 OG 图：原来回退成 []，会让 og:image / twitter:image 整体缺失
   const ogImage = prompt.coverUrl
     ? [{ url: prompt.coverUrl, width: 960, height: 540 }]
     : [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }];
   return {
-    title: prompt.title,
+    title: metaTitle,
     description,
     alternates: {
       canonical,
@@ -78,15 +90,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       },
     },
     openGraph: {
-      title: prompt.title,
+      title: metaTitle,
       description,
       url: canonical,
+      locale: t('ogLocale'),
       images: ogImage,
       type: 'article',
     },
     twitter: {
       card: 'summary_large_image',
-      title: prompt.title,
+      title: metaTitle,
       description,
       images: ogImage.map((img) => img.url),
     },

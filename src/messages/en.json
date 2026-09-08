@@ -147,5 +147,21 @@
     "tagsDescription": "Explore prompts organized by topic and style.",
     "modelsTitle": "Browse by model",
     "modelsDescription": "Find prompts for your favorite video generation models."
+  },
+  "seo": {
+    "titleTemplate": "%s | Awesome Video Prompts",
+    "ogLocale": "en_US",
+    "homeTitle": "Awesome Video Prompts — AI Video Prompt Library",
+    "homeDescription": "An open-source collection of awesome AI video generation prompts for Seedance, Kling, Veo, Sora and more. Browse by model or tag, copy, and remix.",
+    "tagTitle": "{name} AI Video Prompts",
+    "tagDescription": "Browse {count} {name} AI video prompts — copy-ready for Seedance, Kling, Veo and Sora.",
+    "modelTitle": "{name} Prompts — AI Video Prompt Library",
+    "modelDescription": "Browse {count} copy-ready {name} video prompts with examples and the exact prompt text.",
+    "promptTitleSuffix": "AI Video Prompt",
+    "promptDescriptionPrefix": "AI video prompt:",
+    "tagsIndexTitle": "AI Video Prompt Tags — Browse Prompts by Topic",
+    "tagsIndexDescription": "Browse every AI video prompt topic: cinematic, action, portrait, anime, product video and more. Copy-ready prompts for Seedance, Kling, Veo and Sora.",
+    "modelsIndexTitle": "AI Video Models — Browse Prompts by Model",
+    "modelsIndexDescription": "Find copy-ready prompts for Seedance, Kling, Veo, Sora, Runway, MiniMax and other AI video models."
   }
 }

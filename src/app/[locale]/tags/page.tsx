@@ -29,9 +29,11 @@ interface TagsPageProps {
 export async function generateMetadata({ params }: TagsPageProps) {
   const { locale } = await params;
   const canonical = `${SITE_URL}/${locale}/tags`;
+  // B2：meta 三语化
+  const t = await getTranslations({ locale, namespace: 'seo' });
   return {
-    title: 'Browse by tag',
-    description: 'Explore prompts organized by topic and style.',
+    title: t('tagsIndexTitle'),
+    description: t('tagsIndexDescription'),
     alternates: {
       canonical,
       languages: {
@@ -42,9 +44,10 @@ export async function generateMetadata({ params }: TagsPageProps) {
       },
     },
     openGraph: {
-      title: 'Browse by tag',
-      description: 'Explore prompts organized by topic and style.',
+      title: t('tagsIndexTitle'),
+      description: t('tagsIndexDescription'),
       url: canonical,
+      locale: t('ogLocale'),
       images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }],
       type: 'website',
     },

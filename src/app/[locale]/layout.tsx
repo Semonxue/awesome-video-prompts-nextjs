@@ -10,8 +10,9 @@
 export const revalidate = 3600;
 
 import { ReactNode } from 'react';
+import type { Metadata } from 'next';
 import { NextIntlClientProvider } from 'next-intl';
-import { getMessages } from 'next-intl/server';
+import { getMessages, getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { locales, type Locale } from '@/i18n/request';
 import MobileFilters from '@/components/MobileFilters';
@@ -19,6 +20,27 @@ import MobileFilters from '@/components/MobileFilters';
 interface LocaleLayoutProps {
   children: ReactNode;
   params: Promise<{ locale: string }>;
+}
+
+/**
+ * 本地化 title 模板（B2，2026-09-08）
+ *
+ * 根 layout 的模板是英文 `%s | Awesome Video Prompts`，zh/ja 页面会变成
+ * 中英/日英混排。这里按 locale 覆盖 default + template（Next.js 的嵌套
+ * layout metadata 对本子树生效）。
+ * 注意：模板里必须保留 `%s` 占位符，Next.js 用它拼接子页 title。
+ */
+export async function generateMetadata({ params }: LocaleLayoutProps): Promise<Metadata> {
+  const { locale } = await params;
+  if (!locales.includes(locale as Locale)) return {};
+  const t = await getTranslations({ locale, namespace: 'seo' });
+  const brand = await getTranslations({ locale, namespace: 'site' });
+  return {
+    title: {
+      default: brand('title'),
+      template: t('titleTemplate'),
+    },
+  };
 }
 
 export default async function LocaleLayout({ children, params }: LocaleLayoutProps) {

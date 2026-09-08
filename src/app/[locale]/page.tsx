@@ -32,6 +32,8 @@ export async function generateMetadata({ params, searchParams }: HomePageProps) 
   const { locale } = await params;
   const sp = await searchParams;
   const canonical = `${SITE_URL}/${locale}`;
+  // B2：meta 三语化（zh/ja 页面此前是英文 title/description，与 en 近似重复）
+  const t = await getTranslations({ locale, namespace: 'seo' });
 
   // 低质量页面 noindex：分页 >1 / 搜索 / 筛选（与独立 tag/model 页重复）
   const isLowValue =
@@ -41,10 +43,9 @@ export async function generateMetadata({ params, searchParams }: HomePageProps) 
     Boolean(sp.model);
 
   return {
-    // absolute：根 layout 的 title template `%s | Awesome Video Prompts` 会再拼一次站点名，
-    // 曾导致首页 <title> = "Awesome Video Prompts | Awesome Video Prompts"
-    title: { absolute: 'Awesome Video Prompts — AI Video Prompt Library' },
-    description: 'An open-source collection of awesome AI video generation prompts. Browse, copy, and remix.',
+    // absolute：首页标题已自带品牌名，不能再套 title 模板（否则品牌重复）
+    title: { absolute: t('homeTitle') },
+    description: t('homeDescription'),
     alternates: {
       canonical,
       languages: {
@@ -56,9 +57,10 @@ export async function generateMetadata({ params, searchParams }: HomePageProps) 
     },
     robots: isLowValue ? { index: false, follow: true } : undefined,
     openGraph: {
-      title: 'Awesome Video Prompts — AI Video Prompt Library',
-      description: 'An open-source collection of awesome AI video generation prompts. Browse, copy, and remix.',
+      title: t('homeTitle'),
+      description: t('homeDescription'),
       url: canonical,
+      locale: t('ogLocale'),
       images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }],
       type: 'website',
     },
