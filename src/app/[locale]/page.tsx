@@ -41,7 +41,9 @@ export async function generateMetadata({ params, searchParams }: HomePageProps) 
     Boolean(sp.model);
 
   return {
-    title: 'Awesome Video Prompts',
+    // absolute：根 layout 的 title template `%s | Awesome Video Prompts` 会再拼一次站点名，
+    // 曾导致首页 <title> = "Awesome Video Prompts | Awesome Video Prompts"
+    title: { absolute: 'Awesome Video Prompts — AI Video Prompt Library' },
     description: 'An open-source collection of awesome AI video generation prompts. Browse, copy, and remix.',
     alternates: {
       canonical,
@@ -54,7 +56,7 @@ export async function generateMetadata({ params, searchParams }: HomePageProps) 
     },
     robots: isLowValue ? { index: false, follow: true } : undefined,
     openGraph: {
-      title: 'Awesome Video Prompts',
+      title: 'Awesome Video Prompts — AI Video Prompt Library',
       description: 'An open-source collection of awesome AI video generation prompts. Browse, copy, and remix.',
       url: canonical,
       images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }],
@@ -119,7 +121,9 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
       <main className="main-content">
         <div className="grid-header">
           <div className="grid-header-left">
-            <h2 className="grid-title">{t('popularPrompts')}</h2>
+            {/* H1：首页此前整页没有 <h1>（只有这个 h2），是权重最高页面的语义缺失。
+                .grid-title 显式设了 font-size/weight，改标签不影响视觉 */}
+            <h1 className="grid-title">{t('popularPrompts')}</h1>
             <div className="grid-header-links">
               {sp.model && activeModel && (
                 <Link

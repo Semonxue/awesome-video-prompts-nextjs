@@ -22,7 +22,7 @@ import { GridEngine } from '@/components/GridEngine';
 import { getPromptBySlugCached, getAdjacentPromptsFromMap, getRelatedPromptsFromMap } from '@/db/queries';
 import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
 import { tagHref, modelHref } from '@/lib/format';
-import { SITE_URL, R2_PUBLIC_URL } from '@/lib/site';
+import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
 
 
 function r2Webp(url: string | null, _width: number): string | null {
@@ -61,9 +61,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!prompt) return { title: 'Prompt not found' };
   const canonical = `${SITE_URL}/${locale}/prompts/${slug}`;
   const description = prompt.description.replace(/\s+/g, ' ').trim().slice(0, 160);
+  // 无封面时回退到默认 OG 图：原来回退成 []，会让 og:image / twitter:image 整体缺失
   const ogImage = prompt.coverUrl
     ? [{ url: prompt.coverUrl, width: 960, height: 540 }]
-    : [];
+    : [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }];
   return {
     title: prompt.title,
     description,

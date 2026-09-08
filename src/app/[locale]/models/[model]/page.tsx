@@ -39,7 +39,8 @@ export async function generateMetadata({ params, searchParams }: Props) {
     (sp.page && parseInt(sp.page, 10) > 1) || Boolean(sp.tag);
 
   return {
-    title: `${name} Prompts | Awesome Video Prompts`,
+    // 不要手写站点名后缀：根 layout 的 template 会再拼一次（曾出现 "x | AVP | AVP"）
+    title: `${name} Prompts`,
     description: `Browse ${name} video prompts on Awesome Video Prompts`,
     alternates: {
       canonical,
@@ -52,7 +53,7 @@ export async function generateMetadata({ params, searchParams }: Props) {
     },
     robots: isLowValue ? { index: false, follow: true } : undefined,
     openGraph: {
-      title: `${name} Prompts | Awesome Video Prompts`,
+      title: `${name} Prompts`,
       description: `Browse ${name} video prompts on Awesome Video Prompts`,
       url: canonical,
       images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }],

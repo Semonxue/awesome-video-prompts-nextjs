@@ -453,3 +453,14 @@ body:has(.site-header.header-compact) .main-content {
     text-align: left;
   }
 }
+
+/* ============================================================
+ * 目录页计数（2026-09-08）
+ * assets/css/main.css 里 .tag-count 是 display:none（Header chips 里隐藏计数）；
+ * /[locale]/tags 与 /[locale]/models 作为「目录页」需要显示每条 prompt 数。
+ * 选择器特异性高于 .tag-count，无需改老站 CSS。
+ * ============================================================ */
+.content-tag .tag-count--show {
+  display: inline;
+}
+
