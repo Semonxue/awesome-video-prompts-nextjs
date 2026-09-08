@@ -118,5 +118,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       tags: tagList,
       models: modelList,
     },
+  }, {
+    // 显式 no-store：虽然本接口用 Authorization 头鉴权（CF 对带 Authorization 的响应
+    // 默认不存储），仍显式声明，避免将来改成 cookie/自定义头鉴权后被 Workers Cache
+    // 启发式缓存（默认 200 → 2h）导致越权读到他人响应。
+    headers: { 'Cache-Control': 'no-store' },
   });
 }

@@ -47,5 +47,9 @@ export async function GET(req: NextRequest) {
     existing: Array.from(existing),
     missing,
     total: ids.length,
+  }, {
+    // Workers Cache 会对无 Cache-Control 的 200 做启发式缓存（默认 2h）；
+    // 这个接口是发布前的实时查重，必须不缓存。
+    headers: { 'Cache-Control': 'no-store' },
   });
 }

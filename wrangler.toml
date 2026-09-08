@@ -32,6 +32,23 @@ binding = "MEDIA"
 bucket_name = "awesome-video-prompts-static"
 
 # ============================================================
+# Workers Cache（2026-09-08 C1）
+#
+# 为什么必须在这里开，而不是用 zone 级 Cache Rule：
+#   - Worker 自己生成的响应**不会**进入 zone 缓存；CF 文档明确 "No zone configuration
+#     for caching applies to Workers Caching. Cache Rules ... have no effect"。
+#   - 所以 HTML 想被边缘缓存，只能开 Workers Cache（wrangler ≥ 4.69.0）。
+# 缓存策略由 wrappers/cache-control-cloudflare-node.js 写的响应头决定：
+#   - 边缘：cloudflare-cdn-cache-control: public, max-age=28800, stale-while-revalidate=86400
+#   - 浏览器：cache-control: public, max-age=0, must-revalidate（每次回源校验）
+#   - RSC / 预取请求：private, no-store（避免与文档请求互相污染）
+# 注意：默认 cache key 含 Worker version → 每次部署缓存自动冷启动（对频繁改动是好事，
+#       不会部署后还发旧 HTML）；如需跨版本复用再考虑 cross_version_cache。
+# ============================================================
+[cache]
+enabled = true
+
+# ============================================================
 # 环境变量
 # 生产环境在 Cloudflare Dashboard 或 wrangler secret 注入
 # ============================================================
