@@ -79,3 +79,20 @@ name = "awesome-video-prompts-nextjs-staging"
 
 [env.production]
 name = "awesome-video-prompts-nextjs"
+
+# ============================================================
+# 可观测性（Cloudflare Workers Observability）
+# 启用 Logs + Traces，head_sampling_rate = 1（全量采样）
+# persist = true → 日志和 trace 写入 Workers Logs（CF 后台可查询）
+# invocation_logs = true → 包含每次调用的请求/响应日志
+# ============================================================
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+invocation_logs = true
+persist = true
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 1
+persist = true
