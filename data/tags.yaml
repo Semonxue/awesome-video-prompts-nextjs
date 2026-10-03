@@ -1906,6 +1906,31 @@ thailand:
   description_en: "Thailand related content"
   description_zh-cn: "泰国相关内容"
 
+traditional:
+  en: traditional
+  zh-cn: 传统
+  description_en: "Traditional cultural elements and historical aesthetics"
+  description_zh-cn: "传统文化元素与历史美学"
+
+barbershop:
+  en: barbershop
+  zh-cn: 理发店
+  description_en: "Barbershop, haircut, and grooming scenes"
+  description_zh-cn: "理发店、理发与造型场景"
+
+trampoline:
+  en: trampoline
+  zh-cn: 蹦床
+  description_en: "Trampoline acrobatics, flips, and aerial stunts"
+  description_zh-cn: "蹦床特技、翻腾与空中动作"
+
+noir:
+  en: noir
+  zh-cn: 黑色电影
+  description_en: "Film noir moody, high-contrast cinematic style with dark shadows"
+  description_zh-cn: "黑色电影风格，高对比阴影与阴沉氛围"
+
+
 thriller:
   en: thriller
   zh-cn: 惊悚
@@ -1965,3 +1990,267 @@ live-action:
   zh-cn: 真人实拍
   description_en: "Live-action filmed content, not animated"
   description_zh-cn: "真人实拍内容，非动画"
+
+chinese-aesthetic:
+  en: chinese aesthetic
+  zh-cn: 中式美学
+  description_en: "Chinese aesthetic elements and cultural visual language"
+  description_zh-cn: "中式美学元素与文化视觉语言"
+
+commercial:
+  en: commercial
+  zh-cn: 商业广告
+  description_en: "Commercial advertising and brand content"
+  description_zh-cn: "商业广告与品牌内容"
+
+commute:
+  en: commute
+  zh-cn: 通勤
+  description_en: "Commuting, transit, and urban daily routines"
+  description_zh-cn: "通勤、出行与城市日常"
+
+east-asian:
+  en: east asian
+  zh-cn: 东亚
+  description_en: "East Asian cultural, fashion, and character aesthetics"
+  description_zh-cn: "东亚文化、时尚与人物美学"
+
+factory:
+  en: factory
+  zh-cn: 工厂
+  description_en: "Factory, industrial, and manufacturing scenes"
+  description_zh-cn: "工厂、工业与制造场景"
+
+handheld:
+  en: handheld
+  zh-cn: 手持拍摄
+  description_en: "Handheld camera, run-and-gun, and shaky-cam style"
+  description_zh-cn: "手持摄影、随拍与晃动手感风格"
+
+heartwarming:
+  en: heartwarming
+  zh-cn: 温馨
+  description_en: "Heartwarming, tender, and emotional scenes"
+  description_zh-cn: "温馨、柔情与情感场景"
+
+kpop:
+  en: kpop
+  zh-cn: 韩国流行
+  description_en: "K-pop, idol, and Korean music video aesthetics"
+  description_zh-cn: "K-pop、偶像与韩国 MV 美学"
+
+lantern-festival:
+  en: lantern festival
+  zh-cn: 灯节
+  description_en: "Lantern festival and night lantern scenes"
+  description_zh-cn: "灯节与夜晚花灯场景"
+
+museum:
+  en: museum
+  zh-cn: 博物馆
+  description_en: "Museum, gallery, and artifact scenes"
+  description_zh-cn: "博物馆、美术馆与文物场景"
+
+product_shot:
+  en: product shot
+  zh-cn: 产品镜头
+  description_en: "Product-focused close-up and commercial product photography"
+  description_zh-cn: "产品特写与商业产品镜头"
+
+real-estate:
+  en: real estate
+  zh-cn: 房地产
+  description_en: "Real estate, property, and architecture showcase"
+  description_zh-cn: "房地产、楼盘与建筑展示"
+
+reel:
+  en: reel
+  zh-cn: 集锦
+  description_en: "Sports reel, highlight reel, and fast-cut montage style"
+  description_zh-cn: "运动集锦、高光回放与快剪蒙太奇"
+
+skincare:
+  en: skincare
+  zh-cn: 护肤
+  description_en: "Skincare, beauty product, and cosmetics scenes"
+  description_zh-cn: "护肤、化妆品与美妆产品场景"
+
+song-dynasty:
+  en: song dynasty
+  zh-cn: 宋朝
+  description_en: "Song Dynasty Chinese historical aesthetic and clothing"
+  description_zh-cn: "宋朝中国历史美学与服饰"
+
+splash:
+  en: splash
+  zh-cn: 飞溅
+  description_en: "Water splash, liquid burst, and droplet visual effects"
+  description_zh-cn: "水花、液体飞溅与水滴特效"
+
+street-style:
+  en: street style
+  zh-cn: 街头风
+  description_en: "Street style fashion and urban wear"
+  description_zh-cn: "街头风格时尚与都市穿搭"
+
+stylized:
+  en: stylized
+  zh-cn: 风格化
+  description_en: "Stylized, illustrative, and non-photorealistic look"
+  description_zh-cn: "风格化、插画感与非常规写实"
+
+tennis:
+  en: tennis
+  zh-cn: 网球
+  description_en: "Tennis, racquet sports, and court scenes"
+  description_zh-cn: "网球、球拍运动与球场场景"
+
+tilt-shift:
+  en: tilt shift
+  zh-cn: 移轴
+  description_en: "Tilt-shift miniature and depth-of-field trick effect"
+  description_zh-cn: "移轴微缩与景深戏法效果"
+
+village:
+  en: village
+  zh-cn: 村庄
+  description_en: "Village, rural, and countryside scenes"
+  description_zh-cn: "村庄、乡村与田园场景"
+
+viral:
+  en: viral
+  zh-cn: 爆款
+  description_en: "Viral, trending, and social media challenge"
+  description_zh-cn: "爆款、热门与社交平台挑战"
+
+water-physics:
+  en: water physics
+  zh-cn: 水物理
+  description_en: "Water splash, wave, and fluid physics simulation"
+  description_zh-cn: "水花、波浪与流体物理模拟"
+
+fitness:
+  en: fitness
+  zh-cn: 健身
+  description_en: "Fitness, gym, workout, and athletic training"
+  description_zh-cn: "健身、健身房、锻炼与运动训练"
+
+parkour:
+  en: parkour
+  zh-cn: 跑酷
+  description_en: "Parkour, free running, and urban obstacle navigation"
+  description_zh-cn: "跑酷、自由跑酷与城市障碍穿越"
+
+game:
+  en: game
+  zh-cn: 游戏
+  description_en: "Game-inspired, video game, and arcade-style content"
+  description_zh-cn: "游戏风格、电子游戏与街机风格内容"
+
+campus:
+  en: campus
+  zh-cn: 校园
+  description_en: "Campus, university, and school life scenes"
+  description_zh-cn: "校园、大学与学校生活场景"
+
+period:
+  en: period
+  zh-cn: 时代
+  description_en: "Period-specific historical eras and costume design"
+  description_zh-cn: "特定历史时代与时代服饰设计"
+
+selfie:
+  en: selfie
+  zh-cn: 自拍
+  description_en: "Selfie, vlog, and first-person front-camera style"
+  description_zh-cn: "自拍、Vlog 与第一人称前置镜头风格"
+
+portal:
+  en: portal
+  zh-cn: 传送门
+  description_en: "Portal, doorway, and dimension-transit scenes"
+  description_zh-cn: "传送门、门洞与维度转换场景"
+
+short_form:
+  en: short form
+  zh-cn: 短视频
+  description_en: "Short-form vertical, TikTok, and Reels style"
+  description_zh-cn: "竖屏短视频、TikTok 与 Reels 风格"
+
+nostalgic:
+  en: nostalgic
+  zh-cn: 怀旧
+  description_en: "Nostalgic, retro, and vintage mood"
+  description_zh-cn: "怀旧、复古与往日情怀氛围"
+
+montage:
+  en: montage
+  zh-cn: 蒙太奇
+  description_en: "Montage, multi-clip compilation, and edit-driven"
+  description_zh-cn: "蒙太奇、多段剪辑与编辑驱动"
+
+behind-the-scenes:
+  en: behind the scenes
+  zh-cn: 幕后
+  description_en: "Behind the scenes, documentary, and production footage"
+  description_zh-cn: "幕后花絮、纪录片与制作现场"
+
+industrial:
+  en: industrial
+  zh-cn: 工业
+  description_en: "Industrial, factory, and construction scenes"
+  description_zh-cn: "工业、工厂与建筑施工场景"
+
+coastal:
+  en: coastal
+  zh-cn: 海岸
+  description_en: "Coastal, seaside, and ocean view scenes"
+  description_zh-cn: "海岸、海滨与海景场景"
+
+cute:
+  en: cute
+  zh-cn: 可爱
+  description_en: "Cute, adorable, and wholesome scenes"
+  description_zh-cn: "可爱、萌系与温馨场景"
+
+moody:
+  en: moody
+  zh-cn: 忧郁
+  description_en: "Moody, atmospheric, and contemplative"
+  description_zh-cn: "忧郁、氛围感与沉思气质"
+
+editorial:
+  en: editorial
+  zh-cn: 时尚大片
+  description_en: "Editorial fashion and high-end magazine style"
+  description_zh-cn: "时尚大片与高端杂志风格"
+
+experimental:
+  en: experimental
+  zh-cn: 实验性
+  description_en: "Experimental, boundary-pushing, and unconventional style"
+  description_zh-cn: "实验性、突破常规与非常规风格"
+
+rainy:
+  en: rainy
+  zh-cn: 雨天
+  description_en: "Rain, wet, and rainy atmosphere"
+  description_zh-cn: "雨、潮湿与雨天气氛"
+
+domestic:
+  en: domestic
+  zh-cn: 居家
+  description_en: "Domestic, home, and everyday apartment life"
+  description_zh-cn: "居家、家庭与日常公寓生活"
+
+art-film:
+  en: art film
+  zh-cn: 艺术片
+  description_en: "Art film, experimental cinema, and auteur-style work"
+  description_zh-cn: "艺术片、实验电影与作者风格作品"
+
+post-production:
+  en: post production
+  zh-cn: 后期
+  description_en: "Post-production, color grading, and finishing workflow"
+  description_zh-cn: "后期、调色与精修工作流"

@@ -51,6 +51,8 @@ test-results/
 playwright-report/
 playwright/.cache/
 temp/
+# X 视频下载器的一次性产出目录（中间产物，可随时重新下载）
+twitter-downloads/
 *.log
 *.tmp
 

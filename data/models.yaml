@@ -14,6 +14,8 @@ kling26:
   name: Kling 2.6
 kling3:
   name: Kling 3.0
+kling4flash:
+  name: Kling 4.0 Flash
 hailuo:
   name: Hailuo
 veo3:
@@ -66,6 +68,8 @@ geminiomniflash:
   name: Gemini Omni Flash
 minimaxh3:
   name: MiniMax H3
+musevideo:
+  name: Muse Video
 flux3:
   name: Flux 3
 

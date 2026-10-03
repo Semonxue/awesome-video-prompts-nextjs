@@ -3,10 +3,21 @@
 ### 输入上下文：
 - 先使用 x 帖子地址判断是否已经重复存在（一定要全字段匹配）
 - 使用 tools/dl-x-videos.py + x 帖子地址 下载视频及元数据，存储在 temp/<TWEET_ID>/ 目录
-- temp/<TWEET_ID>/ 目录包含：info.json, video.mp4 (原画), preview_480p.mp4 (预览), video.jpg
+- temp/<TWEET_ID>/ 目录包含（`<n>` 为视频序号，从 1 开始；单视频帖子即 `n=1`）：
+  - `info.json`：帖子元数据
+  - `video_<n>.mp4`：原画
+  - `preview_<n>_480p.mp4`：预览版（ffmpeg 存在时才生成）
+  - `video_<n>.jpg`：封面缩略图
 - 检查在 D1 的 prompts 表中（按 slug）是否已经存在了 <TWEET_ID> 对应的资源，已经存在的话则提示用户
 - 如果下载出错，重试 2 次
 - 如果帖子中提到提示词在回复中，则拉取回复内容，提取完整提示词（不要改写、不要提炼，如果是 json 格式则保持），所有收集到的信息存入 full_text 字段
+
+### 文件卫生（强制要求，所有子任务都适用）
+
+- ❌ **不要创建非必要的一次性脚本**：不要新建 `batch*.py` / `tmp*.sh` / 临时 `*.mjs` / helper 等。优先用现成工具（`tools/dl-x-videos.py`、`jq`、`ffmpeg`、命令行内联）直接完成。
+- ❌ **不要写非产出文件到仓库**：日志/调试输出写 stdout 或系统临时目录（`/tmp`），不要写进 `logs/`、项目根目录，或 `temp/` 之外的任何位置。
+- ✅ **中间文件只允许存在于 `temp/<TWEET_ID>/`**：所有下载、预览、缩略图、info.json 都只放这里，不散落到别处。
+- ✅ **确有需要创建临时文件/脚本时**：任务结束（无论成功或失败）前必须**全部清除**，不留任何残留。
 
 ### 批量查重 (Batch Dedup)
 
@@ -36,8 +47,8 @@
 ### 处理静态资源 (Asset Management)
 
 - 创建草稿目录：`mkdir -p static/_drafts/prompts/<YYYY-MM>/<Slug>`
-- 迁移封面图：`cp temp/<TWEET_ID>/video.jpg static/_drafts/prompts/<YYYY-MM>/<Slug>/cover.jpg`
-- 迁移视频（仅预览版）：`cp temp/<TWEET_ID>/preview_480p.mp4 static/_drafts/prompts/<YYYY-MM>/<Slug>/video.mp4`
+- 迁移封面图：`cp temp/<TWEET_ID>/video_1.jpg static/_drafts/prompts/<YYYY-MM>/<Slug>/cover.jpg`
+- 迁移视频（仅预览版）：`cp temp/<TWEET_ID>/preview_1_480p.mp4 static/_drafts/prompts/<YYYY-MM>/<Slug>/video.mp4`
 - 把封面图尺寸宽度压缩到长边不大于 600px，保持比例，使用 ImageMagick 把图片压缩到 60% 的 jpg，大小控制在 30k 之内
 - 把视频压缩到 480p，体积控制在 1M 之内
 - （注：优先使用生成的 480p/preview 版本以节省带宽，若无预览版则使用原版）
@@ -104,6 +115,8 @@
 ### 清理与验证 (Cleanup)
 
 - 删除临时目录：`rm -rf temp/<TWEET_ID>`
+- 删除本任务中创建的任何一次性脚本 / 中间文件（临时 python/shell/mjs、临时清单 json 等），不留残留
+- 确认 `temp/` 下无本次任务的残留（`ls temp/`），且没有在 `logs/`、项目根等位置新增中间文件
 - 验证生成文件的路径是否正确包含 `<YYYY-MM>`
 - 验证草稿 JSON 与素材都位于 `_drafts/` 目录中
 - 验证 JSON 可被 `json.loads` 正常解析（字段类型正确、无尾逗号、无注释）
@@ -137,3 +150,4 @@
 - ❌ 不要用 url 字段存原帖链接（用 source_url）
 - ❌ 不要把 models/tags 写成逗号分隔字符串（必须是 JSON 数组）
 - ❌ 不要生成 YAML front matter 格式的草稿（新草稿统一 JSON；存量 .md 草稿由 md-editor 兼容读取，不迁移）
+- ❌ 不要创建一次性脚本、也不要把中间文件写进仓库（详见「文件卫生」；结束后必须清理）

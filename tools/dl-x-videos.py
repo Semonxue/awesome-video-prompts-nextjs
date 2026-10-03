@@ -47,66 +47,66 @@ def extract_tweet_info(url: str) -> dict:
     
     tweet_id = extract_tweet_id(url)
     
-    # 优先使用 twitter CLI 获取完整帖子信息
+    # 优先使用 opencli twitter thread 获取完整帖子信息
+    # 注意: 旧的 `twitter` 二进制已不存在, 会静默 fallback 到 yt-dlp,
+    # 而 yt-dlp 的 description 会被截断到 ~300 字符 (长 CJK 提示词必被截断)。
     if tweet_id:
         try:
+            opencli_bin = shutil.which("opencli") or "/opt/homebrew/bin/opencli"
             cmd = [
-                "twitter", "tweet", tweet_id,
-                "--json", "--full-text","-n 1"
+                opencli_bin, "twitter", "thread", tweet_id,
+                "--limit", "1", "-f", "json",
+                "--site-session", "persistent",
             ]
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 check=True,
-                timeout=30
+                timeout=120
             )
-            
+
             data = json.loads(result.stdout.strip())
-            
-            # 检查返回结构
-            if data.get("ok") and data.get("data") and len(data["data"]) > 0:
-                tweet = data["data"][0]
-                author = tweet.get("author", {})
-                media = tweet.get("media", [])
-                
-                # 提取视频信息
-                videos = []
-                for m in media:
-                    if m.get("type") == "video" and m.get("url"):
-                        videos.append({
-                            "resolution": f"{m.get('width', '?')}x{m.get('height', '?')}",
-                            "url": m.get("url"),
-                            "format_id": "twitter"
-                        })
-                
-                # 提取缩略图（从媒体中获取）
-                thumbnail = None
-                if media and media[0].get("url"):
-                    # 视频缩略图通常可以从 twitter 获取，这里先留空
-                    # 后续可以通过 yt-dlp 或其他方式获取
-                    pass
-                
+            items = data if isinstance(data, list) else [data]
+
+            # thread 返回 [原帖, 回复...], 取 id 匹配的原帖
+            tweet = next(
+                (t for t in items if isinstance(t, dict) and str(t.get("id")) == str(tweet_id)),
+                None,
+            )
+            if tweet and tweet.get("text"):
+                username = tweet.get("author", "") or ""
+                media_urls = tweet.get("media_urls") or []
+                videos = [
+                    {
+                        "resolution": "unknown",
+                        "url": u,
+                        "format_id": "opencli",
+                    }
+                    for u in media_urls
+                    if u and ".mp4" in u
+                ]
+
                 extracted = {
                     "success": True,
                     "url": url,
                     "post_id": tweet.get("id"),
                     "text": tweet.get("text", ""),
-                    "author_name": author.get("name", ""),
-                    "author_username": author.get("screenName", ""),
-                    "author_url": f"https://twitter.com/{author.get('screenName', '')}",
-                    "post_date": tweet.get("createdAt", ""),
-                    "thumbnail": thumbnail,
+                    "author_name": tweet.get("name") or username,
+                    "author_username": username,
+                    "author_url": f"https://x.com/{username}" if username else "",
+                    "post_date": tweet.get("created_at", ""),
+                    "thumbnail": (tweet.get("media_posters") or [None])[0],
                     "videos": videos,
-                    "source": "twitter-cli"
+                    "source": "opencli-thread",
                 }
-                
+
                 return extracted
-                
+
         except Exception as e:
-            # twitter CLI 失败，记录错误但继续使用 yt-dlp
-            print(f"twitter CLI failed: {e}, falling back to yt-dlp", file=sys.stderr)
-    
+            # opencli 失败，记录错误但继续使用 yt-dlp
+            print(f"opencli twitter thread failed: {e}, falling back to yt-dlp", file=sys.stderr)
+
     # Fallback: 使用 yt-dlp 获取信息
     return extract_tweet_info_yt_dlp(url)
 
@@ -174,7 +174,9 @@ def extract_tweet_info_yt_dlp(url: str) -> dict:
 
 def process_download(metadata: dict, url: str) -> dict:
     """下载视频、生成预览并保存相关文件到 temp 目录"""
-    post_id = metadata.get("post_id")
+    # Use URL-extracted id as source of truth (yt-dlp may return a different id for retweets/quotes)
+    url_id = extract_tweet_id(url)
+    post_id = url_id or metadata.get("post_id")
     if not post_id:
         return metadata
 
@@ -182,14 +184,18 @@ def process_download(metadata: dict, url: str) -> dict:
     base_dir = "temp"
     output_dir = os.path.join(base_dir, post_id)
     os.makedirs(output_dir, exist_ok=True)
+    # Sync metadata["post_id"] so info.json is keyed by the URL id
+    metadata["post_id"] = post_id
 
     normalized = normalize_url(url)
     
     # 构造 yt-dlp 下载命令，使用 --output 模板自动处理多个视频
     # %(autonumber)s 会为多个视频自动编号 (1, 2, 3...)
     output_template = os.path.join(output_dir, "video_%(autonumber)s.%(ext)s")
+    # Locate yt-dlp (PATH may be minimal in some shells)
+    yt_dlp_bin = shutil.which("yt-dlp") or "/opt/homebrew/bin/yt-dlp"
     cmd = [
-        "yt-dlp",
+        yt_dlp_bin,
         "--no-warnings",
         "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
         "--merge-output-format", "mp4",
