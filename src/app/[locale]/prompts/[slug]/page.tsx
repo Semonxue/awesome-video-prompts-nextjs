@@ -22,7 +22,8 @@ import { GridEngine } from '@/components/GridEngine';
 import { getPromptBySlugCached, getAdjacentPromptsFromMap, getRelatedPromptsFromMap } from '@/db/queries';
 import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
 import { tagHref, modelHref } from '@/lib/format';
-import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
+import { SITE_URL, SITE_BRAND, DEFAULT_OG_IMAGE } from '@/lib/site';
+import { toW3CDate } from '@/lib/date';
 
 
 function r2Webp(url: string | null, _width: number): string | null {
@@ -73,10 +74,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const description = `${prefix} ${clipped}`;
   const metaTitle = `${prompt.title} — ${t('promptTitleSuffix')}`;
 
-  // 无封面时回退到默认 OG 图：原来回退成 []，会让 og:image / twitter:image 整体缺失
+  // OG 图（2026-10-06 修）
+  //
+  // 原实现对有封面的详情页声明 `width: 960, height: 540`，但线上实测封面图根本没有
+  // 960×540 这一种规格：抽样 10 个 → 8 个 600×338（1.775:1 横版），
+  // 2 个 450×600 / 447×600（0.75:1 竖版）。声明错的尺寸比不声明更糟：
+  // 平台会按声明值去裁剪，竖版图会被裁成中间一条。
+  // 所以有封面时**只给 url + alt，不声明尺寸**，让平台按图片真实尺寸渲染。
+  //
+  // 无封面时回退默认 OG 图 —— public/og/og-default.png 实测就是标准 1200×630
+  // （1.9048:1，正好命中 FB/LinkedIn 的 1.91:1 门槛），可以放心声明。
   const ogImage = prompt.coverUrl
-    ? [{ url: prompt.coverUrl, width: 960, height: 540 }]
-    : [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }];
+    ? [{ url: prompt.coverUrl, alt: prompt.title }]
+    : [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630, alt: `${prompt.title} — ${SITE_BRAND}` }];
   return {
     title: metaTitle,
     description,
@@ -138,26 +148,56 @@ export default async function PromptDetailPage({ params }: Props) {
 
   // JSON-LD 结构化数据（Article + VideoObject + BreadcrumbList）
   const canonicalUrl = `${SITE_URL}/${locale}/prompts/${slug}`;
+  const ldDescription = prompt.description.replace(/\s+/g, ' ').trim().slice(0, 160);
+  const publisher = {
+    '@type': 'Organization',
+    name: SITE_BRAND,
+    url: SITE_URL,
+    logo: { '@type': 'ImageObject', url: `${SITE_URL}/favicon.svg` },
+  };
+  // D1 的 created_at / updated_at 是 `YYYY-MM-DD HH:MM:SS`，必须先归一化成 W3C，
+  // 否则 Google 判 Invalid date（见 src/lib/date.ts）
+  const datePublished = toW3CDate(prompt.promptDate) ?? toW3CDate(prompt.createdAt);
+  const dateModified = toW3CDate(prompt.updatedAt);
   const jsonLd: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'Article',
     headline: prompt.title,
-    description: prompt.description.replace(/\s+/g, ' ').trim().slice(0, 160),
+    description: ldDescription,
     url: canonicalUrl,
-    ...(prompt.coverUrl ? { image: prompt.coverUrl } : {}),
-    ...(prompt.promptDate ? { datePublished: prompt.promptDate } : {}),
-    ...(prompt.author ? { author: { '@type': 'Person', name: prompt.author } } : {}),
+    // Article 的 image 缺省会让 Google 判不合格；无封面时回退默认 OG 图
+    image: {
+      '@type': 'ImageObject',
+      url: prompt.coverUrl ?? DEFAULT_OG_IMAGE,
+    },
+    // 页面 UI 是三语的，正文是英文原文 —— 声明实际内容语言，别按 UI 语言标错
+    inLanguage: locale,
+    ...(datePublished ? { datePublished } : {}),
+    ...(dateModified ? { dateModified } : {}),
+    author: prompt.author
+      ? { '@type': 'Person', name: prompt.author }
+      : publisher,
+    publisher,
     mainEntityOfPage: canonicalUrl,
   };
-  const videoJsonLd = prompt.videoUrl
+  // VideoObject 的必填项是 name / thumbnailUrl / uploadDate + (contentUrl|embedUrl)
+  //   - thumbnailUrl：原实现给 undefined，JSON.stringify 会把该键整个丢掉 → 必填项消失
+  //   - uploadDate：原实现兜底 new Date().toISOString()，每次渲染值都不同，
+  //     与 ISR 缓存的确定性冲突，且语义错误（把"最后修改时间"当成"视频上传时间"）
+  //   - duration：Google 文档里是 recommended 而非 required，且本地无 ffprobe、
+  //     D1 无该字段，拿到它需要一次 schema 迁移 + 全量回填，故此处不输出
+  const videoUploadDate = datePublished;
+  const videoJsonLd = prompt.videoUrl && videoUploadDate
     ? {
         '@context': 'https://schema.org',
         '@type': 'VideoObject',
         name: prompt.title,
-        description: prompt.description.replace(/\s+/g, ' ').trim().slice(0, 160),
-        thumbnailUrl: prompt.coverUrl ?? undefined,
+        description: ldDescription,
+        thumbnailUrl: prompt.coverUrl ?? DEFAULT_OG_IMAGE,
         contentUrl: prompt.videoUrl,
-        uploadDate: prompt.promptDate ?? new Date().toISOString(),
+        uploadDate: videoUploadDate,
+        inLanguage: locale,
+        publisher,
       }
     : null;
   const breadcrumbJsonLd = {

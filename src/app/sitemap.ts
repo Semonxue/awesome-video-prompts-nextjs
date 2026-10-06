@@ -23,6 +23,7 @@ import { listAllSlugsForSitemap, listAllTags, listAllModels } from '@/db/queries
 import { getCachedData, invalidateCache, CACHE_KEYS } from '@/db/cache';
 import { locales } from '@/i18n/request';
 import { SITE_URL } from '@/lib/site';
+import { toW3CDate } from '@/lib/date';
 
 // sitemap ISR 缓存：1 天 revalidate（sitemap 数据小时级变化即可，更激进缓存）
 // 之前 force-dynamic 导致每次请求都打 D1，加上 13437 个 URL 对象构造时内存压力大，
@@ -35,25 +36,10 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 86400;
 
 /**
- * 把 DB 里的 updatedAt 转成 W3C Datetime 格式（sitemap lastmod 要求）
- *
- * D1/SQLite 的 updated_at 实际存的是 `YYYY-MM-DD HH:MM:SS`（空格分隔），
- * 不是 W3C 标准格式。GSC 会报 "Invalid date"。
- * 这里统一转成 `YYYY-MM-DDTHH:MM:SSZ`。
+ * lastModified 走 toW3CDate（src/lib/date.ts）：
+ * D1 的 updated_at 实际存的是 `YYYY-MM-DD HH:MM:SS`（空格分隔），
+ * 不是 W3C 标准格式，直接输出 GSC 会报 "Invalid date"。
  */
-function toW3CDate(value: string | null | undefined): string | undefined {
-  if (!value) return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  // 已经是 W3C 格式（含 T 或 Z）则原样返回
-  if (/[TZ]/.test(trimmed)) return trimmed;
-  // `YYYY-MM-DD HH:MM:SS` → `YYYY-MM-DDTHH:MM:SSZ`
-  const m = trimmed.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})$/);
-  if (m) return `${m[1]}T${m[2]}Z`;
-  // `YYYY-MM-DD` → 原样（W3C 允许纯日期）
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-  return undefined;
-}
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // 整个 sitemap 输出加跨实例缓存（2026-08-07 Error 1102 修复）

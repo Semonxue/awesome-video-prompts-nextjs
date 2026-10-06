@@ -34,9 +34,14 @@
 
 **检查命令**：
 ```bash
-grep "s-maxage=3600" node_modules/@opennextjs/aws/dist/overrides/wrappers/cloudflare-node.js
+grep "cloudflare-cdn-cache-control" node_modules/@opennextjs/aws/dist/overrides/wrappers/cloudflare-node.js
 # 没结果 = wrapper 没装，CDN 边缘缓存不会生效，每次请求都打 worker
 ```
+
+⚠️ **不要 grep `s-maxage=3600`**（2026-10-06 更正）：2026-09-08 C1 重写后边缘 TTL 已改用
+`cloudflare-cdn-cache-control` + `max-age`（CF 文档明确 `s-maxage` 会禁用
+stale-while-revalidate），wrapper 里不再有 `s-maxage` 字样。沿用旧 grep 会永远返回空，
+导致误判"wrapper 没装"并重复排查。
 
 ## Namespace Version Cache TTL（必读 + 关键坑）
 

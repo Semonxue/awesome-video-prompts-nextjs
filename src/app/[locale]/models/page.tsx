@@ -48,7 +48,7 @@ export async function generateMetadata({ params }: ModelsPageProps) {
       description: t('modelsIndexDescription'),
       url: canonical,
       locale: t('ogLocale'),
-      images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }],
+      images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630, alt: t('modelsIndexTitle') }],
       type: 'website',
     },
   };

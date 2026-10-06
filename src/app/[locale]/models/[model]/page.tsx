@@ -64,7 +64,7 @@ export async function generateMetadata({ params, searchParams }: Props) {
       description: t('modelDescription', { name, count }),
       url: canonical,
       locale: t('ogLocale'),
-      images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }],
+      images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630, alt: t('modelTitle', { name }) }],
       type: 'website',
     },
   };
@@ -100,6 +100,22 @@ export default async function ModelPage({ params, searchParams }: Props) {
 
   return (
     <>
+      {/* BreadcrumbList：页面上有可见的 <nav class="breadcrumb">，之前只有视觉没有结构化数据，
+          白白浪费了搜索结果的面包屑富媒体位（2026-10-06 补） */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            itemListElement: [
+              { '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_URL}/${locale}` },
+              { '@type': 'ListItem', position: 2, name: t('breadcrumbModels'), item: `${SITE_URL}/${locale}/models` },
+              { '@type': 'ListItem', position: 3, name: modelName, item: `${SITE_URL}/${locale}/models/${model}` },
+            ],
+          }),
+        }}
+      />
       <Header
         locale={locale}
         activeModel={model}
@@ -122,14 +138,14 @@ export default async function ModelPage({ params, searchParams }: Props) {
           </div>
           <div className="model-hero__stats">
             <span className="model-hero__count">{t('promptsFound', { count: result.total.toLocaleString() })}</span>
-            <Link href={`/${locale}/models/`} className="model-hero__back">{t('backToModels')}</Link>
+            <Link href={`/${locale}/models`} className="model-hero__back">{t('backToModels')}</Link>
           </div>
         </section>
 
         {tagOptions.length > 0 && (
           <div className="content-tag-area model-tag-tabs">
             <div className="content-tags">
-              <Link href={`/${locale}/models/${model}/`} className={`content-tag${!sp.tag ? ' active' : ''}`}>
+              <Link href={`/${locale}/models/${model}`} className={`content-tag${!sp.tag ? ' active' : ''}`}>
                 {t('all')}
               </Link>
               {tagOptions.slice(0, 16).map((tt) => (

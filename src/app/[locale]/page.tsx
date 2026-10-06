@@ -16,7 +16,7 @@ import { Footer } from '@/components/Footer';
 import { GridEngine } from '@/components/GridEngine';
 import { HEADER_TAG_LIMIT } from '@/components/types';
 import Link from 'next/link';
-import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
+import { SITE_URL, SITE_BRAND, DEFAULT_OG_IMAGE } from '@/lib/site';
 
 interface HomePageProps {
   params: Promise<{ locale: string }>;
@@ -61,7 +61,7 @@ export async function generateMetadata({ params, searchParams }: HomePageProps) 
       description: t('homeDescription'),
       url: canonical,
       locale: t('ogLocale'),
-      images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }],
+      images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630, alt: t('homeTitle') }],
       type: 'website',
     },
   };
@@ -111,6 +111,44 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
 
   return (
     <>
+      {/* 站点级结构化数据（2026-10-06 补）——之前整站首页 JSON-LD 块数为 0。
+          WebSite + SearchAction：站点本来就有 ?q= 搜索，这是拿 Google
+          Sitelinks 搜索框的正规途径；Organization 帮搜索引擎把品牌与 GitHub
+          仓库、社交账号这些实体关联起来。 */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@graph': [
+              {
+                '@type': 'WebSite',
+                '@id': `${SITE_URL}/#website`,
+                url: `${SITE_URL}/${locale}`,
+                name: SITE_BRAND,
+                inLanguage: locale,
+                publisher: { '@id': `${SITE_URL}/#organization` },
+                potentialAction: {
+                  '@type': 'SearchAction',
+                  target: {
+                    '@type': 'EntryPoint',
+                    urlTemplate: `${SITE_URL}/${locale}?q={search_term_string}`,
+                  },
+                  'query-input': 'required name=search_term_string',
+                },
+              },
+              {
+                '@type': 'Organization',
+                '@id': `${SITE_URL}/#organization`,
+                name: SITE_BRAND,
+                url: SITE_URL,
+                logo: { '@type': 'ImageObject', url: `${SITE_URL}/favicon.svg` },
+                sameAs: ['https://github.com/Semonxue/awesome-video-prompts'],
+              },
+            ],
+          }),
+        }}
+      />
       <Header
         locale={locale}
         activeTag={sp.tag}
@@ -129,7 +167,7 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
             <div className="grid-header-links">
               {sp.model && activeModel && (
                 <Link
-                  href={`/${locale}/models/${sp.model}/`}
+                  href={`/${locale}/models/${sp.model}`}
                   className="view-all-link"
                   data-view-more="model"
                 >
@@ -138,7 +176,7 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
               )}
               {sp.tag && activeTag && (
                 <Link
-                  href={`/${locale}/tags/${sp.tag}/`}
+                  href={`/${locale}/tags/${sp.tag}`}
                   className="view-all-link"
                   data-view-more="tag"
                 >

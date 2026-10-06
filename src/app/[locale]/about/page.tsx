@@ -31,7 +31,7 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
       title: t('title'),
       description: t('intro'),
       url: canonical,
-      images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }],
+      images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630, alt: t('title') }],
       type: 'website',
     },
   };

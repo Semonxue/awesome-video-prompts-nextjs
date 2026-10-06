@@ -61,6 +61,7 @@
     "promptsFound": "{count} prompts found",
     "all": "All",
     "backToModels": "← Models",
+    "breadcrumbModels": "Models",
     "noPrompts": "No prompts found.",
     "loadingMore": "Loading more prompts…"
   },

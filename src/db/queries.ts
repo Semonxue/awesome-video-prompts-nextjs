@@ -164,6 +164,11 @@ export async function hydratePrompts(
     sourceUrl: r.sourceUrl,
     author: r.author,
     promptDate: r.promptDate,
+    // 详情页 JSON-LD 的 dateModified / uploadDate 兜底需要这两个字段。
+    // R2 payload 代价：每条 +~60 字节，列表页 24 条 ≈ +1.4KB（占首页 HTML 0.5%），
+    // 换来的是不用为详情页单独加一次 D1 round-trip。
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
     models: modelsByPromptId.get(r.id) ?? [],
     tags: tagsByPromptId.get(r.id) ?? [],
   }));

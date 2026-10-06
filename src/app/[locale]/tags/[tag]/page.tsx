@@ -64,7 +64,7 @@ export async function generateMetadata({ params, searchParams }: Props) {
       description: t('tagDescription', { name: displayName, count }),
       url: canonical,
       locale: t('ogLocale'),
-      images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }],
+      images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630, alt: t('tagTitle', { name: displayName }) }],
       type: 'website',
     },
   };
@@ -111,6 +111,22 @@ export default async function TagPage({ params, searchParams }: Props) {
 
   return (
     <>
+      {/* BreadcrumbList：页面上有可见的 <nav class="breadcrumb">，之前只有视觉没有结构化数据，
+          白白浪费了搜索结果的面包屑富媒体位（2026-10-06 补） */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            itemListElement: [
+              { '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_URL}/${locale}` },
+              { '@type': 'ListItem', position: 2, name: t('breadcrumbTags'), item: `${SITE_URL}/${locale}/tags` },
+              { '@type': 'ListItem', position: 3, name: displayName, item: `${SITE_URL}/${locale}/tags/${tag}` },
+            ],
+          }),
+        }}
+      />
       <Header
         locale={locale}
         activeTag={tag}
@@ -122,7 +138,7 @@ export default async function TagPage({ params, searchParams }: Props) {
         <nav className="breadcrumb" aria-label="Breadcrumb">
           <Link href={`/${locale}`}>Home</Link>
           <span className="breadcrumb-sep">›</span>
-          <Link href={`/${locale}/tags/`}>{t('breadcrumbTags')}</Link>
+          <Link href={`/${locale}/tags`}>{t('breadcrumbTags')}</Link>
           <span className="breadcrumb-sep">›</span>
           <span>{displayName}</span>
         </nav>
@@ -131,7 +147,7 @@ export default async function TagPage({ params, searchParams }: Props) {
           <h1 className="model-hero__title">{displayName}</h1>
           <div className="model-hero__stats">
             <span className="model-hero__count">{t('promptsFound', { count: result.total.toLocaleString() })}</span>
-            <Link href={`/${locale}/tags/`} className="model-hero__back">{t('backToTags')}</Link>
+            <Link href={`/${locale}/tags`} className="model-hero__back">{t('backToTags')}</Link>
           </div>
         </section>
 
@@ -142,7 +158,7 @@ export default async function TagPage({ params, searchParams }: Props) {
               {modelOptions.slice(0, 12).map((m) => (
                 <Link
                   key={m.slug}
-                  href={`/${locale}/models/${m.slug}/`}
+                  href={`/${locale}/models/${m.slug}`}
                   className="content-tag"
                 >
                   {m.name} <span className="tag-count">{m.count}</span>

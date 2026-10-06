@@ -7,6 +7,9 @@
 export const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ?? 'https://awesomevideoprompts.com';
 
+/** 站点品牌名（JSON-LD 的 Organization / publisher 用，避免各处硬编码不一致） */
+export const SITE_BRAND = 'Awesome Video Prompts';
+
 /** R2 公网域（图片/视频/默认 OG 图） */
 export const R2_PUBLIC_URL =
   process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? 'https://static.awesomevideoprompts.com';

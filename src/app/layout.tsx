@@ -4,19 +4,19 @@
  */
 import type { ReactNode } from 'react';
 import './globals.css';
-import { SITE_URL, R2_PUBLIC_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
+import { SITE_URL, SITE_BRAND, R2_PUBLIC_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
 
 export const metadata: {
   title: { default: string; template: string };
   description: string;
   metadataBase: string;
   alternates: { languages: Record<string, string> };
-  openGraph: { type: string; siteName: string; title: string; description: string; url: string; images: { url: string; width: number; height: number }[] };
+  openGraph: { type: string; siteName: string; title: string; description: string; url: string; images: { url: string; width: number; height: number; alt: string }[] };
   twitter: { card: string; title: string; description: string; images: string[] };
 } = {
   title: {
-    default: 'Awesome Video Prompts',
-    template: '%s | Awesome Video Prompts',
+    default: SITE_BRAND,
+    template: `%s | ${SITE_BRAND}`,
   },
   description: 'Curated prompts for AI video generation',
   metadataBase: SITE_URL,
@@ -30,15 +30,18 @@ export const metadata: {
   },
   openGraph: {
     type: 'website',
-    siteName: 'Awesome Video Prompts',
-    title: 'Awesome Video Prompts',
+    siteName: SITE_BRAND,
+    title: SITE_BRAND,
     description: 'Curated prompts for AI video generation',
     url: SITE_URL,
-    images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630 }],
+    // og-default.png 实测就是 1200×630（1.9048:1），尺寸声明准确
+    images: [
+      { url: DEFAULT_OG_IMAGE, width: 1200, height: 630, alt: `${SITE_BRAND} — AI Video Prompt Library` },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Awesome Video Prompts',
+    title: SITE_BRAND,
     description: 'Curated prompts for AI video generation',
     images: [DEFAULT_OG_IMAGE],
   },

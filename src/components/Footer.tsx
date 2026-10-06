@@ -31,8 +31,8 @@ export async function Footer({ locale = 'en' }: Props) {
 
         {/* 右侧：导航链接 */}
         <div className="footer-right">
-          <Link href={`/${locale}/tags/`} className="footer-link">{t('tags')}</Link>
-          <Link href={`/${locale}/models/`} className="footer-link">{t('models')}</Link>
+          <Link href={`/${locale}/tags`} className="footer-link">{t('tags')}</Link>
+          <Link href={`/${locale}/models`} className="footer-link">{t('models')}</Link>
           <a
             href="https://github.com/Semonxue/awesome-video-prompts"
             className="footer-link"
@@ -41,7 +41,7 @@ export async function Footer({ locale = 'en' }: Props) {
           >
             {t('github')}
           </a>
-          <Link href={`/${locale}/about/`} className="footer-link">{t('about')}</Link>
+          <Link href={`/${locale}/about`} className="footer-link">{t('about')}</Link>
         </div>
       </div>
     </footer>

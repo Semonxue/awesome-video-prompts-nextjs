@@ -19,6 +19,16 @@ export interface PromptCardData {
   author: string | null;
   /** 发布日期 ISO 8601 YYYY-MM-DD */
   promptDate: string | null;
+  /**
+   * 建档时间（D1 存 `YYYY-MM-DD HH:MM:SS`，非 ISO 8601）
+   * JSON-LD 的 datePublished / uploadDate 兜底要用，取值前必须过 toW3CDate
+   */
+  createdAt: string;
+  /**
+   * 最后修改时间（D1 存 `YYYY-MM-DD HH:MM:SS`，非 ISO 8601）
+   * JSON-LD 的 dateModified 用，取值前必须过 toW3CDate
+   */
+  updatedAt: string;
   /** 模型 keys（slug 形式，如 "veo3" / "sora"） */
   models: ModelRef[];
   /** 标签 keys（slug 形式） */

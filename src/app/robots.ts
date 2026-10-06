@@ -28,6 +28,11 @@ export default function robots(): MetadataRoute.Robots {
         userAgent: '*',
         allow: '/',
         disallow: [
+          // API 路由（2026-10-06 新增）
+          // /api/prompts 实测返回 200 + 全量 prompt JSON（含 description / coverUrl /
+          // videoUrl），/api/prompts/check-duplicates 同样 200。middleware matcher 已
+          // 排除 /api，所以这里只影响爬虫可见性，不影响现有缓存逻辑。
+          '/api/',
           '/*?tag=',
           '/*?model=',
           '/*?q=',

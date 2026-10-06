@@ -61,6 +61,7 @@
     "promptsFound": "共找到 {count} 条提示词",
     "all": "全部",
     "backToModels": "← 模型",
+    "breadcrumbModels": "模型",
     "noPrompts": "未找到提示词",
     "loadingMore": "加载更多提示词…"
   },
