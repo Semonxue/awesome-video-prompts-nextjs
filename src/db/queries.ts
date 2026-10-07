@@ -799,7 +799,7 @@ export async function getRelatedPrompts(
  */
 export async function getRelatedPromptsCached(
   sourcePrompt: PromptCardData,
-  limit: number = 6,
+  limit: number = RELATED_PER_PROMPT,
 ): Promise<PromptCardData[]> {
   return getNamespacedCachedData<PromptCardData[]>(
     'related',
@@ -851,7 +851,15 @@ export async function getAdjacentPromptsCached(
 //       只在 publish 时执行一次（人工低频操作），完全可接受。
 // ============================================================
 
-/** 预计算所有 prompt 的 top 6 related slugs（全量内存打分，不走 D1 per-prompt 查询） */
+/** 预计算所有 prompt 的 top N related slugs（全量内存打分，不走 D1 per-prompt 查询） */
+/**
+ * 每个 prompt 预计算多少条 related（2026-10-08 P1-4：6 → 12）
+ *
+ * 读侧 getRelatedPromptsFromMap 的默认 limit 与预计算上限必须一致，
+ * 否则读侧要的比存的还多，页面上就少渲染。
+ */
+export const RELATED_PER_PROMPT = 12;
+
 async function computeRelatedMap(): Promise<RelatedMapCache> {
   const d1 = await getD1();
   const db = getDb(d1);
@@ -912,7 +920,12 @@ async function computeRelatedMap(): Promise<RelatedMapCache> {
     rankMap.set(p.id, i);
   }
 
-  // 5) 为每个 prompt 计算 top 6 related slugs
+  // 5) 为每个 prompt 计算 top 12 related slugs
+  //    2026-10-08 P1-4：6 → 12。详情页原先每页只输出 6 条 related + 2 上下篇 = 9 条
+  //    内链，导致 sitemap 里 6,804 条 prompt 有 4,743 条（70%）没有任何入口链接
+  //    （GSC "Discovered - currently not indexed" 19,530 的主因）。
+  //    候选池已经预裁到 100 个并在内存里打好分，多取 6 条**不增加任何 D1 查询**，
+  //    代价只有 related-map.json 体积约 +1.8MB R2 存储/读取。
   const result: RelatedMapCache = {};
 
   for (const prompt of allPrompts) {
@@ -957,7 +970,7 @@ async function computeRelatedMap(): Promise<RelatedMapCache> {
     );
 
     result[prompt.slug] = scored
-      .slice(0, 6)
+      .slice(0, RELATED_PER_PROMPT)
       .map((s) => idToSlug.get(s.id)!)
       .filter(Boolean);
   }
@@ -1003,7 +1016,7 @@ async function computeAdjacentMap(): Promise<AdjacentMapCache> {
  */
 export async function getRelatedPromptsFromMap(
   sourcePrompt: PromptCardData,
-  limit: number = 6,
+  limit: number = RELATED_PER_PROMPT,
 ): Promise<PromptCardData[]> {
   const map = await readAggregateCache<RelatedMapCache>(AGG_CACHE_KEYS.relatedMap);
   if (!map) {

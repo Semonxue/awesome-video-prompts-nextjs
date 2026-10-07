@@ -63,7 +63,8 @@
     "backToModels": "← 模型",
     "breadcrumbModels": "模型",
     "noPrompts": "未找到提示词",
-    "loadingMore": "加载更多提示词…"
+    "loadingMore": "加载更多提示词…",
+    "paginationLabel": "{model} 分页"
   },
   "tag": {
     "breadcrumbTags": "标签",
@@ -71,7 +72,8 @@
     "promptsFound": "共找到 {count} 条提示词",
     "popularPrompts": "热门提示词",
     "backToTags": "← 标签",
-    "noPrompts": "未找到提示词"
+    "noPrompts": "未找到提示词",
+    "paginationLabel": "{tag} 分页"
   },
   "mobileFilters": {
     "filters": "筛选",
@@ -164,5 +166,9 @@
     "tagsIndexDescription": "按主题浏览全部 AI 视频提示词：电影感、动作、人像、动漫、产品视频等，可直接复制用于 Seedance、Kling、Veo、Sora。",
     "modelsIndexTitle": "AI 视频模型 — 按模型浏览提示词",
     "modelsIndexDescription": "查找 Seedance、Kling、Veo、Sora、Runway、MiniMax 等 AI 视频模型的即用提示词。"
+  },
+  "pagination": {
+    "prev": "上一页",
+    "next": "下一页"
   }
 }

@@ -1,27 +1,21 @@
 /**
- * 独立 model 页面 /[locale]/models/[model]
- * 视觉对齐线上 awesomevideoprompts.com/models/[model]/：
- *   - Header
- *   - Breadcrumb: Home › models: [Model Name]
- *   - Hero: H1 + "Official Website" link
- *   - 该 model 下的 tag tabs
- *   - "Model Name video prompts" + N prompts found
- *   - 瀑布流
- *   - Footer
+ * model 页面 /[locale]/models/[model]（第 1 页）
+ *
+ * 2026-10-08 P1-1 重构：JSX 与 metadata 抽到共享组件/函数，
+ * 与新增的 /[locale]/models/[model]/p/[page] 真实分页路径共用同一实现。
+ *
+ * 分页不用 ?page=N 的原因与 tag 页完全一样：
+ *   旧实现下 `?page=N` 同时被 robots.txt Disallow、页面自带 noindex、
+ *   且没有任何分页链接指向它 —— 三重死区。现在统一走真实路径 /p/N。
+ *
+ * `?tag=X` 分面筛选保持原状（robots 封锁 + noindex），刻意不并入 /p/N 体系：
+ *   model × tag 与 /[locale]/tags/[tag] 内容重复，合并会让提交量按乘法膨胀。
  */
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getTranslations } from 'next-intl/server';
-import { Header } from '@/components/Header';
-import { Footer } from '@/components/Footer';
-import { GridEngine } from '@/components/GridEngine';
-import { listAllModels, listAllTags, listPrompts, listModelTagDistribution, getModelName } from '@/db/queries';
-import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
-import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
+import { ModelPageView } from '@/components/ModelPageView';
+import { buildModelMetadata } from '@/lib/model-page-metadata';
 
 export const revalidate = 86400;
-
-const PAGE_SIZE = 24;
 
 interface Props {
   params: Promise<{ locale: string; model: string }>;
@@ -31,158 +25,13 @@ interface Props {
 export async function generateMetadata({ params, searchParams }: Props) {
   const { locale, model } = await params;
   const sp = await searchParams;
-
-  // B2：meta 三语化 + 带上该 model 的 prompt 数（listAllModels 走 R2 聚合缓存，不额外打 D1）
-  const [t, name, models] = await Promise.all([
-    getTranslations({ locale, namespace: 'seo' }),
-    getModelName(model),
-    listAllModels(),
-  ]);
-  const count = models.find((m) => m.slug === model)?.count ?? 0;
-  const canonical = `${SITE_URL}/${locale}/models/${model}`;
-
-  // 低质量页面 noindex：分页 >1 / tag 筛选（与独立 tag 页重复）
-  const isLowValue =
-    (sp.page && parseInt(sp.page, 10) > 1) || Boolean(sp.tag);
-
-  return {
-    // 不要手写站点名后缀：layout 的 title 模板会再拼一次（曾出现 "x | AVP | AVP"）
-    title: t('modelTitle', { name }),
-    description: t('modelDescription', { name, count }),
-    alternates: {
-      canonical,
-      languages: {
-        en: `${SITE_URL}/en/models/${model}`,
-        zh: `${SITE_URL}/zh/models/${model}`,
-        ja: `${SITE_URL}/ja/models/${model}`,
-        'x-default': `${SITE_URL}/en/models/${model}`,
-      },
-    },
-    robots: isLowValue ? { index: false, follow: true } : undefined,
-    openGraph: {
-      title: t('modelTitle', { name }),
-      description: t('modelDescription', { name, count }),
-      url: canonical,
-      locale: t('ogLocale'),
-      images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630, alt: t('modelTitle', { name }) }],
-      type: 'website',
-    },
-  };
+  return buildModelMetadata({ locale, model, page: 1, filtered: Boolean(sp.tag) });
 }
 
 export default async function ModelPage({ params, searchParams }: Props) {
   const { locale, model } = await params;
   const sp = await searchParams;
-  const t = await getTranslations('model');
   if (!['en', 'zh', 'ja'].includes(locale)) notFound();
 
-  const modelName = await getModelName(model);
-
-  // 分页
-  const page = Math.max(1, parseInt(sp.page ?? '1', 10) || 1);
-  const offset = (page - 1) * PAGE_SIZE;
-
-  // 该 model 下的 prompts（不分 locale）
-  const result = await listPrompts({ model, tag: sp.tag, limit: PAGE_SIZE, offset });
-  const modelItems = result.items;
-
-  // 该 model 下的 tag 分布（专门 SQL + 跨实例缓存，2026-08-07 替换 listPrompts({ model }) 的错误实现）
-  // 之前用 listPrompts({ model }) 默认 limit=24 拿分布是逻辑 bug（不全），且要走 3 次 D1 + 完整 hydrate
-  // 现改 1 次 JOIN GROUP BY，1 次 D1 round-trip 完成，5 分钟跨实例缓存
-  // counts 缓存：Header intro "Collected N prompts" 需要全站总数，result.total
-  // 在 model 页是该 model 下的数，不能直接传给 Header（2026-08-07 修复）。
-  const [tagOptions, modelOptions, counts] = await Promise.all([
-    listModelTagDistribution(model),
-    listAllModels(),
-    readAggregateCache<CountsCache>(AGG_CACHE_KEYS.counts),
-  ]);
-  const totalCount = counts?.total ?? 0;
-
-  return (
-    <>
-      {/* BreadcrumbList：页面上有可见的 <nav class="breadcrumb">，之前只有视觉没有结构化数据，
-          白白浪费了搜索结果的面包屑富媒体位（2026-10-06 补） */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            '@context': 'https://schema.org',
-            '@type': 'BreadcrumbList',
-            itemListElement: [
-              { '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_URL}/${locale}` },
-              { '@type': 'ListItem', position: 2, name: t('breadcrumbModels'), item: `${SITE_URL}/${locale}/models` },
-              { '@type': 'ListItem', position: 3, name: modelName, item: `${SITE_URL}/${locale}/models/${model}` },
-            ],
-          }),
-        }}
-      />
-      <Header
-        locale={locale}
-        activeModel={model}
-        activeTag={sp.tag}
-        modelOptions={modelOptions}
-        tagOptions={tagOptions.slice(0, 12)}
-        totalCount={totalCount}
-      />
-
-      <main className="main-content model-tag-page">
-        <nav className="breadcrumb" aria-label="Breadcrumb">
-          <Link href={`/${locale}`}>Home</Link>
-          <span className="breadcrumb-sep">›</span>
-          <span>models: {modelName}</span>
-        </nav>
-
-        <section className="model-hero">
-          <div className="model-hero__header">
-            <h1 className="model-hero__title">{modelName}</h1>
-          </div>
-          <div className="model-hero__stats">
-            <span className="model-hero__count">{t('promptsFound', { count: result.total.toLocaleString() })}</span>
-            <Link href={`/${locale}/models`} className="model-hero__back">{t('backToModels')}</Link>
-          </div>
-        </section>
-
-        {tagOptions.length > 0 && (
-          <div className="content-tag-area model-tag-tabs">
-            <div className="content-tags">
-              <Link href={`/${locale}/models/${model}`} className={`content-tag${!sp.tag ? ' active' : ''}`}>
-                {t('all')}
-              </Link>
-              {tagOptions.slice(0, 16).map((tt) => (
-                <Link
-                  key={tt.slug}
-                  href={`/${locale}/models/${model}/?tag=${tt.slug}`}
-                  className={`content-tag${sp.tag === tt.slug ? ' active' : ''}`}
-                >
-                  {tt.name} <span className="tag-count">{tt.count}</span>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="grid-header">
-          <h2 className="grid-title">{modelName} video prompts</h2>
-          <span className="result-count">{t('promptsFound', { count: result.total.toLocaleString() })}</span>
-        </div>
-
-        {modelItems.length > 0 ? (
-          <GridEngine
-            initialItems={modelItems}
-            total={result.total}
-            filters={{ model, tag: sp.tag }}
-            initialPage={page}
-            pageSize={PAGE_SIZE}
-            locale={locale}
-          />
-        ) : (
-          <div className="empty-state">
-            <p>{t('noPrompts')}</p>
-          </div>
-        )}
-      </main>
-
-      <Footer locale={locale} />
-    </>
-  );
+  return <ModelPageView locale={locale} model={model} page={1} tag={sp.tag} />;
 }

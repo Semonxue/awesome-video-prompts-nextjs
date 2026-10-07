@@ -26,7 +26,8 @@ import { listPrompts } from '@/db/queries';
 // ISR: 让 API endpoint 也走边缘 ISR 缓存（同 URL 1h 命中）
 export const revalidate = 3600;
 
-const PAGE_SIZE = 24;
+// 2026-10-08 P1-3：与 SSR 页面共用同一常量，否则 offset 基数不一致会跳页
+import { PAGE_SIZE } from '@/lib/pagination';
 
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;

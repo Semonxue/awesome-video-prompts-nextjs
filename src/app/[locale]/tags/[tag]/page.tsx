@@ -1,195 +1,35 @@
 /**
- * 独立 tag 页面 /[locale]/tags/[tag]
- * 视觉对齐线上 awesomevideoprompts.com/tags/[tag]/：
- *   - Header
- *   - Breadcrumb: Home › Tags › [tag]
- *   - Hero: H1 + 描述 + N prompts found + ← Tags
- *   - 该 tag 下的相关 model tabs
- *   - "Popular prompts" + 瀑布流
- *   - Footer
+ * tag 页面 /[locale]/tags/[tag]（第 1 页）
+ *
+ * 2026-10-08 P1-1 重构：JSX 与 metadata 抽到共享组件/函数，
+ * 与新增的 /[locale]/tags/[tag]/p/[page] 真实分页路径共用同一实现。
+ *
+ * 本文件只负责：参数校验 + metadata + 渲染 <TagPageView page={1} />。
+ * 分页控件见 components/TagPagination.tsx。
+ *
+ * 为什么分页不用 ?page=N：
+ *   旧实现下 `?page=N` 同时被 robots.txt Disallow、页面自带 noindex、
+ *   且没有任何分页链接指向它 —— 三重死区，page 2+ 的内容永远进不了索引。
+ *   现在统一走真实路径 /p/N。`?page=N` 由 src/lib/legacy-url.ts 301 收敛过去，
+ *   robots.txt 里对 ?page= 的封锁保持不变（老参数不再产生可抓取面）。
  */
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getTranslations } from 'next-intl/server';
-import { Header } from '@/components/Header';
-import { Footer } from '@/components/Footer';
-import { GridEngine } from '@/components/GridEngine';
-import { HEADER_TAG_LIMIT } from '@/components/types';
-import { listAllModels, listAllTags, listPrompts } from '@/db/queries';
-import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
-import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
+import { TagPageView } from '@/components/TagPageView';
+import { buildTagMetadata } from '@/lib/tag-page-metadata';
 
 export const revalidate = 86400;
 
-const PAGE_SIZE = 24;
-
 interface Props {
   params: Promise<{ locale: string; tag: string }>;
-  searchParams: Promise<{ page?: string }>;
 }
 
-export async function generateMetadata({ params, searchParams }: Props) {
+export async function generateMetadata({ params }: Props) {
   const { locale, tag } = await params;
-  const sp = await searchParams;
-  const canonical = `${SITE_URL}/${locale}/tags/${tag}`;
-
-  // B2：meta 三语化 + 用 yaml 显示名（D1 里 tags.name 是原始串，如 motion_blur / martial-arts）
-  const [t, tags] = await Promise.all([
-    getTranslations({ locale, namespace: 'seo' }),
-    listAllTags(),
-  ]);
-  const hit = tags.find((x) => x.slug === tag);
-  const displayName = hit?.name ?? tag;
-  const count = hit?.count ?? 0;
-
-  // 低质量页面 noindex：分页 >1
-  const isLowValue = sp.page && parseInt(sp.page, 10) > 1;
-
-  return {
-    // 不要手写站点名后缀：layout 的 title 模板会再拼一次（曾出现 "x | AVP | AVP"）
-    title: t('tagTitle', { name: displayName }),
-    description: t('tagDescription', { name: displayName, count }),
-    alternates: {
-      canonical,
-      languages: {
-        en: `${SITE_URL}/en/tags/${tag}`,
-        zh: `${SITE_URL}/zh/tags/${tag}`,
-        ja: `${SITE_URL}/ja/tags/${tag}`,
-        'x-default': `${SITE_URL}/en/tags/${tag}`,
-      },
-    },
-    robots: isLowValue ? { index: false, follow: true } : undefined,
-    openGraph: {
-      title: t('tagTitle', { name: displayName }),
-      description: t('tagDescription', { name: displayName, count }),
-      url: canonical,
-      locale: t('ogLocale'),
-      images: [{ url: DEFAULT_OG_IMAGE, width: 1200, height: 630, alt: t('tagTitle', { name: displayName }) }],
-      type: 'website',
-    },
-  };
+  return buildTagMetadata({ locale, tag, page: 1 });
 }
 
-export default async function TagPage({ params, searchParams }: Props) {
+export default async function TagPage({ params }: Props) {
   const { locale, tag } = await params;
-  const sp = await searchParams;
-  const t = await getTranslations('tag');
   if (!['en', 'zh', 'ja'].includes(locale)) notFound();
-
-  // 分页
-  const page = Math.max(1, parseInt(sp.page ?? '1', 10) || 1);
-  const offset = (page - 1) * PAGE_SIZE;
-
-  // 该 tag 下的 prompts（不分 locale）
-  const result = await listPrompts({ tag, limit: PAGE_SIZE, offset });
-  const tagItems = result.items;
-
-  // 该 tag 下的 model 分布
-  const modelSet = new Map<string, number>();
-  for (const p of tagItems) {
-    for (const m of p.models) {
-      modelSet.set(m.slug, (modelSet.get(m.slug) ?? 0) + 1);
-    }
-  }
-  const modelOptions = [...modelSet.entries()]
-    .map(([slug, count]) => ({ slug, name: slug, count }))
-    .sort((a, b) => b.count - a.count);
-
-  // 全集 tagOptions（顶部 tag tabs，不分 locale）
-  // 只传前 N 个：Header 是客户端组件，全量 1486 个 tag 会被序列化进 RSC 载荷
-  // （实测占首页 HTML 的 77%）。详见 components/types.ts 的 HEADER_TAG_LIMIT。
-  // counts 缓存：Header intro "Collected N prompts" 需要全站总数，result.total
-  // 在 tag 页是该 tag 下的数，不能直接传给 Header（2026-08-07 修复）。
-  const [allTags, counts] = await Promise.all([
-    listAllTags(),
-    readAggregateCache<CountsCache>(AGG_CACHE_KEYS.counts),
-  ]);
-  const allTagsSliced = allTags.slice(0, HEADER_TAG_LIMIT);
-  const totalCount = counts?.total ?? 0;
-  // B2/D2：H1 用 yaml 显示名（D1 里 tags.name 是原始串，如 motion_blur）
-  const displayName = allTags.find((x) => x.slug === tag)?.name ?? tag;
-
-  return (
-    <>
-      {/* BreadcrumbList：页面上有可见的 <nav class="breadcrumb">，之前只有视觉没有结构化数据，
-          白白浪费了搜索结果的面包屑富媒体位（2026-10-06 补） */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            '@context': 'https://schema.org',
-            '@type': 'BreadcrumbList',
-            itemListElement: [
-              { '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_URL}/${locale}` },
-              { '@type': 'ListItem', position: 2, name: t('breadcrumbTags'), item: `${SITE_URL}/${locale}/tags` },
-              { '@type': 'ListItem', position: 3, name: displayName, item: `${SITE_URL}/${locale}/tags/${tag}` },
-            ],
-          }),
-        }}
-      />
-      <Header
-        locale={locale}
-        activeTag={tag}
-        tagOptions={allTagsSliced}
-        totalCount={totalCount}
-      />
-
-      <main className="main-content model-tag-page">
-        <nav className="breadcrumb" aria-label="Breadcrumb">
-          <Link href={`/${locale}`}>Home</Link>
-          <span className="breadcrumb-sep">›</span>
-          <Link href={`/${locale}/tags`}>{t('breadcrumbTags')}</Link>
-          <span className="breadcrumb-sep">›</span>
-          <span>{displayName}</span>
-        </nav>
-
-        <section className="model-hero">
-          <h1 className="model-hero__title">{displayName}</h1>
-          <div className="model-hero__stats">
-            <span className="model-hero__count">{t('promptsFound', { count: result.total.toLocaleString() })}</span>
-            <Link href={`/${locale}/tags`} className="model-hero__back">{t('backToTags')}</Link>
-          </div>
-        </section>
-
-        {modelOptions.length > 0 && (
-          <div className="content-tag-area model-tag-tabs">
-            <div className="content-tags">
-              <span className="content-tag content-tag--label">{t('byModel')}</span>
-              {modelOptions.slice(0, 12).map((m) => (
-                <Link
-                  key={m.slug}
-                  href={`/${locale}/models/${m.slug}`}
-                  className="content-tag"
-                >
-                  {m.name} <span className="tag-count">{m.count}</span>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="grid-header">
-          <h2 className="grid-title">{t('popularPrompts')}</h2>
-          <span className="result-count">{t('promptsFound', { count: result.total.toLocaleString() })}</span>
-        </div>
-
-        {tagItems.length > 0 ? (
-          <GridEngine
-            initialItems={tagItems}
-            total={result.total}
-            filters={{ tag }}
-            initialPage={page}
-            pageSize={PAGE_SIZE}
-            locale={locale}
-          />
-        ) : (
-          <div className="empty-state">
-            <p>{t('noPrompts')}</p>
-          </div>
-        )}
-      </main>
-
-      <Footer locale={locale} />
-    </>
-  );
+  return <TagPageView locale={locale} tag={tag} page={1} />;
 }

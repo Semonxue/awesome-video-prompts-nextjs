@@ -26,7 +26,9 @@ interface HomePageProps {
 // ISR 24h — publish/delete 时 revalidatePath 主动失效，无需短 TTL
 export const revalidate = 86400;
 
-const PAGE_SIZE = 24;
+// 2026-10-08 P1-3：PAGE_SIZE 统一从 lib/pagination 取（此前 5 处各写一份 24，
+// 改一处忘一处会让 GridEngine 无限滚动跳页/重复条目）
+import { PAGE_SIZE } from '@/lib/pagination';
 
 export async function generateMetadata({ params, searchParams }: HomePageProps) {
   const { locale } = await params;

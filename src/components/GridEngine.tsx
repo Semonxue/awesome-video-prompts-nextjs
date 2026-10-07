@@ -23,6 +23,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { PromptCard } from './PromptCard';
 import type { PromptCardData } from './types';
+import { PAGE_SIZE as DEFAULT_PAGE_SIZE } from '@/lib/pagination';
 
 interface Props {
   /** 服务端 SSR 渲染的首批 items（page 1 或 URL 指定页） */
@@ -33,7 +34,7 @@ interface Props {
   filters?: { tag?: string; model?: string; q?: string };
   /** 初始页码（URL ?page=N，默认 1） */
   initialPage?: number;
-  /** 每页条数（默认 24，必须与 API endpoint 一致） */
+  /** 每页条数（默认取 lib/pagination.PAGE_SIZE，必须与 /api/prompts 一致） */
   pageSize?: number;
   /** locale（用于卡片 href） */
   locale: string;
@@ -45,8 +46,6 @@ interface ApiResponse {
   hasMore: boolean;
   nextPage: number | null;
 }
-
-const DEFAULT_PAGE_SIZE = 24;
 
 export function GridEngine({
   initialItems,

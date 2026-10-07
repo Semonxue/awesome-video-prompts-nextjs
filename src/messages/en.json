@@ -63,7 +63,8 @@
     "backToModels": "← Models",
     "breadcrumbModels": "Models",
     "noPrompts": "No prompts found.",
-    "loadingMore": "Loading more prompts…"
+    "loadingMore": "Loading more prompts…",
+    "paginationLabel": "{model} pagination"
   },
   "tag": {
     "breadcrumbTags": "Tags",
@@ -71,7 +72,8 @@
     "promptsFound": "{count} prompts found",
     "popularPrompts": "Popular prompts",
     "backToTags": "← Tags",
-    "noPrompts": "No prompts found."
+    "noPrompts": "No prompts found.",
+    "paginationLabel": "{tag} pagination"
   },
   "mobileFilters": {
     "filters": "Filters",
@@ -164,5 +166,9 @@
     "tagsIndexDescription": "Browse every AI video prompt topic: cinematic, action, portrait, anime, product video and more. Copy-ready prompts for Seedance, Kling, Veo and Sora.",
     "modelsIndexTitle": "AI Video Models — Browse Prompts by Model",
     "modelsIndexDescription": "Find copy-ready prompts for Seedance, Kling, Veo, Sora, Runway, MiniMax and other AI video models."
+  },
+  "pagination": {
+    "prev": "Previous",
+    "next": "Next"
   }
 }

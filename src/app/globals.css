@@ -464,3 +464,60 @@ body:has(.site-header.header-compact) .main-content {
   display: inline;
 }
 
+
+/* ============================================================
+ * tag 分页控件（2026-10-08 P1-1）
+ * 配合 /[locale]/tags/[tag]/p/[page] 真实路径，给爬虫可跟随的 <a href>
+ * ============================================================ */
+.tag-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 32px 0 8px;
+  font-size: 14px;
+}
+.tag-pagination__step {
+  padding: 6px 12px;
+  border: 1px solid var(--border-color, #e2e2e2);
+  border-radius: 6px;
+  text-decoration: none;
+  color: inherit;
+  white-space: nowrap;
+}
+.tag-pagination__step:hover {
+  border-color: currentColor;
+}
+.tag-pagination__step.is-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.tag-pagination__pages {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.tag-pagination__page {
+  min-width: 32px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color, #e2e2e2);
+  border-radius: 6px;
+  text-align: center;
+  text-decoration: none;
+  color: inherit;
+}
+.tag-pagination__page:hover {
+  border-color: currentColor;
+}
+.tag-pagination__page.is-current {
+  background: currentColor;
+  color: var(--bg-color, #fff);
+  border-color: currentColor;
+  font-weight: 600;
+}
+.tag-pagination__gap {
+  padding: 6px 4px;
+  opacity: 0.5;
+}
