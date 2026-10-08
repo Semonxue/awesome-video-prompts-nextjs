@@ -38,6 +38,8 @@ describe('sitemap 拆分结构', () => {
     }
     expect(paths).toContain('/sitemaps/tags.xml');
     expect(paths).toContain('/sitemaps/models.xml');
+    // 静态页必须单独成子表：<sitemapindex> 里只允许 <sitemap>，不能放页面 URL
+    expect(paths).toContain('/sitemaps/static.xml');
     // 每个 locale 恰好一个子表
     const promptPaths = paths.filter((p) => p.includes('prompts-'));
     expect(promptPaths.length).toBe(SITEMAP_PROMPT_LOCALES.length);

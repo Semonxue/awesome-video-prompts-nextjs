@@ -75,6 +75,9 @@ export const SITEMAP_CHILDREN = [
   })),
   { path: '/sitemaps/tags.xml', locale: null },
   { path: '/sitemaps/models.xml', locale: null },
+  // <sitemapindex> 里只能放 <sitemap>，不能放页面 URL，
+  // 所以首页 / about / tags·models 索引这 12 个静态页必须单独成一个子表。
+  { path: '/sitemaps/static.xml', locale: null },
 ];
 
 /**
@@ -152,10 +155,13 @@ export async function buildModelsSitemap(): Promise<MetadataRoute.Sitemap> {
 }
 
 /**
- * sitemapindex 本身：3 locale 首页 + 3 locale 静态页。
- * 同样省略 lastModified —— 静态页每次生成都变会误导 Google。
+ * 静态页：3 locale 首页 + about + tags/models 索引（12 条）。
+ * 省略 lastModified —— 静态页每次生成都变会误导 Google。
+ *
+ * 注意：这些是**页面 URL**，不能直接放进 <sitemapindex>（那里面只允许
+ * 放 <sitemap>），所以走 /sitemaps/static.xml 子表提交。
  */
-export async function buildIndexSitemap(): Promise<MetadataRoute.Sitemap> {
+export async function buildStaticSitemap(): Promise<MetadataRoute.Sitemap> {
   return getCachedData(`${CACHE_KEYS.sitemapOutput}-index`, async () => {
     const homeRoutes: MetadataRoute.Sitemap = locales.map((locale) => ({
       url: `${SITE_URL}/${locale}`,
