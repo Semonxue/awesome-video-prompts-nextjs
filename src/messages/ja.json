@@ -73,7 +73,11 @@
     "popularPrompts": "人気プロンプト",
     "backToTags": "← タグ",
     "noPrompts": "プロンプトが見つかりません",
-    "paginationLabel": "{tag} のページ送り"
+    "paginationLabel": "{tag} のページ送り",
+    "overviewText": "{count} 件の {tag} プロンプトを掲載しています。ライブラリ全体の {total} 件中 {share}% に相当し、多くは {models} 向けに書かれています。各項目には完全なプロンプト本文・元動画・使用モデルを併記しています。",
+    "overviewNoModel": "複数の動画モデル",
+    "relatedTags": "関連タグ",
+    "relatedTagTitle": "{count} 件"
   },
   "mobileFilters": {
     "filters": "フィルター",

@@ -73,7 +73,11 @@
     "popularPrompts": "Popular prompts",
     "backToTags": "← Tags",
     "noPrompts": "No prompts found.",
-    "paginationLabel": "{tag} pagination"
+    "paginationLabel": "{tag} pagination",
+    "overviewText": "Browse {count} {tag} video prompts — {share}% of the {total} prompts in our library. Most are built for {models}. Each entry includes the full prompt text, the source clip and the model it was made with.",
+    "overviewNoModel": "multiple video models",
+    "relatedTags": "Related tags",
+    "relatedTagTitle": "{count} prompts"
   },
   "mobileFilters": {
     "filters": "Filters",

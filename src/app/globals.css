@@ -521,3 +521,26 @@ body:has(.site-header.header-compact) .main-content {
   padding: 6px 4px;
   opacity: 0.5;
 }
+
+/* ============================================================
+ * tag 页数据派生概览（P3，2026-10-08）
+ * 独特性加在类别层：Google 实际已收录的 84 条里绝大多数是 /tags/*
+ * 全部复用已加载数据，零新增 D1 查询
+ * ============================================================ */
+.tag-overview {
+  margin: 0 0 20px;
+}
+.tag-overview__text {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: inherit;
+  opacity: 0.85;
+  max-width: 72ch;
+}
+.tag-overview__related {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}

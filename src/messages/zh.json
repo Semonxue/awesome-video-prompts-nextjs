@@ -73,7 +73,11 @@
     "popularPrompts": "热门提示词",
     "backToTags": "← 标签",
     "noPrompts": "未找到提示词",
-    "paginationLabel": "{tag} 分页"
+    "paginationLabel": "{tag} 分页",
+    "overviewText": "这里有 {count} 条 {tag} 提示词，占全站 {total} 条的 {share}%。其中多数适配 {models}。每条都附完整提示词原文、来源视频与所用模型。",
+    "overviewNoModel": "多种视频模型",
+    "relatedTags": "相关标签",
+    "relatedTagTitle": "{count} 条提示词"
   },
   "mobileFilters": {
     "filters": "筛选",

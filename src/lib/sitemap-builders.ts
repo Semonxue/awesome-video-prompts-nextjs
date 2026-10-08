@@ -1,0 +1,174 @@
+/**
+ * sitemap 构建器（2026-10-08 P2-1）
+ *
+ * 背景：原先 src/app/sitemap.ts 一个文件产出全部 21,429 条 URL，
+ *   单次 Worker 调用要构造两万多个对象 —— 代码注释里明确记着这是
+ *   Error 1102（Worker 资源超限）的复发源之一（2026-08-07 修过一次）。
+ *
+ * 拆成 sitemapindex + 4 个子表后：
+ *   - 每次请求只构造自己那一份（prompt 表按 locale 再拆三份，降到原来的 1/3）
+ *   - 可以只重点提交 en，把抓取预算集中给主力语言
+ *   - 哪一块质量差一目了然
+ *
+ * 成本影响：**单次调用的 CPU/内存下降**，CDN 缓存条目 1 → 4（各自独立 8h 边缘缓存）。
+ * 净效果是降本，不是增本。
+ *
+ * lastModified 策略（P2-2，2026-10-08）：
+ *   - 详情页：prompt.updatedAt（真实更新时间）
+ *   - tag/model/静态页：**省略**。
+ *     原因：tag.updatedAt 取的是该分类下 prompts 的 max(updated_at)
+ *     （见 queries.ts queryAllTags 的 `max(${prompts.updatedAt})`），
+ *     站点每天发新 prompt → 930 个 tag 页的 lastmod 全天在跳。
+ *     20,412 条详情页又是 changefreq:monthly 却带真实 updatedAt，两套信号打架，
+ *     Google 只能按"高频变动 + 低独特性"处理。
+ *     省略 lastmod 与静态页的处理一致（见本文件末尾注释）。
+ */
+import type { MetadataRoute } from 'next';
+import { listAllSlugsForSitemap, listAllTags, listAllModels } from '@/db/queries';
+import { getCachedData, CACHE_KEYS } from '@/db/cache';
+import { locales } from '@/i18n/request';
+import { SITE_URL } from '@/lib/site';
+import { toW3CDate } from '@/lib/date';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 86400;
+
+/**
+ * 哪些 locale 的 prompt 详情页进 sitemap（P2-3，2026-10-08）
+ *
+ * 决定只提交 en，依据是实测数据而不是偏好：
+ *
+ *   GSC Performance（部署后同日）：
+ *     Total impressions 235 / Total clicks 4 / **Average position 6**
+ *     有曝光的 query 只有 2 个，其中一个就是 `site:awesomevideoprompts.com`
+ *     —— 也就是说站外几乎没有自然曝光，全站 rank 能力其实没问题（position 6），
+ *     问题是**被要求收录的 URL 太多、且几乎没有搜索需求**
+ *
+ *   收录率 84 / 37,458 = 0.22%。让 Google 判定"这个站只值得收录 84 页"的
+ *   主要压力来源，就是 20,412 条近零需求的长尾 prompt 页
+ *   （slug 形如 `{推特id}-{通用描述}`，例如 temporary-tattoo-test-at-midnight，
+ *    没人会拿这种词去搜）。
+ *
+ *   而 zh / ja 详情页的 **正文与 en 完全一致**（prompt 原文是英文，
+ *   只有页面 chrome 被翻译）。同时提交三份等于告诉 Google
+ *   "同样的内容给我三份 URL"，独特价值没有增加，请求索引的页面数却 ×3。
+ *
+ * 成本与收益：
+ *   - 提交量 21,468 → ~7,900（**-63%**），Google 侧的抓取/评估压力同比下降
+ *   - zh / ja 页面**不会被移除或 noindex**，它们仍通过两条路径被 Google 发现：
+ *       ① 详情页的 hreflang en/zh/ja/x-default 互指（见 tag-page-metadata 等）
+ *       ② 全站内链（Header / 分页 / related / 上下篇）都带 locale 前缀
+ *     GSC 规范也明确：hreflang 组内不必每个 URL 都出现在 sitemap 里
+ *   - 想改回全语言提交：把这里改成 `locales`（下面有注释说明）即可，一行
+ */
+export const SITEMAP_PROMPT_LOCALES: ReadonlyArray<(typeof locales)[number]> = ['en'];
+
+/**
+ * 子表清单：**从 SITEMAP_PROMPT_LOCALES 推导**，不是手写数组。
+ * 这样把上面的常量改回 locales 就能一键恢复 zh/ja 提交，
+ * 不会出现"index 里少了子表但 route 还在"这种半吊子状态。
+ */
+export const SITEMAP_CHILDREN = [
+  ...SITEMAP_PROMPT_LOCALES.map((loc) => ({
+    path: `/sitemaps/prompts-${loc}.xml`,
+    locale: loc,
+  })),
+  { path: '/sitemaps/tags.xml', locale: null },
+  { path: '/sitemaps/models.xml', locale: null },
+];
+
+/**
+ * 纯映射函数（不碰 D1/R2，可单测）
+ *
+ * 拆出来是为了让 lastModified 策略这类不变量能在 vitest 里直接断言 ——
+ * 否则一调 buildTagsSitemap() 就会去打 D1，测试环境没有 CF context 直接炸。
+ * 这几条策略一旦破掉，线上要好几天才能从 GSC 看出来，必须锁住。
+ */
+interface SlugRow {
+  slug: string;
+  updatedAt: string;
+}
+interface TagRow {
+  slug: string;
+}
+interface ModelRow {
+  slug: string;
+}
+
+/** 详情页：保留 lastModified（prompt 真实更新时间） */
+export function toPromptSitemapRows(
+  rows: SlugRow[],
+  locale: (typeof locales)[number],
+): MetadataRoute.Sitemap {
+  return rows.map((row) => ({
+    url: `${SITE_URL}/${locale}/prompts/${row.slug}`,
+    lastModified: toW3CDate(row.updatedAt),
+    changeFrequency: 'monthly' as const,
+    priority: locale === 'en' ? 0.9 : 0.7,
+  }));
+}
+
+/** tag 页：**省略 lastModified**（P2-2，理由见文件头） */
+export function toTagSitemapRows(tags: TagRow[]): MetadataRoute.Sitemap {
+  return tags.flatMap((tag) =>
+    locales.map((locale) => ({
+      url: `${SITE_URL}/${locale}/tags/${tag.slug}`,
+      changeFrequency: 'weekly' as const,
+      priority: locale === 'en' ? 0.7 : 0.6,
+    })),
+  );
+}
+
+/** model 页：同样省略 lastModified（P2-2） */
+export function toModelSitemapRows(models: ModelRow[]): MetadataRoute.Sitemap {
+  return models.flatMap((model) =>
+    locales.map((locale) => ({
+      url: `${SITE_URL}/${locale}/models/${model.slug}`,
+      changeFrequency: 'weekly' as const,
+      priority: locale === 'en' ? 0.7 : 0.6,
+    })),
+  );
+}
+
+/** 详情页：某 locale 的全部 prompt */
+export async function buildPromptsSitemap(locale: (typeof locales)[number]): Promise<MetadataRoute.Sitemap> {
+  return getCachedData(`${CACHE_KEYS.sitemapOutput}-prompts-${locale}`, async () =>
+    toPromptSitemapRows(await listAllSlugsForSitemap(), locale),
+  );
+}
+
+/** tag 页：3 locale */
+export async function buildTagsSitemap(): Promise<MetadataRoute.Sitemap> {
+  return getCachedData(`${CACHE_KEYS.sitemapOutput}-tags`, async () =>
+    toTagSitemapRows(await listAllTags()),
+  );
+}
+
+/** model 页：3 locale */
+export async function buildModelsSitemap(): Promise<MetadataRoute.Sitemap> {
+  return getCachedData(`${CACHE_KEYS.sitemapOutput}-models`, async () =>
+    toModelSitemapRows(await listAllModels()),
+  );
+}
+
+/**
+ * sitemapindex 本身：3 locale 首页 + 3 locale 静态页。
+ * 同样省略 lastModified —— 静态页每次生成都变会误导 Google。
+ */
+export async function buildIndexSitemap(): Promise<MetadataRoute.Sitemap> {
+  return getCachedData(`${CACHE_KEYS.sitemapOutput}-index`, async () => {
+    const homeRoutes: MetadataRoute.Sitemap = locales.map((locale) => ({
+      url: `${SITE_URL}/${locale}`,
+      changeFrequency: 'daily' as const,
+      priority: locale === 'en' ? 1.0 : 0.9,
+    }));
+
+    const staticRoutes: MetadataRoute.Sitemap = locales.flatMap((locale) => [
+      { url: `${SITE_URL}/${locale}/about`, changeFrequency: 'monthly' as const, priority: 0.6 },
+      { url: `${SITE_URL}/${locale}/tags`, changeFrequency: 'weekly' as const, priority: 0.8 },
+      { url: `${SITE_URL}/${locale}/models`, changeFrequency: 'weekly' as const, priority: 0.8 },
+    ]);
+
+    return [...homeRoutes, ...staticRoutes];
+  });
+}

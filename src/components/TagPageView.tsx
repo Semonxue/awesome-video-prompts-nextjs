@@ -62,6 +62,35 @@ export async function TagPageView({ locale, tag, page }: Props) {
   // 分页只在 TAG_PAGE_MAX_DEPTH 之内生成（成本护栏 G1）
   const last = Math.min(totalPages(result.total), TAG_PAGE_MAX_DEPTH);
 
+  // ---- P3 真实内容（2026-10-08）----
+  // 动机不是"内容太薄"，而是"能匹配搜索需求的只有类别层"。
+  // 实测（GSC Performance 部署当日）：全站 235 曝光 / 4 点击 / 平均排名 position 6，
+  // 但有曝光的 query 只有 2 个，其中一个是 site:awesomevideoprompts.com。
+  // 而 GSC 已收录的 84 条里绝大多数是 /tags/* 与 /models/* —— Google 自己
+  // 挑中的是类别页。所以独特性应该加在类别层，而不是 2 万条零需求的长尾详情页。
+  //
+  // 关键成本约束：下面两块内容**全部复用已经加载进内存的数据**，
+  // 不新增任何 D1 查询 —— related tags 来自本页已 hydrate 的 tagItems，
+  // model 分布同理。HTML 增量约 1~2KB / 页。
+  const relatedTagSet = new Map<string, number>();
+  for (const p of tagItems) {
+    for (const tt of p.tags) {
+      if (tt.slug === tag) continue;
+      relatedTagSet.set(tt.slug, (relatedTagSet.get(tt.slug) ?? 0) + 1);
+    }
+  }
+  const relatedTags = [...relatedTagSet.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 16)
+    .map(([slug, coCount]) => ({
+      slug,
+      count: allTags.find((x) => x.slug === slug)?.count ?? 0,
+      coCount,
+    }));
+
+  const modelNames = modelOptions.slice(0, 3).map((m) => m.name);
+  const shareText = totalCount > 0 ? ((result.total / totalCount) * 100).toFixed(1) : '0';
+
   return (
     <>
       {/* BreadcrumbList：页面上有可见的 <nav class="breadcrumb">，之前只有视觉没有结构化数据，
@@ -97,6 +126,38 @@ export async function TagPageView({ locale, tag, page }: Props) {
             <span className="model-hero__count">{t('promptsFound', { count: result.total.toLocaleString() })}</span>
             <Link href={`/${locale}/tags`} className="model-hero__back">{t('backToTags')}</Link>
           </div>
+        </section>
+
+        {/* P3（2026-10-08）：数据派生的真实描述 + 相关标签
+            全部来自本页已加载的数据，零新增 D1 查询。
+            动机见上方注释：搜索需求只存在于类别层，独特性就该加在这里。 */}
+        <section className="tag-overview">
+          <p className="tag-overview__text">
+            {t('overviewText', {
+              tag: displayName,
+              count: result.total.toLocaleString(),
+              share: shareText,
+              total: totalCount.toLocaleString(),
+              models: modelNames.length > 0 ? modelNames.join(', ') : t('overviewNoModel'),
+            })}
+          </p>
+
+          {relatedTags.length > 0 && (
+            <div className="tag-overview__related">
+              <span className="content-tag content-tag--label">{t('relatedTags')}</span>
+              {relatedTags.map((rt) => (
+                <Link
+                  key={rt.slug}
+                  href={`/${locale}/tags/${rt.slug}`}
+                  className="content-tag"
+                  title={t('relatedTagTitle', { count: rt.count })}
+                >
+                  {allTags.find((x) => x.slug === rt.slug)?.name ?? rt.slug}{' '}
+                  <span className="tag-count">{rt.count}</span>
+                </Link>
+              ))}
+            </div>
+          )}
         </section>
 
         {modelOptions.length > 0 && (
