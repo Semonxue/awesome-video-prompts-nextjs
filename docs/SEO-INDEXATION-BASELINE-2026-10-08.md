@@ -254,4 +254,66 @@ curl -sS --max-time 40 "https://awesomevideoprompts.com/en/tags" -o tagidx.html
 | 日期 | Indexed | Not indexed | 404 | noindex | Crawled-not-ind | Discovered-not-ind | 孤儿数 | D1 rowsRead/24h | 备注 |
 |---|---|---|---|---|---|---|---|---|---|
 | 2026-10-08 | **84** | 37,374 | 4,265 | 220 | 13,053 | 19,530 | **4,743** | ❌ 未取到 | 基线，改动前 |
-| | | | | | | | | | |
+| 2026-10-11 | 84 | 37.4K | 4,265 | 220 | 13,053 | 19,530 | 未重测 | ❌ 未取到 | **索引类报告全部无变化**，见下 |
+
+### 2026-10-11 复测结论（部署 f8fcafe 后第 3 天）
+
+**没有任何 GSC 索引指标变化 —— 但这不能说明改动无效，因为所有索引类报告的数据日期都早于改动。**
+
+| GSC 报告 | 数据截止 | 是否反映 10/08 的改动 |
+|---|---|---|
+| Sitemaps | **Oct 9, 2026** | ✅ **已反映，见下** |
+| Page Indexing | 10/04 | ❌ 早于改动 |
+| Crawl stats | 10/06 | ❌ 早于改动 |
+| Performance | 约 60 小时前 | ⚠️ 勉强 |
+
+**唯一反映改动的是 Sitemaps 报告，而且结果是正面的：**
+
+```
+https://awesomevideoprompts.com/sitemap.xml
+  Sitemap Type : Sitemap index     ← f8fcafe 的 urlset→sitemapindex 修复已生效
+  Submitted    : Oct 9, 2026
+  Last read    : Oct 9, 2026
+  Status       : Success
+  Discovered   : 8,019 pages
+```
+
+8,019 与本地 8,004 一致（差值来自期间新发布的 prompt）。
+提交量 21,468 → 8,019（**-62.7%**）已在 Google 侧确认生效。
+
+**Performance 报告（60 小时前）：**
+
+| 指标 | 10/08 基线 | 10/11 | 判断 |
+|---|---|---|---|
+| Total impressions | 235 | 227 | 噪声，无变化 |
+| Total clicks | 4 | 5 | 噪声 |
+| Average CTR | 1.7% | 2.2% | 噪声 |
+| Average position | 6 | 5.9 | 无变化 |
+| 有曝光的 query 数 | 2 | 2 | **无变化** |
+
+**线上性能复测（是否有 CPU / 响应回归）：**
+
+| 路径 | TTFB | 体积 |
+|---|---|---|
+| `/en` | 2.30s | 386 KB |
+| `/en/tags/room`（小 tag） | 1.41s | 34 KB |
+| `/en/tags/cinematic`（大 tag） | 1.75s | 362 KB |
+| `/en/tags/cinematic/p/2`（新增分页） | 1.15–1.89s | 384 KB |
+| `/en/models/seedance25` | 1.63s | 367 KB |
+| `/en/prompts/{slug}` | 1.01–1.94s | 109 KB |
+| `/sitemap.xml` | 1 KB（index） | — |
+
+网络地板对照（`/favicon.svg` 静态资源）：**1.62–1.93s**。
+所有页面 TTFB 与地板同量级 → **未见 PAGE_SIZE 24→48 带来的响应回归**。
+（单次 8.28s 的读数为抖动，复测 5 次均落在 1.0–1.9s。）
+
+**Crawl stats 基线（10/06，改动前）：8.94K 请求 / 301 MB 下载 / 平均响应 332ms。**
+待 10/13 之后数据刷新可做差值。
+
+### 仍然取不到的数据
+
+- **D1 rowsRead / Workers 请求数**：wrangler OAuth 已过期
+  （"Your auth token has expired"，非交互 shell 无法刷新）；
+  CF Dashboard 的数据面板在此网络下只加载侧边栏、内容区始终空白
+  （Workers metrics 与 D1 两个页面均复现）→ 需在可正常访问的浏览器手动查看
+- **CDN 缓存命中率**：客户端侧无法判定（TTFB 与网络地板同量级，响应头无 `cf-cache-status`/`Age`）
