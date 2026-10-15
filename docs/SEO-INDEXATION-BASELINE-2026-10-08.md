@@ -370,3 +370,66 @@ https://awesomevideoprompts.com/sitemap.xml
   CF Dashboard 的数据面板在此网络下只加载侧边栏、内容区始终空白
   （Workers metrics 与 D1 两个页面均复现）→ 需在可正常访问的浏览器手动查看
 - **CDN 缓存命中率**：客户端侧无法判定（TTFB 与网络地板同量级，响应头无 `cf-cache-status`/`Age`）
+
+---
+
+## 2026-10-15 Workers CPU 优化（commit df44318）
+
+### 背景
+
+Workers CPU 每日超预算。历史实测（`wrangler.toml` 2026-09-08 注释内）：
+CPU 181M ms/月 vs 30M 免费额度 → 约 **$3/月超额**，是唯一瓶颈
+（D1 rowsRead 1.03B/月 = 免费额度 4% → $0；请求 2.76M/月 = 10M 的 28% → $0）。
+
+### 根因定位（实测）
+
+抓 `/en/tags/cinematic` 的 RSC flight payload（`RSC: 1` header）实测：
+
+| 指标 | 优化前 | 优化后 | 变化 |
+|---|---|---|---|
+| tag 页 HTML | 376,249 B | 222,890 B | **−41%** |
+| RSC flight payload | 227,238 B | 79,032 B | **−65%** |
+| 48 条 description 合计 | 188,871 B（中位 2,475，最大 17,846） | 每条 ≤ 201 字符 | — |
+
+**根因**：`PromptCard` 是 `'use client'`，props 全量序列化进 RSC payload 再嵌进 HTML，
+但 UI 只渲染 `truncate(description, 180)`。服务端下发完整正文，99% 是纯浪费的序列化 CPU。
+
+### 三项改动
+
+1. **`[cache] enabled = true`** — 官方规则：缓存命中时 Worker 完全不执行，**CPU 计费为零**。
+   更正了一条已过时的顾虑：官方明确 "Requests to static assets are free and unlimited."，
+   旧注释担心的"静态资源变计费"不成立。
+2. **列表页只下发 180 字符摘要** — `hydratePrompts`/`listPrompts` 加 opt-in `descriptionLimit`
+   （默认不截断）；新增 `GET /api/prompt/[slug]`（复用 per-slug 缓存）；
+   `PromptCard` 点击复制时懒加载全文，失败降级为摘要。
+3. **observability 降采样** — `head_sampling_rate` 1 → 0.05，`invocation_logs = false`，
+   traces 关闭。**2026-12-01 起 Workers Logs 改为按 GB 计费**（$0.25/GB，
+   CF 估算单条均 4.84KB），全量采样成本约翻倍。
+
+### 线上验收（2026-10-15 14:3x）
+
+- `cf-cache-status: HIT`，`age: 15` → **Workers Cache 已生效**
+- 列表页 48/48 张卡片 description 均以 `…` 结尾（摘要），最大 201 字符
+- 详情页 `/en/prompts/{slug}` 正文完整，含 3 个 JSON-LD block，description 未截断
+- `GET /api/prompt/{slug}` 返回 1,630 字符完整正文
+
+### 对 SEO 的影响（预期，待复测）
+
+- **详情页零影响**：走 `getPromptBySlug`，不传 limit，正文与 JSON-LD 完整
+- **列表页正文变短**：48 条从 188,871 B → 约 9,600 B。但列表页本来只渲染 180 字符，
+  Google 抓到的可见文本**没有变化**，只是不再下发隐藏的全文
+- 复制功能改为一次懒加载请求（用户点击才发生）
+
+### 仍然取不到的数据（⚠️ 未实测）
+
+- **真实 CPU 与 cache 命中率**：CF Dashboard 在此网络下内容区空白、wrangler OAuth 过期。
+  上述 −41%/−65% 是**线上实测的体积**，但**节省多少 CPU 未实测**。
+  需手动在 Dashboard 看：Workers → Observability → cache hit rate + CPU time。
+- **12-01 后 Workers Logs 按 GB 计费的真实账单**：需等新计费周期。
+
+### 待办
+
+1. 24h 后查 CF Dashboard：cache hit rate、CPU ms 是否从 181M/月 降下来
+2. 手动跑 `curl -X POST -H "Authorization: Bearer $ADMIN_SECRET" \
+   https://awesomevideoprompts.com/api/admin/rebuild-aggregates`
+   让 related 6→12 生效（`.dev.vars` 的 secret 与线上不一致，未做）
