@@ -64,15 +64,37 @@ export const revalidate = 86400;
 export const SITEMAP_PROMPT_LOCALES: ReadonlyArray<(typeof locales)[number]> = ['en'];
 
 /**
- * 子表清单：**从 SITEMAP_PROMPT_LOCALES 推导**，不是手写数组。
- * 这样把上面的常量改回 locales 就能一键恢复 zh/ja 提交，
+ * 是否提交 prompt 详情页（2026-10-15）
+ *
+ * **默认关掉。** 依据是 GSC 实测，不是偏好：
+ *
+ *   - 30 天总曝光 204 / 点击 6，且 72% 集中在首页（`/en` 79 + `/` 68）
+ *   - 详情页的平均排名是 **1.0–3.7** —— 它们在赢，只是赢的那些词
+ *     30 天总搜索量只有 3~7 次
+ *   - 也就是说：6,954 条详情页每条分到的曝光约 0.005 次/天
+ *   - 而 Google 已经爬过 13,046 条详情页并**全部拒绝收录**
+ *
+ * 提交 87% 都是零需求长尾的 URL，等于持续给 Google 一个"这批不值得抓"的信号，
+ * 还会稀释真正想被收录的 ~1,050 个页面的抓取优先级。
+ *
+ * **关掉不等于封死**：详情页仍可被爬（Header / 分页 / related / 上下篇内链都在），
+ * 也没有加 noindex。哪天拿到外链、它们开始有曝光，改回 true 即可，
+ * 子表路由仍然在线（见下方 SITEMAP_CHILDREN 的推导）。
+ */
+export const SUBMIT_PROMPT_DETAIL_PAGES = false;
+
+/**
+ * 子表清单：由开关推导，不是手写数组。
+ * 把 SUBMIT_PROMPT_DETAIL_PAGES 改回 true 就能一键恢复详情页提交，
  * 不会出现"index 里少了子表但 route 还在"这种半吊子状态。
  */
 export const SITEMAP_CHILDREN = [
-  ...SITEMAP_PROMPT_LOCALES.map((loc) => ({
-    path: `/sitemaps/prompts-${loc}.xml`,
-    locale: loc,
-  })),
+  ...(SUBMIT_PROMPT_DETAIL_PAGES
+    ? SITEMAP_PROMPT_LOCALES.map((loc) => ({
+        path: `/sitemaps/prompts-${loc}.xml`,
+        locale: loc,
+      }))
+    : []),
   { path: '/sitemaps/tags.xml', locale: null },
   { path: '/sitemaps/models.xml', locale: null },
   // <sitemapindex> 里只能放 <sitemap>，不能放页面 URL，
@@ -111,24 +133,40 @@ export function toPromptSitemapRows(
   }));
 }
 
-/** tag 页：**省略 lastModified**（P2-2，理由见文件头） */
+/**
+ * tag 页：**省略 lastModified**（P2-2，理由见文件头）
+ *
+ * priority 2026-10-15 上调（原 0.7 / 0.6）：
+ *   详情页退出提交面后，tag 页与 model 页成为 sitemap 的主体，
+ *   不再需要给详情页让位。
+ */
 export function toTagSitemapRows(tags: TagRow[]): MetadataRoute.Sitemap {
   return tags.flatMap((tag) =>
     locales.map((locale) => ({
       url: `${SITE_URL}/${locale}/tags/${tag.slug}`,
       changeFrequency: 'weekly' as const,
-      priority: locale === 'en' ? 0.7 : 0.6,
+      priority: locale === 'en' ? 0.9 : 0.7,
     })),
   );
 }
 
-/** model 页：同样省略 lastModified（P2-2） */
+/**
+ * model 页：省略 lastModified（P2-2），**priority 提到最高**（2026-10-15）
+ *
+ * 为什么 model 页排第一：
+ *   全站唯一一类"用户确实在搜"的查询就落在 model 维度 ——
+ *   "seedance 2.0 video prompt"、"kling 3 video prompt" 这类词有真实搜索量，
+ *   而 6,954 条详情页的 slug 形如 `temporary-tattoo-test-at-midnight`，
+ *   没人会拿它去搜。实测 `/ja/models/seedance/` 已经在拿曝光。
+ *
+ *   只有 25 个 model（×3 locale = 75 条），是 sitemap 里最该被优先抓的部分。
+ */
 export function toModelSitemapRows(models: ModelRow[]): MetadataRoute.Sitemap {
   return models.flatMap((model) =>
     locales.map((locale) => ({
       url: `${SITE_URL}/${locale}/models/${model.slug}`,
       changeFrequency: 'weekly' as const,
-      priority: locale === 'en' ? 0.7 : 0.6,
+      priority: locale === 'en' ? 1.0 : 0.8,
     })),
   );
 }

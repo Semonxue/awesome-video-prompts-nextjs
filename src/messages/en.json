@@ -64,7 +64,12 @@
     "breadcrumbModels": "Models",
     "noPrompts": "No prompts found.",
     "loadingMore": "Loading more prompts…",
-    "paginationLabel": "{model} pagination"
+    "paginationLabel": "{model} pagination",
+    "overviewText": "Browse {count} {model} video prompts — {share}% of the {total} prompts in our library. They are most often written for {tags}. Each entry includes the full prompt text, the source clip and the settings it was generated with.",
+    "overviewNoTag": "a range of styles",
+    "topTags": "Most common tags",
+    "tagTitleCount": "{count} prompts",
+    "relatedModels": "Often paired with"
   },
   "tag": {
     "breadcrumbTags": "Tags",
@@ -77,7 +82,9 @@
     "overviewText": "Browse {count} {tag} video prompts — {share}% of the {total} prompts in our library. Most are built for {models}. Each entry includes the full prompt text, the source clip and the model it was made with.",
     "overviewNoModel": "multiple video models",
     "relatedTags": "Related tags",
-    "relatedTagTitle": "{count} prompts"
+    "relatedTagTitle": "{count} prompts",
+    "topModels": "Most used models",
+    "modelTitleCount": "{count} prompts"
   },
   "mobileFilters": {
     "filters": "Filters",

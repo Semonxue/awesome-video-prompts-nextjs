@@ -61,6 +61,30 @@ export async function ModelPageView({ locale, model, page, tag }: Props) {
   // 直接访问 /p/N 时拦住薄页 / 越界页，避免 Soft 404
   if (!tag && (page > last || (page > 1 && modelItems.length < MIN_PAGE_ITEMS))) notFound();
 
+  // ---- 2026-10-15：model 页内容加深 ----
+  // 动机：GSC 实测显示 model 维度是全站唯一有真实搜索量的查询
+  //（"seedance 2.0 video prompt" 这类词有人搜），而 6,954 条详情页的
+  // slug 形如 temporary-tattoo-test-at-midnight，没人会拿它去搜。
+  // 所以把 model 页做成 sitemap 主体，并给它真正配得上优先级的正文。
+  //
+  // **所有数字都来自已有数据，零新增 D1 查询，不编造任何模型能力描述**：
+  //   - tagOptions 来自 listModelTagDistribution，是该 model **全量** prompt 的 tag 分布
+  //     （不是当前页），比 tag 页那套从当前页现算的更准
+  //   - relatedModels 从本页已 hydrate 的 modelItems 共现关系现算
+  const topTags = tagOptions.slice(0, 8);
+  const shareText = totalCount > 0 ? ((result.total / totalCount) * 100).toFixed(1) : '0';
+
+  const relatedModelSet = new Map<string, number>();
+  for (const p of modelItems) {
+    for (const m of p.models) {
+      if (m.slug === model) continue;
+      relatedModelSet.set(m.slug, (relatedModelSet.get(m.slug) ?? 0) + 1);
+    }
+  }
+  const relatedModels = [...relatedModelSet.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8);
+
   return (
     <>
       {/* BreadcrumbList：页面上有可见的 <nav class="breadcrumb">，之前只有视觉没有结构化数据，
@@ -124,6 +148,49 @@ export async function ModelPageView({ locale, model, page, tag }: Props) {
               ))}
             </div>
           </div>
+        )}
+
+        {/* 2026-10-15：数据派生的概览 + 主力 tag / 相关 model 交叉链
+            数字全部来自本页已加载的数据，零新增 D1 查询。 */}
+        {!tag && (
+          <section className="tag-overview">
+            <p className="tag-overview__text">
+              {t('overviewText', {
+                model: modelName,
+                count: result.total.toLocaleString(),
+                share: shareText,
+                total: totalCount.toLocaleString(),
+                tags: topTags.length > 0 ? topTags.map((x) => x.name).join(', ') : t('overviewNoTag'),
+              })}
+            </p>
+
+            {topTags.length > 0 && (
+              <div className="tag-overview__related">
+                <span className="content-tag content-tag--label">{t('topTags')}</span>
+                {topTags.map((x) => (
+                  <Link
+                    key={x.slug}
+                    href={`/${locale}/tags/${x.slug}`}
+                    className="content-tag"
+                    title={t('tagTitleCount', { count: x.count })}
+                  >
+                    {x.name} <span className="tag-count">{x.count}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+
+            {relatedModels.length > 0 && (
+              <div className="tag-overview__related">
+                <span className="content-tag content-tag--label">{t('relatedModels')}</span>
+                {relatedModels.map(([slug]) => (
+                  <Link key={slug} href={`/${locale}/models/${slug}`} className="content-tag">
+                    {slug}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
         )}
 
         <div className="grid-header">

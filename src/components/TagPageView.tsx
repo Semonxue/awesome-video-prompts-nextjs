@@ -85,7 +85,7 @@ export async function TagPageView({ locale, tag, page }: Props) {
   }
   const relatedTags = [...relatedTagSet.entries()]
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 16)
+    .slice(0, 24)
     .map(([slug, coCount]) => ({
       slug,
       count: allTags.find((x) => x.slug === slug)?.count ?? 0,
@@ -93,6 +93,9 @@ export async function TagPageView({ locale, tag, page }: Props) {
     }));
 
   const modelNames = modelOptions.slice(0, 3).map((m) => m.name);
+  // 2026-10-15：主力 model 交叉链（tag → model 是 sitemap 里两类主体之间的唯一连接，
+  // 之前只有 model 图标形式的 tab，没有文字锚点，权重传递弱）
+  const topModels = modelOptions.slice(0, 8);
   const shareText = totalCount > 0 ? ((result.total / totalCount) * 100).toFixed(1) : '0';
 
   return (
@@ -162,13 +165,30 @@ export async function TagPageView({ locale, tag, page }: Props) {
               ))}
             </div>
           )}
+
+          {/* tag → model 文字交叉链：sitemap 的两类主体（tag/model）之间唯一权重通道 */}
+          {topModels.length > 0 && (
+            <div className="tag-overview__related">
+              <span className="content-tag content-tag--label">{t('topModels')}</span>
+              {topModels.map((m) => (
+                <Link
+                  key={m.slug}
+                  href={`/${locale}/models/${m.slug}`}
+                  className="content-tag"
+                  title={t('modelTitleCount', { count: m.count })}
+                >
+                  {m.name} <span className="tag-count">{m.count}</span>
+                </Link>
+              ))}
+            </div>
+          )}
         </section>
 
         {modelOptions.length > 0 && (
           <div className="content-tag-area model-tag-tabs">
             <div className="content-tags">
               <span className="content-tag content-tag--label">{t('byModel')}</span>
-              {modelOptions.slice(0, 12).map((m) => (
+              {modelOptions.slice(0, 16).map((m) => (
                 <Link
                   key={m.slug}
                   href={`/${locale}/models/${m.slug}`}
