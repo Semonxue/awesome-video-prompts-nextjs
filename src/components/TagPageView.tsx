@@ -5,7 +5,7 @@ import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { GridEngine } from '@/components/GridEngine';
 import { Pagination } from '@/components/Pagination';
-import { HEADER_TAG_LIMIT } from '@/components/types';
+import { HEADER_TAG_LIMIT, LIST_DESCRIPTION_LIMIT } from '@/components/types';
 import { listAllTags, listPrompts } from '@/db/queries';
 import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
 import { PAGE_SIZE, TAG_PAGE_MAX_DEPTH, lastUsablePage, MIN_PAGE_ITEMS } from '@/lib/pagination';
@@ -37,8 +37,9 @@ export async function TagPageView({ locale, tag, page }: Props) {
   const offset = (page - 1) * PAGE_SIZE;
 
   // 该 tag 下的 prompts（不分 locale）
+  // descriptionLimit：只下发摘要（卡片 UI 只显示 180 字符），复制全文时懒加载。
   const [result, allTags, counts] = await Promise.all([
-    listPrompts({ tag, limit: PAGE_SIZE, offset }),
+    listPrompts({ tag, limit: PAGE_SIZE, offset, descriptionLimit: LIST_DESCRIPTION_LIMIT }),
     listAllTags(),
     readAggregateCache<CountsCache>(AGG_CACHE_KEYS.counts),
   ]);

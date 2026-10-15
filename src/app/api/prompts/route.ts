@@ -28,6 +28,10 @@ export const revalidate = 3600;
 
 // 2026-10-08 P1-3：与 SSR 页面共用同一常量，否则 offset 基数不一致会跳页
 import { PAGE_SIZE } from '@/lib/pagination';
+// 2026-10-15 CPU 优化：增量拉取同样只下发摘要，否则 infinite scroll 的 JSON
+// 会把 48 条完整正文（实测合计 188,871 B）全部传给客户端。复制全文时由
+// PromptCard 按 slug 懒加载 /api/prompt/[slug]。
+import { LIST_DESCRIPTION_LIMIT } from '@/components/types';
 
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
@@ -44,6 +48,7 @@ export async function GET(req: NextRequest) {
     q: q || undefined,
     limit: PAGE_SIZE,
     offset,
+    descriptionLimit: LIST_DESCRIPTION_LIMIT,
   });
 
   const hasMore = offset + result.items.length < result.total;

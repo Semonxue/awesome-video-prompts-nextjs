@@ -14,7 +14,7 @@ import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggre
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { GridEngine } from '@/components/GridEngine';
-import { HEADER_TAG_LIMIT } from '@/components/types';
+import { HEADER_TAG_LIMIT, LIST_DESCRIPTION_LIMIT } from '@/components/types';
 import Link from 'next/link';
 import { SITE_URL, SITE_BRAND, DEFAULT_OG_IMAGE } from '@/lib/site';
 
@@ -83,12 +83,15 @@ export default async function HomePage({ params, searchParams }: HomePageProps) 
   const offset = (page - 1) * PAGE_SIZE;
 
   // 列表（按 sp.tag / sp.model / sp.q 过滤；不分 locale）
+  // descriptionLimit：只下发 180 字符摘要，卡片 UI 也只显示这么多；
+  // 复制全文时由 PromptCard 按 slug 懒加载 /api/prompt/[slug]。详见 src/lib/description.ts。
   const result = await listPrompts({
     tag: sp.tag,
     model: sp.model,
     q: sp.q,
     limit: PAGE_SIZE,
     offset,
+    descriptionLimit: LIST_DESCRIPTION_LIMIT,
   });
 
   // 模型/标签 tabs 数据（全局唯一，不分 locale）

@@ -69,3 +69,36 @@ export const EMPTY_PROMPTS: PromptCardData[] = [];
  */
 export const HEADER_TAG_LIMIT = 40;
 
+/**
+ * 列表页 description 截断长度（2026-10-15 Workers CPU 优化）
+ *
+ * 背景（实测 /en/tags/cinematic）：
+ *   - PromptCard 是 `'use client'`，props 会全量序列化进 RSC flight payload 再嵌进 HTML。
+ *   - 卡片 UI 只渲染 `truncate(description, 180)`，但服务端下发的是**完整正文**。
+ *   - 实测一页 48 条：description 合计 188,871 B（中位 2,475 B，最大 17,846 B），
+ *     占 flight payload 227,238 B 的绝大部分；单条最长 17.8 KB。
+ *   - 也就是说 UI 只用掉 180 字符，其余全是每次请求都要付的序列化 CPU。
+ *
+ * 做法：列表页只下发摘要，复制全文时由客户端按 slug 懒加载
+ *       （GET /api/prompt/[slug]，走既有 per-slug 缓存）。
+ *
+ * 为什么截断值与 UI 的 180 一致：
+ *   - 卡片渲染正好只显示这么多，摘要 = 完整可见内容，不丢任何用户能看到的信息。
+ *   - 单一常量，UI 与数据层不会各自漂移。
+ *
+ * ⚠️ 详情页**绝不能**截断：正文是 SEO 主体，且 JSON-LD 需要全文。
+ *    详情页走 getPromptBySlug（不传 descriptionLimit），保持原样。
+ */
+export const LIST_DESCRIPTION_LIMIT = 180;
+
+/**
+ * 摘要被截断时的结尾标记
+ *
+ * PromptCard 靠它判断「本地这份是摘要，复制前要去拉全文」。
+ * 用哨兵字符而非布尔字段：布尔字段会给每条 item 加约 20 字节 × 48 条 ≈ 1 KB，
+ * 而哨兵只在真正被截断的条目上出现（绝大多数条目正文都 > 180 字符，等价）。
+ *
+ * 不加标记的失败模式很隐蔽：用户复制到的是被腰斩的提示词，却没有任何报错。
+ */
+export const DESCRIPTION_TRUNCATED_SUFFIX = '…';
+

@@ -12,6 +12,7 @@ import {
   getModelName,
 } from '@/db/queries';
 import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
+import { LIST_DESCRIPTION_LIMIT } from '@/components/types';
 import { PAGE_SIZE, MODEL_PAGE_MAX_DEPTH, lastUsablePage, MIN_PAGE_ITEMS } from '@/lib/pagination';
 import { SITE_URL } from '@/lib/site';
 
@@ -45,8 +46,9 @@ export async function ModelPageView({ locale, model, page, tag }: Props) {
   const offset = (page - 1) * PAGE_SIZE;
 
   // 该 model 下的 prompts（不分 locale）
+  // descriptionLimit：只下发摘要（卡片 UI 只显示 180 字符），复制全文时懒加载。
   const [result, tagOptions, modelOptions, counts, modelName] = await Promise.all([
-    listPrompts({ model, tag, limit: PAGE_SIZE, offset }),
+    listPrompts({ model, tag, limit: PAGE_SIZE, offset, descriptionLimit: LIST_DESCRIPTION_LIMIT }),
     listModelTagDistribution(model),
     listAllModels(),
     readAggregateCache<CountsCache>(AGG_CACHE_KEYS.counts),

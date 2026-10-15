@@ -32,28 +32,28 @@ binding = "MEDIA"
 bucket_name = "awesome-video-prompts-static"
 
 # ============================================================
-# Workers Cache（2026-09-08 C1）
+# Workers Cache（2026-09-08 C1 引入，2026-10-15 重新开启）
 #
-# ⚠️ 当前状态：**关闭**（2026-09-08 当天上线后按用户要求回退，观察 24h 成本）
+# 为什么开（这是 CPU 超预算的唯一有效解）：
+#   - 官方计费规则：**缓存命中（HIT）时 Worker 完全不执行，CPU 计费为零**，
+#     仅按标准费率算请求；MISS / BYPASS 才计 CPU。
+#   - 本站 CPU 历史实测 181M ms/月 vs 30M 免费额度 → 约 $3/月超额。
+#     命中率 60~80% 即可把 CPU 压回 36M~72M ms（接近免费额度内）。
+#   - middleware 的 `cloudflare-cdn-cache-control: public, max-age=28800, swr=86400`
+#     在此之前一直是空转（响应头在线上确实存在，但没有缓存层消费它）。
 #
-# 为什么当初要开：
-#   - Worker 自己生成的响应**不会**进入 zone 缓存；CF 文档明确 "No zone configuration
-#     for caching applies to Workers Caching. Cache Rules ... have no effect"。
-#   - 所以 HTML 想被边缘缓存，只能开 Workers Cache（wrangler ≥ 4.69.0）。
+# ⚠️ 2026-10-15 更正一条已过时的顾虑：
+#   旧注释写「开启后静态资源请求从免费无限变为按请求计费」——
+#   **这条在当前计费模型下不成立**。官方文档明确：
+#     "Requests to static assets are free and unlimited."
+#   且实测 `/_next/static/chunks/*` 已是 `cf-cache-status: HIT`（静态资源本就走
+#   zone CDN，不经过 Worker 的 HTML 渲染路径）。
 #
-# 为什么先关（成本权衡，实测数据）：
-#   - 计费口径变化：开启后「静态资源请求」从免费无限变为按请求计费
-#     （pricing 脚注 4：requests served from the Worker's cache are billed ... includes static assets），
-#     本站单页引用 ~14 个静态资源。
-#   - 而收益侧：D1 当前 ~1.03B 行/月，仅占 25B 免费额度 4% → 已经 $0；
-#     CPU 181M ms/月（30M 免费）→ 约 $3/月超额，缓存命中可省 $2-3/月。
-#   - 结论：净收益为正但存在请求数不确定性，先关掉观察 24h 再定。
-#
-# 重新开启：把下面 enabled 改回 true 并重新部署即可（wrapper 与路由侧的缓存头已就绪，
-#           不需要其他改动；cache key 含 Worker version，部署即冷启动，无陈旧风险）。
+# 部署注意：cache key 含 Worker version，每次部署即冷启动，无陈旧数据风险。
+# 监控：CF Dashboard → 该 Worker → Observability → cache hit rate / CPU
 # ============================================================
 [cache]
-enabled = false
+enabled = true
 
 # ============================================================
 # 环境变量
@@ -82,17 +82,32 @@ name = "awesome-video-prompts-nextjs"
 
 # ============================================================
 # 可观测性（Cloudflare Workers Observability）
-# 启用 Logs + Traces，head_sampling_rate = 1（全量采样）
-# persist = true → 日志和 trace 写入 Workers Logs（CF 后台可查询）
-# invocation_logs = true → 包含每次调用的请求/响应日志
+#
+# 2026-10-15 成本优化：原为 head_sampling_rate = 1（全量采样）+ invocation_logs。
+# 问题：
+#   - 按 ~2.76M 请求/月计，全量 invocation logs 已远超 Workers Paid 的
+#     20M events/月余量，且 traces 也全开。
+#   - **2026-12-01 起 Workers Logs 改为按 GB 计费**（$0.25/GB 摄入 +
+#     $0.10/GB-月存储），CF 估算单条日志均 4.84 KB —— 全量采样下成本约翻倍。
+#
+# 现在的取舍：
+#   - logs 采样 5%：足够排查线上问题，成本降到 1/20。
+#   - invocation_logs = false：不再为每个请求写一条完整 invocation 记录。
+#     ⚠️ 注意：cache 命中率统计走独立的 Observability 指标面板（hit/miss/update/
+#     bypass），不依赖 invocation logs，所以关掉不影响我们观察缓存效果。
+#     但这意味着**排查具体某个请求**时不再有逐条日志，故保留 5% head sampling。
+#   - traces 关闭：trace 是按 trace event 单独计费的，且全量 trace 对本站
+#     （无关键路径调试需求）价值有限。
+#
+# 需要临时深度排查时，把 head_sampling_rate 临时调回 1，排查完改回 0.05。
 # ============================================================
 [observability.logs]
 enabled = true
-head_sampling_rate = 1
-invocation_logs = true
+head_sampling_rate = 0.05
+invocation_logs = false
 persist = true
 
 [observability.traces]
-enabled = true
-head_sampling_rate = 1
+enabled = false
+head_sampling_rate = 0.05
 persist = true

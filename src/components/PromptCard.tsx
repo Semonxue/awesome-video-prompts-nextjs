@@ -30,6 +30,7 @@ import { useTranslations } from 'next-intl';
 import type { PromptCardData } from './types';
 import type { PromptCardVideoHandle } from './PromptCardVideo';
 import { tagHref, modelHref } from '@/lib/format';
+import { isTruncatedSummary } from '@/lib/description';
 
 
 /** PromptCardVideo 动态 import（不在首屏 bundle 里） */
@@ -83,6 +84,8 @@ export function PromptCard({ prompt, locale, isFirst = false }: Props) {
   const [copied, setCopied] = useState(false);
   const [aspect, setAspect] = useState<number | null>(null);
   const videoRef = useRef<PromptCardVideoHandle>(null);
+  /** 正在拉取全文的标记：防止连点时对同一 slug 并发请求 */
+  const fetchingRef = useRef(false);
 
   // 读封面图 naturalW/naturalH → 计算 wrapper 的 padding-bottom %
   // 然后根据当前 grid 列宽 + 内容区高度算出 grid-row span
@@ -103,17 +106,46 @@ export function PromptCard({ prompt, locale, isFirst = false }: Props) {
     img.src = r2Webp(prompt.coverUrl, 480) ?? prompt.coverUrl;
   }, [prompt.coverUrl]);
 
-  async function handleCopy(e?: React.MouseEvent | React.KeyboardEvent) {
-    if (!prompt.description) return;
-    e?.preventDefault?.();
-    e?.stopPropagation?.();
+  /**
+   * 取用于复制的完整正文。
+   *
+   * 列表页只下发摘要（见 src/lib/description.ts）以压掉 RSC payload 的序列化 CPU。
+   * 这里是唯一会把全文拉回客户端的时机 —— 用户真的点了复制才付这个代价。
+   *
+   * 兜底策略：拉取失败时返回摘要而不是静默复制错内容 —— 用户至少知道要自己去详情页。
+   */
+  async function resolveFullDescription(): Promise<string> {
+    const current = prompt.description ?? '';
+    if (!isTruncatedSummary(current)) return current;
+
+    // 防止连点导致同一 slug 并发多次请求
+    if (!fetchingRef.current) {
+      fetchingRef.current = true;
+      try {
+        const res = await fetch(`/api/prompt/${encodeURIComponent(prompt.slug)}`);
+        if (res.ok) {
+          const data: { description?: string } = await res.json();
+          if (typeof data.description === 'string' && data.description.length > 0) {
+            return data.description;
+          }
+        }
+      } catch {
+        /* 网络失败 → 用摘要兜底 */
+      } finally {
+        fetchingRef.current = false;
+      }
+    }
+    return current;
+  }
+
+  async function copyToClipboard(text: string) {
     try {
-      await navigator.clipboard.writeText(prompt.description);
+      await navigator.clipboard.writeText(text);
       flashCopied();
     } catch {
       // fallback: execCommand
       const ta = document.createElement('textarea');
-      ta.value = prompt.description;
+      ta.value = text;
       ta.style.position = 'fixed';
       ta.style.opacity = '0';
       document.body.appendChild(ta);
@@ -126,6 +158,14 @@ export function PromptCard({ prompt, locale, isFirst = false }: Props) {
       }
       document.body.removeChild(ta);
     }
+  }
+
+  async function handleCopy(e?: React.MouseEvent | React.KeyboardEvent) {
+    if (!prompt.description) return;
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+    const full = await resolveFullDescription();
+    await copyToClipboard(full);
   }
 
   function flashCopied() {

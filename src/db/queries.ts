@@ -42,6 +42,7 @@ import {
   type RelatedMapCache,
 } from './aggregate-cache';
 import { MODELS_DICT, TAGS_DICT } from '@/lib/dict-yaml';
+import { clampDescription } from '@/lib/description';
 
 /** 拿 D1 binding（OpenNext 注入 env.DB） */
 async function getD1(): Promise<D1Database> {
@@ -82,6 +83,12 @@ export interface ListPromptsArgs {
   /** 分页 */
   limit?: number;
   offset?: number;
+  /**
+   * description 截断长度（字符）。
+   * 列表页传 LIST_DESCRIPTION_LIMIT 只下发摘要（省 RSC payload 序列化 CPU）；
+   * 不传 = 全文。详情页不经过 listPrompts，无影响。
+   */
+  descriptionLimit?: number;
 }
 
 export interface ListPromptsResult {
@@ -102,8 +109,11 @@ export interface ListPromptsResult {
  */
 export async function hydratePrompts(
   rows: Array<typeof prompts.$inferSelect>,
+  options?: { descriptionLimit?: number },
 ): Promise<PromptCardData[]> {
   if (rows.length === 0) return [];
+
+  const descriptionLimit = options?.descriptionLimit;
 
   const d1 = await getD1();
   const db = getDb(d1);
@@ -158,7 +168,12 @@ export async function hydratePrompts(
   return rows.map((r) => ({
     slug: r.slug,
     title: r.title,
-    description: r.description,
+    // descriptionLimit 只由列表页传入（见 ListPromptsArgs）；详情页不传 → 全文。
+    // 截断在 JS 层做而非 SQL substr()：D1 仍返回完整列（rows read 口径不变，
+    // 不会影响 AGENTS.md 里 D1 cost 的既有结论），省下的是序列化 + 下发的 CPU/带宽。
+    description: descriptionLimit
+      ? clampDescription(r.description, descriptionLimit)
+      : r.description,
     coverUrl: r.coverUrl,
     videoUrl: r.videoUrl,
     sourceUrl: r.sourceUrl,
@@ -189,7 +204,7 @@ async function countPrompts(whereClause: ReturnType<typeof and> | undefined): Pr
  * 列表查询 — 首页 / 标签 / 模型 页面入口
  */
 export async function listPrompts(args: ListPromptsArgs): Promise<ListPromptsResult> {
-  const { tag, model, q, limit = 24, offset = 0 } = args;
+  const { tag, model, q, limit = 24, offset = 0, descriptionLimit } = args;
 
   const d1 = await getD1();
   const db = getDb(d1);
@@ -304,7 +319,7 @@ export async function listPrompts(args: ListPromptsArgs): Promise<ListPromptsRes
   }
 
   // 3) hydrate（批量查 tags/models）
-  const items = await hydratePrompts(rows);
+  const items = await hydratePrompts(rows, { descriptionLimit });
 
   return { items, total, hasMore: offset + rows.length < total };
 }
