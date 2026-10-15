@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
@@ -11,7 +12,7 @@ import {
   getModelName,
 } from '@/db/queries';
 import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
-import { PAGE_SIZE, MODEL_PAGE_MAX_DEPTH, totalPages } from '@/lib/pagination';
+import { PAGE_SIZE, MODEL_PAGE_MAX_DEPTH, lastUsablePage, MIN_PAGE_ITEMS } from '@/lib/pagination';
 import { SITE_URL } from '@/lib/site';
 
 /**
@@ -54,8 +55,11 @@ export async function ModelPageView({ locale, model, page, tag }: Props) {
   const modelItems = result.items;
   const totalCount = counts?.total ?? 0;
 
-  // 分页只在无 tag 筛选、且深度未超上限时生成
-  const last = tag ? 1 : Math.min(totalPages(result.total), MODEL_PAGE_MAX_DEPTH);
+  // 分页只在无 tag 筛选时生成；上限 + 剔除薄末页（2026-10-15）
+  const last = tag ? 1 : lastUsablePage(result.total, MODEL_PAGE_MAX_DEPTH);
+
+  // 直接访问 /p/N 时拦住薄页 / 越界页，避免 Soft 404
+  if (!tag && (page > last || (page > 1 && modelItems.length < MIN_PAGE_ITEMS))) notFound();
 
   return (
     <>

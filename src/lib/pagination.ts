@@ -57,6 +57,48 @@ export const TAG_PAGE_MAX_DEPTH = 3;
  */
 export const MODEL_PAGE_MAX_DEPTH = 3;
 
+/**
+ * 分页页最少要有多少条内容才算"值得存在"（2026-10-15 加）
+ *
+ * 问题：P1 把 /p/N 从 noindex 改成可索引后，**内容极薄的末页变成了可收录 URL**。
+ * 实测 313 个 tag 里有 32 个 count 落在 49~96，按 48 条/页切分后末页只剩 1~48 条：
+ *
+ *     /en/tags/wuxia            count=49 → /p/2 只有 **1** 条
+ *     /en/tags/handheld-camera count=52 → /p/2 只有 4 条
+ *     /en/tags/romantic        count=53 → /p/2 只有 5 条
+ *
+ * 这种页面 Google 典型的判定就是 Soft 404 —— 果然，Soft 404 桶
+ * 从 10/08 的 161 涨到 10/15 的 173。
+ *
+ * 规则：末页条目数 < MIN_PAGE_ITEMS 就不生成该页（链接不渲染，
+ * 直接访问返回 404）。代价是这些 tag 末尾 1~11 条 prompt 继续当孤儿 ——
+ * 它们本身是长尾尾部，价值极低，换来的是不给索引塞薄页 + 少一批可抓取 URL。
+ *
+ * 取 12 而不是 1：要容忍单页内容天然偏少的情况，
+ * 低于 12 条基本不具备独立页面的信息量。
+ */
+export const MIN_PAGE_ITEMS = 12;
+
+/**
+ * 计算最后一页页码（≤ maxDepth），自动剔除内容过薄的末页。
+ *
+ * @param total  该维度总条目数
+ * @param maxDepth 深度上限（成本护栏）
+ * @param pageSize 每页条数
+ */
+export function lastUsablePage(
+  total: number,
+  maxDepth: number,
+  pageSize: number = PAGE_SIZE,
+): number {
+  let last = Math.min(Math.max(1, Math.ceil(total / pageSize)), maxDepth);
+  // 末页不足 MIN_PAGE_ITEMS 就往回退一页；page 1 永远保留（它是维度的正式入口）
+  while (last > 1 && total - (last - 1) * pageSize < MIN_PAGE_ITEMS) {
+    last -= 1;
+  }
+  return last;
+}
+
 /** 计算总页数（至少 1） */
 export function totalPages(total: number, pageSize: number = PAGE_SIZE): number {
   return Math.max(1, Math.ceil(total / pageSize));

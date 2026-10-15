@@ -3,8 +3,10 @@ import {
   PAGE_SIZE,
   TAG_PAGE_MAX_DEPTH,
   MODEL_PAGE_MAX_DEPTH,
+  MIN_PAGE_ITEMS,
   totalPages,
   pageWindow,
+  lastUsablePage,
 } from './pagination';
 
 describe('pagination', () => {
@@ -38,6 +40,71 @@ describe('pagination', () => {
       expect(totalPages(80)).toBe(2); // p75
       expect(totalPages(188)).toBe(4); // p90
       expect(totalPages(4511)).toBe(94); // max（48×94=4512），会被 MAX_DEPTH 夹到 3
+    });
+  });
+
+  describe('lastUsablePage（剔除薄末页，2026-10-15）', () => {
+    it('内容量不足一页时只有 page 1', () => {
+      expect(lastUsablePage(19, 3)).toBe(1);
+      expect(lastUsablePage(48, 3)).toBe(1);
+    });
+
+    it('末页刚好 ≥12 条时保留', () => {
+      // 96 = 48×2 → 第 2 页有 48 条
+      expect(lastUsablePage(96, 3)).toBe(2);
+      // 60 = 48 + 12 → 第 2 页正好 12 条，保留
+      expect(lastUsablePage(60, 3)).toBe(2);
+    });
+
+    it('末页 <12 条时回退到上一页（真实 tag 分布）', () => {
+      // wuxia count=49 → /p/2 只剩 1 条 → 回退，page2 不存在
+      expect(lastUsablePage(49, 3)).toBe(1);
+      // handheld-camera count=52 → 只剩 4 条 → 回退
+      expect(lastUsablePage(52, 3)).toBe(1);
+      // romantic count=53 → 只剩 5 条 → 回退
+      expect(lastUsablePage(53, 3)).toBe(1);
+      // count=61 → 只剩 13 条 → 保留 page2
+      expect(lastUsablePage(61, 3)).toBe(2);
+    });
+
+    it('回退后仍要 ≥MIN_PAGE_ITEMS 才算有效', () => {
+      // count=97 → p2 有 48 条(达标)，p3 有 1 条(不达标) → last=2
+      expect(lastUsablePage(97, 3)).toBe(2);
+      // count=144 → p3 正好满 48 条 → last=3
+      expect(lastUsablePage(144, 3)).toBe(3);
+      // count=155 → p3 仍是满的 48 条（第 4 页那 11 条被 maxDepth 截掉，
+      //   不是"末页变薄"）→ 不回退
+      expect(lastUsablePage(155, 3)).toBe(3);
+      // 真正的回退场景：总数只够 2 页、且第 2 页不足 12 条
+      // count=58 → p2 只有 10 条 → 回退到 1
+      expect(lastUsablePage(58, 3)).toBe(1);
+      // count=59 → p2 有 11 条 → 仍回退
+      expect(lastUsablePage(59, 3)).toBe(1);
+      // count=60 → p2 有 12 条 → 保留
+      expect(lastUsablePage(60, 3)).toBe(2);
+    });
+
+    it('永远不超过深度上限', () => {
+      expect(lastUsablePage(5000, 3)).toBe(3);
+      expect(lastUsablePage(5000, 1)).toBe(1);
+    });
+
+    it('不会把 page 1 本身回退掉', () => {
+      expect(lastUsablePage(0, 3)).toBe(1);
+      expect(lastUsablePage(1, 3)).toBe(1);
+    });
+
+    it('单调性：内容量增加时 last 不会变小', () => {
+      let prev = 1;
+      for (let n = 1; n <= 300; n += 7) {
+        const l = lastUsablePage(n, 3);
+        expect(l).toBeGreaterThanOrEqual(prev);
+        prev = l;
+      }
+    });
+
+    it('MIN_PAGE_ITEMS 的取值符合文档约定', () => {
+      expect(MIN_PAGE_ITEMS).toBe(12);
     });
   });
 

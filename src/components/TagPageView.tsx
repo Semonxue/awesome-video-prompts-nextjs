@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
@@ -7,7 +8,7 @@ import { Pagination } from '@/components/Pagination';
 import { HEADER_TAG_LIMIT } from '@/components/types';
 import { listAllTags, listPrompts } from '@/db/queries';
 import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
-import { PAGE_SIZE, TAG_PAGE_MAX_DEPTH, totalPages } from '@/lib/pagination';
+import { PAGE_SIZE, TAG_PAGE_MAX_DEPTH, lastUsablePage, MIN_PAGE_ITEMS } from '@/lib/pagination';
 import { SITE_URL } from '@/lib/site';
 
 /**
@@ -59,8 +60,11 @@ export async function TagPageView({ locale, tag, page }: Props) {
   const totalCount = counts?.total ?? 0;
   const displayName = allTags.find((x) => x.slug === tag)?.name ?? tag;
 
-  // 分页只在 TAG_PAGE_MAX_DEPTH 之内生成（成本护栏 G1）
-  const last = Math.min(totalPages(result.total), TAG_PAGE_MAX_DEPTH);
+  // 分页上限（成本护栏 G1）+ 剔除内容过薄的末页（2026-10-15）
+  const last = lastUsablePage(result.total, TAG_PAGE_MAX_DEPTH);
+
+  // 直接访问 /p/N 时同样要拦住薄页，否则薄页会被收录成 Soft 404
+  if (page > last || (page > 1 && tagItems.length < MIN_PAGE_ITEMS)) notFound();
 
   // ---- P3 真实内容（2026-10-08）----
   // 动机不是"内容太薄"，而是"能匹配搜索需求的只有类别层"。
