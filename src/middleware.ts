@@ -10,7 +10,18 @@ import { resolveLegacyAction } from '@/lib/legacy-url';
  * - URL 不带 locale 时自动 302 到默认 locale (/ → /en)
  * - localeCookie: false → 不写 NEXT_LOCALE cookie（URL 已经有 locale 前缀，写 cookie 会让所有响应 Vary，使 CDN 边缘无法缓存）
  * - localeDetection: false → 不用 cookie/Accept-Language 推断 locale（URL 是唯一来源）
+ * - alternateLinks: **false**（2026-10-18）→ 见下方说明
  * - 排除：API、Next.js 静态、favicon、含扩展名的文件
+ *
+ * ⚠️ alternateLinks 为什么要关：
+ *   next-intl 3.26 默认会按 `locales` 给**每个 HTML 响应**追加一个
+ *   `Link: <...>; rel="alternate"; hreflang="..."` 响应头，
+ *   而且协议是从 `x-forwarded-proto` 现取的（会让 /en 和 /ja 出现 http/https 不一致）。
+ *   它与页面 metadata 的 `alternates.languages` 是**两个独立来源** ——
+ *   2026-10-18 把 zh/ja 改成 noindex 后，HTML 里已经只剩 en + x-default，
+ *   但响应头仍然列出 en/zh/ja，等于给 Google 发两套互相冲突的 hreflang。
+ *   关闭后，hreflang 唯一真源 = 各页面的 `alternates.languages`
+ *   （统一由 src/lib/seo.ts 的 buildSeoAlternates() 生成）。
  */
 const intlMiddleware = createMiddleware({
   locales,
@@ -18,6 +29,7 @@ const intlMiddleware = createMiddleware({
   localePrefix: 'always',
   localeCookie: false,
   localeDetection: false,
+  alternateLinks: false,
 });
 
 /**

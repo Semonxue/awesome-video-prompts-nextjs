@@ -16,8 +16,16 @@
  *   封禁会让 Google 看不到 noindex 指令，已收录的 URL 也不会因为"不可爬"而消失。
  *   `noindex, follow` 才是"请把它从索引里拿掉，但仍跟随页面内链接"的正确表达。
  *
+ * ⚠️ hreflang 只有一个来源（2026-10-18 踩过的坑）：
+ *   next-intl 中间件默认开启 `alternateLinks`，会给每个 HTML 响应**额外**追加一个
+ *   `Link: rel="alternate"; hreflang=...` 响应头，按 `locales` 全量生成，
+ *   与页面 metadata 的 `alternates.languages` 互相独立 —— 只改 metadata 是不够的，
+ *   响应头里 zh/ja 会继续存在并形成冲突信号。
+ *   已在 src/middleware.ts 设 `alternateLinks: false`。改 hreflang 时两处都要记得。
+ *
  * 想恢复某语言：把它的 code 加进 SEO_INDEXABLE_LOCALES 即可 ——
- * sitemap、hreflang、robots 三处都由这一个常量推导，不会出现半吊子状态。
+ * sitemap 与 robots 都由这一个常量推导；hreflang 由 buildSeoAlternates() 推导。
+ * （若届时希望恢复响应头形式的 hreflang，再打开 next-intl 的 alternateLinks。）
  */
 import type { Metadata } from 'next';
 import type { Locale } from '@/i18n/request';
