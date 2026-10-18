@@ -17,6 +17,7 @@ import { GridEngine } from '@/components/GridEngine';
 import { HEADER_TAG_LIMIT, LIST_DESCRIPTION_LIMIT } from '@/components/types';
 import Link from 'next/link';
 import { SITE_URL, SITE_BRAND, DEFAULT_OG_IMAGE } from '@/lib/site';
+import { buildSeoAlternates, seoRobots } from '@/lib/seo';
 
 interface HomePageProps {
   params: Promise<{ locale: string }>;
@@ -50,14 +51,9 @@ export async function generateMetadata({ params, searchParams }: HomePageProps) 
     description: t('homeDescription'),
     alternates: {
       canonical,
-      languages: {
-        en: `${SITE_URL}/en`,
-        zh: `${SITE_URL}/zh`,
-        ja: `${SITE_URL}/ja`,
-        'x-default': `${SITE_URL}/en`,
-      },
+      languages: buildSeoAlternates((loc) => `${SITE_URL}/${loc}`),
     },
-    robots: isLowValue ? { index: false, follow: true } : undefined,
+    robots: seoRobots(locale, { noindex: Boolean(isLowValue) }),
     openGraph: {
       title: t('homeTitle'),
       description: t('homeDescription'),

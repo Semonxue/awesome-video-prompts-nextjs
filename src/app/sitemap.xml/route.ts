@@ -13,18 +13,20 @@
  *   Error 1102（Worker 资源超限）的复发源之一。拆开后每次只构造 1/4~1/3。
  *
  * 子表（由 SITEMAP_CHILDREN 推导，见 lib/sitemap-builders.ts）：
- *   /sitemaps/prompts-en.xml   6,954   详情页（en，保留 lastmod）
- *   /sitemaps/tags.xml           963   tag 页（省略 lastmod，P2-2）
- *   /sitemaps/models.xml          75   model 页（省略 lastmod，P2-2）
- *   /sitemaps/static.xml          12   首页 + about + tags/models 索引
+ *   /sitemaps/tags.xml           ~1,000  tag 页（省略 lastmod，P2-2）
+ *   /sitemaps/models.xml           25    model 页（省略 lastmod，P2-2）
+ *   /sitemaps/static.xml            4    首页 + about + tags/models 索引
  *
  * 注意：`<sitemapindex>` 里**只能放 `<sitemap>`**，不能放页面 URL，
- * 所以 12 个静态页单独放进了 static.xml 子表。
+ * 所以静态页单独放进了 static.xml 子表。
  *
- * P2-3：只提交 en 的 prompt 详情页，提交量 21,468 → ~8,000（-63%）。
- *   zh/ja 详情页正文与 en 完全一致，同时提交三份等于告诉 Google
- *   「同样的内容给我三份 URL」。zh/ja 页面不会被移除或 noindex，
- *   仍通过 hreflang 互指与全站内链被发现。
+ * P2-3 演进（两次决策，别把旧注释当现状）：
+ *   2026-10-08：21,468 → ~8,000，只提交 en 的 prompt 详情页。
+ *   2026-10-15：`SUBMIT_PROMPT_DETAIL_PAGES = false` → **实际提交 0 条 prompt 详情页**。
+ *   2026-10-18：zh/ja 全部 noindex（src/lib/seo.ts），sitemap 只剩 en 的
+ *               tags / models / static，合计约 1,000 条。
+ *   子表路由 /sitemaps/prompts-{en,zh,ja}.xml 仍然在线（HTTP 200），
+ *   只是不在 index 里；恢复提交只需把 SUBMIT_PROMPT_DETAIL_PAGES 改回 true。
  */
 import { SITE_URL } from '@/lib/site';
 import { SITEMAP_CHILDREN } from '@/lib/sitemap-builders';

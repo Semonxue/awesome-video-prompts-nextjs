@@ -43,6 +43,7 @@ import {
 } from './aggregate-cache';
 import { MODELS_DICT, TAGS_DICT } from '@/lib/dict-yaml';
 import { clampDescription } from '@/lib/description';
+import { PAGE_SIZE } from '@/lib/pagination';
 
 /** 拿 D1 binding（OpenNext 注入 env.DB） */
 async function getD1(): Promise<D1Database> {
@@ -204,7 +205,10 @@ async function countPrompts(whereClause: ReturnType<typeof and> | undefined): Pr
  * 列表查询 — 首页 / 标签 / 模型 页面入口
  */
 export async function listPrompts(args: ListPromptsArgs): Promise<ListPromptsResult> {
-  const { tag, model, q, limit = 24, offset = 0, descriptionLimit } = args;
+  // 2026-10-18：默认 limit 原为硬编码 24，与 PAGE_SIZE(48) 不一致。
+  // 调用点目前都显式传 PAGE_SIZE，所以线上没暴露；但任何漏传的调用会静默
+  // 只拿 24 条，且与分页 offset 错位。改为单一真源。
+  const { tag, model, q, limit = PAGE_SIZE, offset = 0, descriptionLimit } = args;
 
   const d1 = await getD1();
   const db = getDb(d1);

@@ -19,6 +19,7 @@ import { Footer } from '@/components/Footer';
 import { modelHref } from '@/lib/format';
 import { HEADER_TAG_LIMIT } from '@/components/types';
 import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
+import { buildSeoAlternates } from '@/lib/seo';
 
 export const revalidate = 86400;
 
@@ -36,12 +37,7 @@ export async function generateMetadata({ params }: ModelsPageProps) {
     description: t('modelsIndexDescription'),
     alternates: {
       canonical,
-      languages: {
-        en: `${SITE_URL}/en/models`,
-        zh: `${SITE_URL}/zh/models`,
-        ja: `${SITE_URL}/ja/models`,
-        'x-default': `${SITE_URL}/en/models`,
-      },
+      languages: buildSeoAlternates((loc) => `${SITE_URL}/${loc}/models`),
     },
     openGraph: {
       title: t('modelsIndexTitle'),

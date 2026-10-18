@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 import { listAllModels, getModelName } from '@/db/queries';
 import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
+import { buildSeoAlternates, seoRobots } from '@/lib/seo';
 
 /**
  * model 页 metadata 共享构造（2026-10-08 P1-1）
@@ -40,15 +41,11 @@ export async function buildModelMetadata({ locale, model, page, filtered }: Args
     description: t('modelDescription', { name, count }),
     alternates: {
       canonical,
-      languages: {
-        en: path('en'),
-        zh: path('zh'),
-        ja: path('ja'),
-        'x-default': path('en'),
-      },
+      languages: buildSeoAlternates(path),
     },
-    // 只有 tag 筛选是低价值重复面；分页页现在有独立内容，改为可索引
-    robots: filtered ? { index: false, follow: true } : undefined,
+    // 只有 tag 筛选是低价值重复面；分页页有独立内容，可索引。
+    // 2026-10-18：zh/ja 也一律 noindex,follow（见 src/lib/seo.ts）
+    robots: seoRobots(locale, { noindex: filtered }),
     openGraph: {
       title: t('modelTitle', { name }),
       description: t('modelDescription', { name, count }),

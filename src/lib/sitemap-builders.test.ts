@@ -1,16 +1,18 @@
 /**
- * sitemap 结构不变量（P2-1 / P2-2 / P2-3，2026-10-08）
+ * sitemap 结构不变量（P2-1 / P2-2 / P2-3，2026-10-08；2026-10-18 更新）
  *
- * 这几条约束一旦破掉，线上要过几天才能从 GSC 看出来，所以锁在单测里：
+ * 这几条约束一旦破掉，线上要过好几天才能从 GSC 看出来，所以锁在单测里：
  *   1. index 里列出的每个子表都真实存在对应 route
- *   2. 子表清单由 SITEMAP_PROMPT_LOCALES 推导，改常量就能恢复 zh/ja 提交
+ *   2. 子表清单由 SUBMIT_PROMPT_DETAIL_PAGES 推导，改开关就能恢复详情页提交
  *   3. tag/model 页不输出 lastmod（消除"全站每天在变"的信号）
- *   4. 提交量确实大幅收敛（防手滑把 en-only 改回全量却没人发现）
+ *   4. **只提交 SEO_INDEXABLE_LOCALES（当前仅 en）** —— zh/ja 已 noindex，
+ *      再出现在 sitemap 里就是自相矛盾的信号
  */
 import { describe, it, expect } from 'vitest';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { locales } from '@/i18n/request';
+import { SEO_INDEXABLE_LOCALES } from '@/lib/seo';
 import {
   SITEMAP_CHILDREN,
   SITEMAP_PROMPT_LOCALES,
@@ -74,7 +76,7 @@ describe('sitemap lastModified 策略（P2-2）', () => {
 
   it('tag 页不输出 lastModified（消除「全站每天在变」信号）', () => {
     const rows = toTagSitemapRows(tags);
-    expect(rows.length).toBe(2 * locales.length);
+    expect(rows.length).toBe(2 * SEO_INDEXABLE_LOCALES.length);
     for (const r of rows) {
       expect(r.lastModified, `tag ${r.url} 不该有 lastModified`).toBeUndefined();
       expect(r.changeFrequency).toBe('weekly');
@@ -83,13 +85,26 @@ describe('sitemap lastModified 策略（P2-2）', () => {
 
   it('model 页不输出 lastModified', () => {
     const rows = toModelSitemapRows(models);
-    expect(rows.length).toBe(locales.length);
+    expect(rows.length).toBe(SEO_INDEXABLE_LOCALES.length);
     for (const r of rows) {
       expect(r.lastModified, `model ${r.url} 不该有 lastModified`).toBeUndefined();
     }
   });
 
-  it('2026-10-15：model 页 priority 最高，tag 页次之', () => {
+  it('2026-10-18：sitemap 只含 SEO locale，绝不出现 zh/ja', () => {
+    const rows = [...toTagSitemapRows(tags), ...toModelSitemapRows(models)];
+    for (const r of rows) {
+      const loc = new URL(r.url).pathname.split('/')[1];
+      expect(
+        (SEO_INDEXABLE_LOCALES as ReadonlyArray<string>).includes(loc),
+        `${r.url} 的 locale "${loc}" 不在 SEO_INDEXABLE_LOCALES 里`,
+      ).toBe(true);
+    }
+    const zh = rows.filter((r) => r.url.includes('/zh/') || r.url.includes('/ja/'));
+    expect(zh).toEqual([]);
+  });
+
+  it('2026-10-15：model 页 priority 最高，tag 页次之（en）', () => {
     const enModel = toModelSitemapRows([{ slug: 'seedance25' }]).find((r) =>
       r.url.includes('/en/models/'),
     )!;
@@ -98,9 +113,6 @@ describe('sitemap lastModified 策略（P2-2）', () => {
     expect(enModel.priority).toBe(1.0);
     expect(enTag.priority).toBe(0.9);
     expect(enModel.priority!).toBeGreaterThan(enTag.priority!);
-    // 非 en 降一档
-    const zhModel = toModelSitemapRows([{ slug: 'seedance25' }]).find((r) => r.url.includes('/zh/models/'))!;
-    expect(zhModel.priority).toBe(0.8);
   });
 
   it('详情页保留 lastModified（prompt 真实更新时间）', () => {

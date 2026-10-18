@@ -19,6 +19,7 @@ import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { tagHref } from '@/lib/format';
 import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
+import { buildSeoAlternates } from '@/lib/seo';
 
 export const revalidate = 86400;
 
@@ -36,12 +37,7 @@ export async function generateMetadata({ params }: TagsPageProps) {
     description: t('tagsIndexDescription'),
     alternates: {
       canonical,
-      languages: {
-        en: `${SITE_URL}/en/tags`,
-        zh: `${SITE_URL}/zh/tags`,
-        ja: `${SITE_URL}/ja/tags`,
-        'x-default': `${SITE_URL}/en/tags`,
-      },
+      languages: buildSeoAlternates((loc) => `${SITE_URL}/${loc}/tags`),
     },
     openGraph: {
       title: t('tagsIndexTitle'),

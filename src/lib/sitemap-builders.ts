@@ -27,6 +27,7 @@ import type { MetadataRoute } from 'next';
 import { listAllSlugsForSitemap, listAllTags, listAllModels } from '@/db/queries';
 import { getCachedData, CACHE_KEYS } from '@/db/cache';
 import { locales } from '@/i18n/request';
+import { SEO_INDEXABLE_LOCALES } from '@/lib/seo';
 import { SITE_URL } from '@/lib/site';
 import { toW3CDate } from '@/lib/date';
 
@@ -60,6 +61,12 @@ export const revalidate = 86400;
  *       ② 全站内链（Header / 分页 / related / 上下篇）都带 locale 前缀
  *     GSC 规范也明确：hreflang 组内不必每个 URL 都出现在 sitemap 里
  *   - 想改回全语言提交：把这里改成 `locales`（下面有注释说明）即可，一行
+ *
+ * ⚠️ 2026-10-18 更新（决策变更，上面两条已过时）：
+ *   zh / ja **现在已 noindex**，也不再出现在任何 hreflang 组里。
+ *   见 src/lib/seo.ts 的 SEO_INDEXABLE_LOCALES —— sitemap / hreflang / robots
+ *   三处现在都由那一个常量推导，不再各自维护。
+ *   本常量保留只为「哪天恢复详情页提交时，先只提交哪些语言」这一层含义。
  */
 export const SITEMAP_PROMPT_LOCALES: ReadonlyArray<(typeof locales)[number]> = ['en'];
 
@@ -142,7 +149,7 @@ export function toPromptSitemapRows(
  */
 export function toTagSitemapRows(tags: TagRow[]): MetadataRoute.Sitemap {
   return tags.flatMap((tag) =>
-    locales.map((locale) => ({
+    SEO_INDEXABLE_LOCALES.map((locale) => ({
       url: `${SITE_URL}/${locale}/tags/${tag.slug}`,
       changeFrequency: 'weekly' as const,
       priority: locale === 'en' ? 0.9 : 0.7,
@@ -159,11 +166,12 @@ export function toTagSitemapRows(tags: TagRow[]): MetadataRoute.Sitemap {
  *   而 6,954 条详情页的 slug 形如 `temporary-tattoo-test-at-midnight`，
  *   没人会拿它去搜。实测 `/ja/models/seedance/` 已经在拿曝光。
  *
- *   只有 25 个 model（×3 locale = 75 条），是 sitemap 里最该被优先抓的部分。
+ *   只有 25 个 model（×1 locale = 25 条，2026-10-18 起只提交 en），
+ *   是 sitemap 里最该被优先抓的部分。
  */
 export function toModelSitemapRows(models: ModelRow[]): MetadataRoute.Sitemap {
   return models.flatMap((model) =>
-    locales.map((locale) => ({
+    SEO_INDEXABLE_LOCALES.map((locale) => ({
       url: `${SITE_URL}/${locale}/models/${model.slug}`,
       changeFrequency: 'weekly' as const,
       priority: locale === 'en' ? 1.0 : 0.8,
@@ -193,21 +201,23 @@ export async function buildModelsSitemap(): Promise<MetadataRoute.Sitemap> {
 }
 
 /**
- * 静态页：3 locale 首页 + about + tags/models 索引（12 条）。
+ * 静态页：SEO locale 的首页 + about + tags/models 索引（en 单语言 = 4 条）。
  * 省略 lastModified —— 静态页每次生成都变会误导 Google。
+ *
+ * 2026-10-18：只提交 SEO_INDEXABLE_LOCALES（当前仅 en），原来 12 条 → 4 条。
  *
  * 注意：这些是**页面 URL**，不能直接放进 <sitemapindex>（那里面只允许
  * 放 <sitemap>），所以走 /sitemaps/static.xml 子表提交。
  */
 export async function buildStaticSitemap(): Promise<MetadataRoute.Sitemap> {
   return getCachedData(`${CACHE_KEYS.sitemapOutput}-index`, async () => {
-    const homeRoutes: MetadataRoute.Sitemap = locales.map((locale) => ({
+    const homeRoutes: MetadataRoute.Sitemap = SEO_INDEXABLE_LOCALES.map((locale) => ({
       url: `${SITE_URL}/${locale}`,
       changeFrequency: 'daily' as const,
       priority: locale === 'en' ? 1.0 : 0.9,
     }));
 
-    const staticRoutes: MetadataRoute.Sitemap = locales.flatMap((locale) => [
+    const staticRoutes: MetadataRoute.Sitemap = SEO_INDEXABLE_LOCALES.flatMap((locale) => [
       { url: `${SITE_URL}/${locale}/about`, changeFrequency: 'monthly' as const, priority: 0.6 },
       { url: `${SITE_URL}/${locale}/tags`, changeFrequency: 'weekly' as const, priority: 0.8 },
       { url: `${SITE_URL}/${locale}/models`, changeFrequency: 'weekly' as const, priority: 0.8 },

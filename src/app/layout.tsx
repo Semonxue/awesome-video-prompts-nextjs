@@ -5,6 +5,7 @@
 import type { ReactNode } from 'react';
 import './globals.css';
 import { SITE_URL, SITE_BRAND, R2_PUBLIC_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
+import { buildSeoAlternates } from '@/lib/seo';
 
 export const metadata: {
   title: { default: string; template: string };
@@ -21,12 +22,9 @@ export const metadata: {
   description: 'Curated prompts for AI video generation',
   metadataBase: SITE_URL,
   alternates: {
-    languages: {
-      en: '/en',
-      zh: '/zh',
-      ja: '/ja',
-      'x-default': '/en',
-    },
+    // 2026-10-18：只列参与 SEO 的 locale（默认仅 en），见 src/lib/seo.ts。
+    // 被 noindex 的 zh/ja 不能出现在 hreflang 组里，否则整组信号会被忽略。
+    languages: buildSeoAlternates((loc) => `/${loc}`),
   },
   openGraph: {
     type: 'website',

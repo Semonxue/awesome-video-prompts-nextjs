@@ -10,6 +10,7 @@ import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggre
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
+import { buildSeoAlternates } from '@/lib/seo';
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -20,12 +21,7 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
     description: t('intro'),
     alternates: {
       canonical,
-      languages: {
-        en: `${SITE_URL}/en/about`,
-        zh: `${SITE_URL}/zh/about`,
-        ja: `${SITE_URL}/ja/about`,
-        'x-default': `${SITE_URL}/en/about`,
-      },
+      languages: buildSeoAlternates((loc) => `${SITE_URL}/${loc}/about`),
     },
     openGraph: {
       title: t('title'),

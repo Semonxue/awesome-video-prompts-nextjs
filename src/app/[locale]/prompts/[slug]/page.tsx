@@ -23,6 +23,7 @@ import { getPromptBySlugCached, getAdjacentPromptsFromMap, getRelatedPromptsFrom
 import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
 import { tagHref, modelHref } from '@/lib/format';
 import { SITE_URL, SITE_BRAND, DEFAULT_OG_IMAGE } from '@/lib/site';
+import { buildSeoAlternates, seoRobots } from '@/lib/seo';
 import { toW3CDate } from '@/lib/date';
 
 
@@ -92,13 +93,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     description,
     alternates: {
       canonical,
-      languages: {
-        en: `${SITE_URL}/en/prompts/${slug}`,
-        zh: `${SITE_URL}/zh/prompts/${slug}`,
-        ja: `${SITE_URL}/ja/prompts/${slug}`,
-        'x-default': `${SITE_URL}/en/prompts/${slug}`,
-      },
+      languages: buildSeoAlternates((loc) => `${SITE_URL}/${loc}/prompts/${slug}`),
     },
+    // 2026-10-18：只有 en 参与 SEO，zh/ja 一律 noindex,follow（见 src/lib/seo.ts）
+    robots: seoRobots(locale),
     openGraph: {
       title: metaTitle,
       description,

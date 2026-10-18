@@ -15,6 +15,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { locales, type Locale } from '@/i18n/request';
+import { seoRobots } from '@/lib/seo';
 import MobileFilters from '@/components/MobileFilters';
 
 interface LocaleLayoutProps {
@@ -29,6 +30,11 @@ interface LocaleLayoutProps {
  * 中英/日英混排。这里按 locale 覆盖 default + template（Next.js 的嵌套
  * layout metadata 对本子树生效）。
  * 注意：模板里必须保留 `%s` 占位符，Next.js 用它拼接子页 title。
+ *
+ * robots（2026-10-18）：只把 en 送去 SEO，zh/ja 一律 `noindex, follow`。
+ * 在 layout 上设是"兜底"——所有未显式声明 robots 的子页都会继承。
+ * 显式声明了 robots 的页面（首页、model 页）内部也统一调用 seoRobots()，
+ * 保证两处口径一致。见 src/lib/seo.ts。
  */
 export async function generateMetadata({ params }: LocaleLayoutProps): Promise<Metadata> {
   const { locale } = await params;
@@ -40,6 +46,7 @@ export async function generateMetadata({ params }: LocaleLayoutProps): Promise<M
       default: brand('title'),
       template: t('titleTemplate'),
     },
+    robots: seoRobots(locale),
   };
 }
 

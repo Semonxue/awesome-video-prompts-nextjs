@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 import { listAllTags } from '@/db/queries';
 import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
+import { buildSeoAlternates, seoRobots } from '@/lib/seo';
 
 /**
  * tag 页 metadata 共享构造（2026-10-08 P1-1）
@@ -45,13 +46,10 @@ export async function buildTagMetadata({ locale, tag, page }: Args) {
     description: t('tagDescription', { name: displayName, count }),
     alternates: {
       canonical,
-      languages: {
-        en: path('en'),
-        zh: path('zh'),
-        ja: path('ja'),
-        'x-default': path('en'),
-      },
+      languages: buildSeoAlternates(path),
     },
+    // 2026-10-18：只有 en 参与 SEO，zh/ja 一律 noindex,follow（见 src/lib/seo.ts）
+    robots: seoRobots(locale),
     openGraph: {
       title: t('tagTitle', { name: displayName }),
       description: t('tagDescription', { name: displayName, count }),
