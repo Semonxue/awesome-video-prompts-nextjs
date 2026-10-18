@@ -556,3 +556,92 @@ Googlebot 抓取：GSC "Total crawl requests" = 8.86K
 | `docs/SEO-INDEXATION-BASELINE-2026-10-08.md` §3 根因 B | "tag-prompt 关联总数 ≈109,596" | 实测 **29,821**；且 109,596 与该文档自身分位数不自洽，疑为口径错误，见 §2.11(a) |
 | `docs/SEO-INDEXATION-PLAN.md` §5.0 成本护栏 | "G1 可抓取 URL ≤1,500 / G3 请求 ≤1.5×" | 护栏前提是 Error 1102 事故 + 无缓存；现已实测边缘 HIT、请求余额 5.5×，**该护栏应放宽** |
 | `docs/SEO-INDEXATION-BASELINE-2026-10-08.md` §5.3 | legacy URL 基线 `200/404/404/200` | 该行**混用了"首跳码"与"终态码"两种口径**；按终态口径现为 `200/200/200/200`（目标达成） |
+
+---
+
+## 11. 已实施：只把 en 送去 SEO（2026-10-18）
+
+用户决策：**zh / ja 不参与 SEO，只送 en。**
+
+### 11.1 改了什么
+
+| 提交 | 内容 |
+|---|---|
+| `ebd6952` | `seo: 只把 en 送去 SEO，zh/ja 改为 noindex,follow` |
+| `703ff69` | `fix(seo): 关闭 next-intl alternateLinks，消除 hreflang 第二来源` |
+
+**核心设计**：新增 `src/lib/seo.ts` 作为**单一真源**
+
+```ts
+export const SEO_INDEXABLE_LOCALES = ['en'];   // 想恢复某语言只需改这一行
+export const SEO_PRIMARY_LOCALE = 'en';        // x-default 指向它
+isSeoIndexable(locale)        // true/false
+buildSeoAlternates(localePath) // 只含可索引 locale + x-default
+seoRobots(locale, {noindex})   // 非 SEO locale → {index:false, follow:true}
+```
+
+三处由它推导：**sitemap 提交面 / hreflang / robots meta**。
+
+**具体改动**：
+
+1. **sitemap 只提交 en** — `tags.xml` 996→332、`models.xml` 75→25、`static.xml` 12→4，
+   **合计 1,083 → 361（−67%）**。
+2. **zh/ja 全部 `noindex, follow`** — `[locale]/layout.tsx` 兜底，
+   首页 / tag 页 / model 页 / 详情页显式调用 `seoRobots()` 保证两处口径一致。
+   **不是 robots.txt 封禁**：封了 Google 就看不到 noindex，已收录的 URL 也不会消失。
+3. **hreflang 只剩 `en` + `x-default`**。
+4. 顺带修 `src/db/queries.ts` 的 `listPrompts` 默认 `limit = 24` → `PAGE_SIZE`。
+
+### 11.2 ⚠️ 踩到的坑：hreflang 有两个来源
+
+改完 metadata 后线上 HTML 已经只剩 `en + x-default`，但 **HTTP 响应头里仍然列出 en/zh/ja**。
+
+根因：**next-intl 3.26 的中间件默认 `alternateLinks: true`**，会按 `routing.locales`
+给每个 HTML 响应追加 `Link: <...>; rel="alternate"; hreflang="..."`。
+它与页面 metadata 是**两个独立来源**，只改 metadata 完全无效。
+
+顺带解释了长期存在的怪现象：`/en`、`/zh` 的 Link 头是 `http://` 而 `/ja` 是 `https://`
+—— 因为 next-intl 从 `x-forwarded-proto` 现取协议。
+
+→ 已设 `createMiddleware({ alternateLinks: false })`，此后 hreflang 唯一真源是页面 metadata。
+
+### 11.3 线上验收（2026-10-18 20:15 CST，两次 CI 均 success）
+
+| 检查 | 结果 |
+|---|---|
+| `/sitemaps/tags.xml` | **332** 条，zh/ja 命中 **0** |
+| `/sitemaps/models.xml` | **25** 条，zh/ja 命中 **0** |
+| `/sitemaps/static.xml` | **4** 条，zh/ja 命中 **0** |
+| 合计提交面 | **1,083 → 361** |
+| `/en`、`/en/tags/cinematic`、`/en/about` | 无 robots 标签（**可索引**），hreflang `en,x-default` |
+| `/zh`、`/ja`、`/ja/tags/cinematic` | `robots = noindex, follow`，hreflang `en,x-default` |
+| `Link:` 响应头 | **已消失**（不再有第二套 hreflang） |
+| `robots.txt` | 未改动，**没有**封 zh/ja（否则 Google 看不到 noindex） |
+| 边缘缓存 | 部署后自然失效，关键 URL 已实测为新内容，**未需要 purge** |
+
+测试：`tsc` 0 错；`vitest` **154/154 通过**（新增 `src/lib/seo.test.ts` 12 条不变量 +
+sitemap 用例改为由 `SEO_INDEXABLE_LOCALES` 驱动并新增「sitemap 绝不出现 zh/ja」断言）；`next build` 成功。
+
+### 11.4 接下来看什么（别盯错指标）
+
+> **不要再盯 Indexed 总数**。它的分母是 24,754 的垃圾池，这个数字永远难看，也不代表任何东西。
+> 改盯这两个：
+
+| 观察项 | 预期变化 | 在哪看 | 什么时候看 |
+|---|---|---|---|
+| `Excluded by 'noindex' tag` 桶 | 199 → **上升**（zh/ja 从 `Crawled - not indexed` 转移过来） | GSC → Page indexing | **3–7 天后** |
+| Known pages 总数 | 24,754 → **下降**（zh/ja 退出已知集） | 同上 | 3–7 天后 |
+| Sitemap「Discovered pages」 | 1,083 → **约 361** | GSC → Sitemaps | 1–3 天（需 Google 重读 sitemap） |
+| **目标页（361 条里的 model/tag 页）收录率** | 从 2/361 开始爬 | GSC 手动 URL 检查 | 4–8 周 |
+
+⚠️ **这是"收敛"，不是"增长"**：本次改动不会让收录数上升。
+它的作用是**停止向 Google 递交重复内容**（三语同正文），把提交面和抓取预算集中到
+en 的 tag / model 页 —— 为 §6.1 的外链和 §6.4 的内容深化创造干净的前提。
+
+### 11.5 仍未做（下一步真正能提升收录的）
+
+1. **外链**（§6.1）—— 1,015 个 X 作者 outreach。**唯一可能让 Indexed 离开个位数的动作。**
+2. **头部 tag / model 页内容深化**（§6.4）—— 现在 leader 页仍只有 1 个 H2，
+   16K 可见字符全是卡片摘要，零编辑性内容（实测）。
+3. **404 / 308 边缘缓存**（§6.2）—— 负成本，12% 的 Googlebot 流量浪费在 MISS 的 404 上。
+4. **`/en/tags/360` 只挂 4 条**（§2.11a）—— 而 `q=360-degree` 能搜到 70 条，tag 归一化收窄过头，需确认。
