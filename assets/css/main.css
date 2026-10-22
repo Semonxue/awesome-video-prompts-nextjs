@@ -1458,3 +1458,77 @@
     padding: 16px;
   }
 }
+
+/* ============================================================
+   类别页内容区（2026-10-22）
+   把 model 页 / tag 页从「筛选列表」升级成「内容页」的正文样式。
+   依据 docs/research-model-tag-pages-as-content-pages.md。
+
+   设计意图：
+   - 正文可读性优先（这是给 Google 和人看的编辑性内容，不是卡片）
+   - 段落间距宽松，让导语读起来像"一段说明"而不是"一段 SEO 文本"
+   - FAQ 用分隔线 + 缩进，视觉上区别于正文（用户扫读时能分辨）
+   ============================================================ */
+.content-page-body {
+  margin: 0 0 32px;
+  padding: 0 0 8px;
+}
+
+.content-page-body__title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 14px;
+  line-height: 1.35;
+}
+
+.content-page-body__para {
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+  max-width: 72ch; /* 长行难读；限制到 ~72 字符宽 */
+}
+
+.content-page-faq {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.content-page-faq__title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 12px;
+}
+
+.content-page-faq__item {
+  margin-bottom: 14px;
+}
+
+.content-page-faq__q {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+  line-height: 1.5;
+}
+
+.content-page-faq__a {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  margin: 0;
+  max-width: 72ch;
+}
+
+@media (max-width: 640px) {
+  .content-page-body__title {
+    font-size: 18px;
+  }
+
+  .content-page-body__para {
+    font-size: 14px;
+  }
+}

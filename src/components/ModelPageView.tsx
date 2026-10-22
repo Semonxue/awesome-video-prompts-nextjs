@@ -14,6 +14,12 @@ import {
 import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
 import { LIST_DESCRIPTION_LIMIT } from '@/components/types';
 import { PAGE_SIZE, MODEL_PAGE_MAX_DEPTH, lastUsablePage, MIN_PAGE_ITEMS } from '@/lib/pagination';
+import {
+  buildModelCollectionSchema,
+  buildModelFaq,
+  buildModelIntro,
+  buildFaqSchema,
+} from '@/lib/content-pages';
 import { SITE_URL } from '@/lib/site';
 
 /**
@@ -87,6 +93,67 @@ export async function ModelPageView({ locale, model, page, tag }: Props) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8);
 
+  // ---- 2026-10-22：内容页化 ----
+  // 导语 + FAQ + CollectionPage/ItemList + FAQPage 结构化数据。
+  // 依据 docs/research-model-tag-pages-as-content-pages.md 与
+  // docs/SEO-STATUS-AND-COST-NEUTRAL-PLAN-2026-10-18.md §6.4。
+  //
+  // ⚠️ 不写"参数规格表"（时长/分辨率/参考输入数）：
+  //    调研文档建议从官方 API schema 派生，但本站 data/models.yaml 只有 name 字段，
+  //    **没有规格数据源** —— 写出来就是编造，会踩 scaled content abuse 红线。
+  //    只写能从 D1 实际数据算出来的事实。
+  //
+  // ⚠️ 带 ?tag= 筛选的变体页不输出完整内容：
+  //    筛选变体与主页面内容高度重叠 → 触发 doorway abuse
+  //    ("substantially similar pages")。
+  const isMainVariant = !tag;
+  const modelIntro = isMainVariant
+    ? buildModelIntro({
+        modelName,
+        count: result.total,
+        total: totalCount,
+        topTags: topTags.map((x) => ({ slug: x.slug, name: x.name, count: x.count })),
+        topModels: [
+          { slug: model, name: modelName, count: result.total },
+          ...relatedModels.map(([slug, coCount]) => ({
+            slug,
+            name: modelOptions.find((m) => m.slug === slug)?.name ?? slug,
+            count: coCount,
+          })),
+        ],
+      })
+    : [];
+  const modelFaq = isMainVariant
+    ? buildModelFaq({
+        modelName,
+        count: result.total,
+        total: totalCount,
+        topTags: topTags.map((x) => ({ slug: x.slug, name: x.name, count: x.count })),
+        topModels: [
+          { slug: model, name: modelName, count: result.total },
+          ...relatedModels.map(([slug, coCount]) => ({
+            slug,
+            name: modelOptions.find((m) => m.slug === slug)?.name ?? slug,
+            count: coCount,
+          })),
+        ],
+      })
+    : [];
+
+  // 结构化数据只在「主变体 + 第 1 页」输出
+  const showSchema = isMainVariant && page === 1;
+  const modelCollectionSchema = showSchema
+    ? buildModelCollectionSchema({
+        modelName,
+        url: `${SITE_URL}/${locale}/models/${model}`,
+        items: modelItems.map((p) => ({
+          name: p.title,
+          url: `${SITE_URL}/${locale}/prompts/${p.slug}`,
+        })),
+      })
+    : null;
+  const modelFaqSchema = showSchema ? buildFaqSchema(modelFaq) : null;
+
   return (
     <>
       {/* BreadcrumbList：页面上有可见的 <nav class="breadcrumb">，之前只有视觉没有结构化数据，
@@ -105,6 +172,21 @@ export async function ModelPageView({ locale, model, page, tag }: Props) {
           }),
         }}
       />
+      {/* CollectionPage / ItemList + FAQPage 结构化数据（2026-10-22）
+          只在「主变体 + 第 1 页」输出。 */}
+      {modelCollectionSchema && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(modelCollectionSchema) }}
+        />
+      )}
+      {modelFaqSchema && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(modelFaqSchema) }}
+        />
+      )}
+
       <Header
         locale={locale}
         activeModel={model}
@@ -189,6 +271,34 @@ export async function ModelPageView({ locale, model, page, tag }: Props) {
                   <Link key={slug} href={`/${locale}/models/${slug}`} className="content-tag">
                     {slug}
                   </Link>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* 2026-10-22：内容页化 —— 导语 + FAQ
+            依据 docs/research-model-tag-pages-as-content-pages.md（业界调研）与
+            docs/SEO-STATUS-AND-COST-NEUTRAL-PLAN-2026-10-18.md §6.4。
+            内容全部由本页数据派生（零虚构、零新增 D1 查询）。
+            带 ?tag= 筛选的变体页不输出（避免与主页面重复 → doorway abuse）。 */}
+        {isMainVariant && modelIntro.length > 0 && (
+          <section className="content-page-body" aria-label={t('aboutThisModel', { model: modelName })}>
+            <h2 className="content-page-body__title">{t('aboutThisModel', { model: modelName })}</h2>
+            {modelIntro.map((para, i) => (
+              <p key={i} className="content-page-body__para">
+                {para}
+              </p>
+            ))}
+
+            {modelFaq.length > 0 && (
+              <div className="content-page-faq">
+                <h3 className="content-page-faq__title">{t('faqTitle')}</h3>
+                {modelFaq.map((item, i) => (
+                  <div key={i} className="content-page-faq__item">
+                    <h4 className="content-page-faq__q">{item.question}</h4>
+                    <p className="content-page-faq__a">{item.answer}</p>
+                  </div>
                 ))}
               </div>
             )}

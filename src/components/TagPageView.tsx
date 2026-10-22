@@ -9,6 +9,13 @@ import { HEADER_TAG_LIMIT, LIST_DESCRIPTION_LIMIT } from '@/components/types';
 import { listAllTags, listPrompts } from '@/db/queries';
 import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
 import { PAGE_SIZE, TAG_PAGE_MAX_DEPTH, lastUsablePage, MIN_PAGE_ITEMS } from '@/lib/pagination';
+import {
+  buildTagCollectionSchema,
+  buildTagFaq,
+  buildTagIntro,
+  buildFaqSchema,
+  extractWordStats,
+} from '@/lib/content-pages';
 import { SITE_URL } from '@/lib/site';
 
 /**
@@ -99,6 +106,53 @@ export async function TagPageView({ locale, tag, page }: Props) {
   const topModels = modelOptions.slice(0, 8);
   const shareText = totalCount > 0 ? ((result.total / totalCount) * 100).toFixed(1) : '0';
 
+  // ---- 2026-10-22：内容页化 ----
+  // 把 tag 页从「筛选列表」升级成「内容页」：导语 + FAQ + 结构化数据。
+  // 数据全部来自本页已加载的 tagItems / modelOptions / allTags / counts，
+  // **零新增 D1 查询**（新增查询 = 新增 rows read = 关联成本）。
+  // 详见 src/lib/content-pages.ts 的设计铁律。
+  const tagWords = extractWordStats(
+    tagItems.map((p) => p.title),
+    8,
+    // 排除本页自己的主题词：tag 页叫 cinematic 时，
+    // 导语写"最常见的是 cinematic"是废话，浪费导语里最宝贵的位置。
+    [tag, displayName],
+  );
+  const introParagraphs = buildTagIntro({
+    tagName: displayName,
+    count: result.total,
+    total: totalCount,
+    topModels: topModels.map((m) => ({ slug: m.slug, name: m.name, count: m.count })),
+    words: tagWords,
+  });
+  const faqItems = buildTagFaq({
+    tagName: displayName,
+    count: result.total,
+    total: totalCount,
+    topModels: topModels.map((m) => ({ slug: m.slug, name: m.name, count: m.count })),
+    topTags: relatedTags.map((rt) => ({
+      slug: rt.slug,
+      name: allTags.find((x) => x.slug === rt.slug)?.name ?? rt.slug,
+      count: rt.count,
+    })),
+  });
+
+  // 结构化数据只在第 1 页输出：
+  //   - 分页页 /p/2 的 ItemList 会与第 1 页内容重叠 → 制造重复内容
+  //   - Google 的 doorway abuse 红线：substantially similar pages
+  const isFirstPage = page === 1;
+  const collectionSchema = isFirstPage
+    ? buildTagCollectionSchema({
+        tagName: displayName,
+        url: `${SITE_URL}/${locale}/tags/${tag}`,
+        items: tagItems.map((p) => ({
+          name: p.title,
+          url: `${SITE_URL}/${locale}/prompts/${p.slug}`,
+        })),
+      })
+    : null;
+  const faqSchema = isFirstPage ? buildFaqSchema(faqItems) : null;
+
   return (
     <>
       {/* BreadcrumbList：页面上有可见的 <nav class="breadcrumb">，之前只有视觉没有结构化数据，
@@ -117,8 +171,23 @@ export async function TagPageView({ locale, tag, page }: Props) {
           }),
         }}
       />
-      <Header locale={locale} activeTag={tag} tagOptions={allTagsSliced} totalCount={totalCount} />
+      {/* CollectionPage / ItemList + FAQPage 结构化数据（2026-10-22）
+          ItemList 语义 = "这个页面上有一组同类条目"，与 tag 页完全吻合。
+          只在第 1 页输出（分页页输出会造成实质重复 → doorway abuse）。 */}
+      {collectionSchema && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(collectionSchema) }}
+        />
+      )}
+      {faqSchema && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
+        />
+      )}
 
+      <Header locale={locale} activeTag={tag} tagOptions={allTagsSliced} totalCount={totalCount} />
       <main className="main-content model-tag-page">
         <nav className="breadcrumb" aria-label="Breadcrumb">
           <Link href={`/${locale}`}>Home</Link>
@@ -184,6 +253,34 @@ export async function TagPageView({ locale, tag, page }: Props) {
             </div>
           )}
         </section>
+
+        {/* 2026-10-22：内容页化 —— 导语 + FAQ
+            依据 docs/research-model-tag-pages-as-content-pages.md（业界调研）
+            与 docs/SEO-STATUS-AND-COST-NEUTRAL-PLAN-2026-10-18.md §6.4。
+            内容全部由本页数据派生（零虚构、零新增 D1 查询）；
+            分页页不重复输出（避免 doorway / scaled content abuse）。 */}
+        {isFirstPage && (
+          <section className="content-page-body" aria-label={t('aboutThisTag', { tag: displayName })}>
+            <h2 className="content-page-body__title">{t('aboutThisTag', { tag: displayName })}</h2>
+            {introParagraphs.map((para, i) => (
+              <p key={i} className="content-page-body__para">
+                {para}
+              </p>
+            ))}
+
+            {faqItems.length > 0 && (
+              <div className="content-page-faq">
+                <h3 className="content-page-faq__title">{t('faqTitle')}</h3>
+                {faqItems.map((item, i) => (
+                  <div key={i} className="content-page-faq__item">
+                    <h4 className="content-page-faq__q">{item.question}</h4>
+                    <p className="content-page-faq__a">{item.answer}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
 
         {modelOptions.length > 0 && (
           <div className="content-tag-area model-tag-tabs">

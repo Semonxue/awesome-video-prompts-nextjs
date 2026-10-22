@@ -69,7 +69,9 @@
     "overviewNoTag": "a range of styles",
     "topTags": "Most common tags",
     "tagTitleCount": "{count} prompts",
-    "relatedModels": "Often paired with"
+    "relatedModels": "Often paired with",
+    "aboutThisModel": "About {model} video prompts",
+    "faqTitle": "Frequently asked questions"
   },
   "tag": {
     "breadcrumbTags": "Tags",
@@ -84,7 +86,9 @@
     "relatedTags": "Related tags",
     "relatedTagTitle": "{count} prompts",
     "topModels": "Most used models",
-    "modelTitleCount": "{count} prompts"
+    "modelTitleCount": "{count} prompts",
+    "aboutThisTag": "About {tag} video prompts",
+    "faqTitle": "Frequently asked questions"
   },
   "mobileFilters": {
     "filters": "Filters",

@@ -69,7 +69,9 @@
     "overviewNoTag": "さまざまなスタイル",
     "topTags": "頻出タグ",
     "tagTitleCount": "{count} 件",
-    "relatedModels": "併用されることが多いモデル"
+    "relatedModels": "併用されることが多いモデル",
+    "aboutThisModel": "{model} 動画プロンプトについて",
+    "faqTitle": "よくある質問"
   },
   "tag": {
     "breadcrumbTags": "タグ",
@@ -84,7 +86,9 @@
     "relatedTags": "関連タグ",
     "relatedTagTitle": "{count} 件",
     "topModels": "よく使われるモデル",
-    "modelTitleCount": "{count} 件"
+    "modelTitleCount": "{count} 件",
+    "aboutThisTag": "{tag} 動画プロンプトについて",
+    "faqTitle": "よくある質問"
   },
   "mobileFilters": {
     "filters": "フィルター",

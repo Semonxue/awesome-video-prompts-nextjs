@@ -69,7 +69,9 @@
     "overviewNoTag": "多种风格",
     "topTags": "高频标签",
     "tagTitleCount": "{count} 条提示词",
-    "relatedModels": "常与以下模型搭配"
+    "relatedModels": "常与以下模型搭配",
+    "aboutThisModel": "关于 {model} 视频提示词",
+    "faqTitle": "常见问题"
   },
   "tag": {
     "breadcrumbTags": "标签",
@@ -84,7 +86,9 @@
     "relatedTags": "相关标签",
     "relatedTagTitle": "{count} 条提示词",
     "topModels": "常用模型",
-    "modelTitleCount": "{count} 条提示词"
+    "modelTitleCount": "{count} 条提示词",
+    "aboutThisTag": "关于 {tag} 视频提示词",
+    "faqTitle": "常见问题"
   },
   "mobileFilters": {
     "filters": "筛选",
