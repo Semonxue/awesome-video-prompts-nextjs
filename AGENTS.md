@@ -24,6 +24,35 @@
 
 **踩坑实录（2026-08-15）**：只跑 `npm run build` 不跑 `build:cf` → `.open-next/` 不更新 → 部署的是旧 worker → 改了等于没改、D1 cost 反而涨。
 
+## Next.js 版本支持窗口（2026-10-22 踩坑，时间炸弹）
+
+OpenNext 在 `build:cf` 时会检查 Next.js major 是否还在官方支持窗口内，**不在就直接 `exit(1)`**，
+pipeline 整个失败，**线上继续跑上一次部署的旧 worker**（看起来像"改了没生效"）。
+
+窗口规则 = **major 首次发布起 2 年**（源码：`@opennextjs/aws/dist/build/helper.js` 的 `NEXT_RELEASE_DATES`）：
+
+| Next major | 首发 | 支持到期 | 状态 |
+|---|---|---|---|
+| 15 | 2024-10-21 | **2026-10-21** | ⚠️ **已过期**（本站当前 15.5.19） |
+| 16 | 2025-10-21 | 2027-10-21 | ✅ 支持中 |
+
+**致命细节：判定只看 major 的首次发布日期，不看 patch 版本** → 换任何一个 15.x patch 都救不了。
+
+2026-10-22 的实际故障（`2e340c6` 与 `9ea5a8f` 两个 push 的 pipeline 全挂）：
+
+```
+ERROR Next.js version 15.5.19 is not supported by the Next.js team.
+If you want to proceed anyway, use the --dangerouslyUseUnsupportedNextVersion flag.
+```
+
+**已采用方案**：`package.json` 的 `build:cf` 加 `--dangerouslyUseUnsupportedNextVersion`
+（commit `a8dabf1`）。⚠️ 代价：**Next 15 从 2026-10-21 起不再有官方安全补丁**，
+升级 Next 16 应进 backlog（独立大工程）。
+
+**下次 pipeline 挂了先查这个**：如果失败在 `build:cf` 步骤且日志出现
+`is not supported by the Next.js team` → 是版本窗口问题，**不是代码问题**。
+
+
 ## Cache-Control Wrapper（必须装）
 
 `open-next.config.ts` 注释明说：Next.js 15 page handler 在 `sendRenderResult` 阶段会**重置** `Cache-Control` 到 `no-store`，**覆盖 middleware 的 `s-maxage=3600`**。修法是自定义 OpenNext wrapper：

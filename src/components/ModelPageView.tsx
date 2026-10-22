@@ -9,6 +9,7 @@ import {
   listAllModels,
   listPrompts,
   listModelTagDistribution,
+  listModelCoModels,
   getModelName,
 } from '@/db/queries';
 import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
@@ -53,12 +54,14 @@ export async function ModelPageView({ locale, model, page, tag }: Props) {
 
   // 该 model 下的 prompts（不分 locale）
   // descriptionLimit：只下发摘要（卡片 UI 只显示 180 字符），复制全文时懒加载。
-  const [result, tagOptions, modelOptions, counts, modelName] = await Promise.all([
+  const [result, tagOptions, modelOptions, counts, modelName, coModels] = await Promise.all([
     listPrompts({ model, tag, limit: PAGE_SIZE, offset, descriptionLimit: LIST_DESCRIPTION_LIMIT }),
     listModelTagDistribution(model),
     listAllModels(),
     readAggregateCache<CountsCache>(AGG_CACHE_KEYS.counts),
     getModelName(model),
+    // 与该 model 出现在同一条 prompt 上的其它 model —— 全量真值（发布时预计算落 R2）
+    listModelCoModels(model),
   ]);
   const modelItems = result.items;
   const totalCount = counts?.total ?? 0;
@@ -78,20 +81,23 @@ export async function ModelPageView({ locale, model, page, tag }: Props) {
   // **所有数字都来自已有数据，零新增 D1 查询，不编造任何模型能力描述**：
   //   - tagOptions 来自 listModelTagDistribution，是该 model **全量** prompt 的 tag 分布
   //     （不是当前页），比 tag 页那套从当前页现算的更准
-  //   - relatedModels 从本页已 hydrate 的 modelItems 共现关系现算
+  //   - coModels 来自 listModelCoModels（R2 预计算），是**全量**共现关系
+  // ⚠️ 2026-10-22 修正：原来这里是从当前页 48 条现算共现（relatedModelSet），
+  //    那是"本页共现"不是"全库共现"，不能当成库级事实写进正文。
   const topTags = tagOptions.slice(0, 8);
   const shareText = totalCount > 0 ? ((result.total / totalCount) * 100).toFixed(1) : '0';
 
-  const relatedModelSet = new Map<string, number>();
-  for (const p of modelItems) {
-    for (const m of p.models) {
-      if (m.slug === model) continue;
-      relatedModelSet.set(m.slug, (relatedModelSet.get(m.slug) ?? 0) + 1);
-    }
-  }
-  const relatedModels = [...relatedModelSet.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8);
+  // 与该 model 出现在同一条 prompt 上的其它 model（全量，发布时预计算）
+  const relatedModels = coModels.slice(0, 8);
+
+  // 该 model 在全站的用量排名（真值：counts.json 里的全站 model 计数）
+  // ⚠️ 实测：绝大多数 prompt 只挂一个 model → 共现 model 几乎为空，
+  //    这时用「全站第 N 名」代替，页面正文才不会出现空段或编造。
+  const globalModelCounts = counts?.models ?? {};
+  const rankedModels = Object.entries(globalModelCounts).sort((a, b) => b[1] - a[1]);
+  const rankIndex = rankedModels.findIndex(([slug]) => slug === model);
+  const modelRank =
+    rankIndex >= 0 ? { rank: rankIndex + 1, totalModels: rankedModels.length } : null;
 
   // ---- 2026-10-22：内容页化 ----
   // 导语 + FAQ + CollectionPage/ItemList + FAQPage 结构化数据。
@@ -113,14 +119,12 @@ export async function ModelPageView({ locale, model, page, tag }: Props) {
         count: result.total,
         total: totalCount,
         topTags: topTags.map((x) => ({ slug: x.slug, name: x.name, count: x.count })),
-        topModels: [
-          { slug: model, name: modelName, count: result.total },
-          ...relatedModels.map(([slug, coCount]) => ({
-            slug,
-            name: modelOptions.find((m) => m.slug === slug)?.name ?? slug,
-            count: coCount,
-          })),
-        ],
+        coModels: relatedModels.map((m) => ({
+          slug: m.slug,
+          name: m.name || modelOptions.find((o) => o.slug === m.slug)?.name || m.slug,
+          count: m.count,
+        })),
+        modelRank,
       })
     : [];
   const modelFaq = isMainVariant
@@ -129,14 +133,12 @@ export async function ModelPageView({ locale, model, page, tag }: Props) {
         count: result.total,
         total: totalCount,
         topTags: topTags.map((x) => ({ slug: x.slug, name: x.name, count: x.count })),
-        topModels: [
-          { slug: model, name: modelName, count: result.total },
-          ...relatedModels.map(([slug, coCount]) => ({
-            slug,
-            name: modelOptions.find((m) => m.slug === slug)?.name ?? slug,
-            count: coCount,
-          })),
-        ],
+        coModels: relatedModels.map((m) => ({
+          slug: m.slug,
+          name: m.name || modelOptions.find((o) => o.slug === m.slug)?.name || m.slug,
+          count: m.count,
+        })),
+        modelRank,
       })
     : [];
 
@@ -267,9 +269,9 @@ export async function ModelPageView({ locale, model, page, tag }: Props) {
             {relatedModels.length > 0 && (
               <div className="tag-overview__related">
                 <span className="content-tag content-tag--label">{t('relatedModels')}</span>
-                {relatedModels.map(([slug]) => (
-                  <Link key={slug} href={`/${locale}/models/${slug}`} className="content-tag">
-                    {slug}
+                {relatedModels.map((m) => (
+                  <Link key={m.slug} href={`/${locale}/models/${m.slug}`} className="content-tag">
+                    {m.name || m.slug}
                   </Link>
                 ))}
               </div>

@@ -26,6 +26,7 @@ export async function listAllSlugsForSitemap(): Promise<Array<{ slug: string; up
  */
 
 import { eq, and, inArray, like, or, sql, desc, ne, lt, gt } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import type { PromptCardData, ModelRef, TagRef } from '@/components/types';
 import { getDb } from './index';
@@ -40,10 +41,15 @@ import {
   type AdjacentMapCache,
   type AdjacentEntry,
   type RelatedMapCache,
+  type TagStatsCache,
+  type TagStatsEntry,
+  type ModelCoModelsCache,
+  tagStatsKey,
 } from './aggregate-cache';
 import { MODELS_DICT, TAGS_DICT } from '@/lib/dict-yaml';
 import { clampDescription } from '@/lib/description';
 import { PAGE_SIZE } from '@/lib/pagination';
+import { extractWordStats } from '@/lib/content-pages';
 
 /** 拿 D1 binding（OpenNext 注入 env.DB） */
 async function getD1(): Promise<D1Database> {
@@ -536,6 +542,288 @@ export async function listModelTagDistribution(
   return queryModelTagDistribution(modelSlug);
 }
 
+/* ------------------------------------------------------------------ *
+ * 2026-10-22：tag / model 页内容页化用的全量统计
+ *
+ * 背景：内容页正文里的每个数字都必须是**全量真值**。
+ * 实测 bug（2026-10-22 上线当天发现）：
+ *   tag 页的 model 分布是从**当前页 48 条**现算的，却拿去和 tag 总数比较，
+ *   线上渲染成 "seedance25 covering 41 of the 5,018 cinematic prompts (1%)"
+ *   —— 41 是当前页的计数，5,018 是 tag 总数，两个口径混用。
+ *   共现 tag 与标题词频有同样的问题。
+ *
+ * 解法：把三个维度都做成**发布时预计算的 R2 聚合**（零运行时 D1）：
+ *   - models：该 tag 全量的 model 分布
+ *   - related：与该 tag 共现最多的其它 tag
+ *   - words：该 tag 全量标题的词频
+ *
+ * 计算时机：rebuildAllAggregateCaches()（publish/unpublish/delete 都会调），
+ * 读取时机：R2（CDN 缓存）→ 运行时 D1 查询数不增加。
+ * ------------------------------------------------------------------ */
+
+/** 单行：tag → model 计数 */
+interface TagModelRow {
+  tag: string;
+  modelSlug: string;
+  modelName: string;
+  count: number;
+}
+
+/** 单行：tag → 共现 tag 计数 */
+interface TagRelatedRow {
+  tag: string;
+  coTag: string;
+  count: number;
+}
+
+/** 单行：tag → prompt 标题 */
+interface TagTitleRow {
+  tag: string;
+  title: string;
+}
+
+/**
+ * tag → model 分布（可按单个 tag 过滤）
+ *
+ * 语义：count = 同时挂了这个 tag 和这个 model 的 prompt 条数。
+ * 因为一个 prompt 的同一个 tag 只挂一次，count 既是 prompt 数也是行数。
+ */
+async function queryTagModelRows(tagSlug?: string): Promise<TagModelRow[]> {
+  const d1 = await getD1();
+  const db = getDb(d1);
+  const rows = await db
+    .select({
+      tag: tags.name,
+      modelSlug: models.slug,
+      modelName: models.name,
+      count: sql<number>`count(*)`,
+    })
+    .from(promptTags)
+    .innerJoin(tags, eq(promptTags.tagId, tags.id))
+    .innerJoin(prompts, and(eq(prompts.id, promptTags.promptId), eq(prompts.isDraft, 0)))
+    .innerJoin(promptModels, eq(promptModels.promptId, promptTags.promptId))
+    .innerJoin(models, eq(promptModels.modelId, models.id))
+    .where(tagSlug ? eq(tags.name, tagSlug) : undefined)
+    .groupBy(tags.name, models.slug, models.name)
+    .orderBy(desc(sql`count(*)`), tags.name);
+  return rows.map((r) => ({
+    tag: r.tag,
+    modelSlug: r.modelSlug,
+    modelName: r.modelName || MODELS_DICT[r.modelSlug]?.name || r.modelSlug,
+    count: Number(r.count),
+  }));
+}
+
+/**
+ * tag → 共现 tag（可按单个 tag 过滤）
+ *
+ * 语义：count = 同时挂了这个 tag 和那个 tag 的 prompt 条数。
+ */
+async function queryTagRelatedRows(tagSlug?: string): Promise<TagRelatedRow[]> {
+  const d1 = await getD1();
+  const db = getDb(d1);
+  const coTags = alias(tags, 'co_tags');
+  const coPromptTags = alias(promptTags, 'co_prompt_tags');
+  const rows = await db
+    .select({
+      tag: tags.name,
+      coTag: coTags.name,
+      count: sql<number>`count(*)`,
+    })
+    .from(promptTags)
+    .innerJoin(tags, eq(promptTags.tagId, tags.id))
+    .innerJoin(prompts, and(eq(prompts.id, promptTags.promptId), eq(prompts.isDraft, 0)))
+    .innerJoin(coPromptTags, eq(coPromptTags.promptId, promptTags.promptId))
+    .innerJoin(coTags, eq(coPromptTags.tagId, coTags.id))
+    // 排除自己和自己共现（列 vs 列，恒成立）
+    .where(
+      and(
+        ne(coTags.name, tags.name),
+        tagSlug ? eq(tags.name, tagSlug) : undefined,
+      ),
+    )
+    .groupBy(tags.name, coTags.name)
+    .orderBy(desc(sql`count(*)`), tags.name);
+  return rows.map((r) => ({ tag: r.tag, coTag: r.coTag, count: Number(r.count) }));
+}
+
+/**
+ * tag → 该 tag 下所有 prompt 的标题（可按单个 tag 过滤）
+ *
+ * 用于算标题词频。返回的是全量标题，不是当前页的 48 条。
+ */
+async function queryTagTitleRows(tagSlug?: string): Promise<TagTitleRow[]> {
+  const d1 = await getD1();
+  const db = getDb(d1);
+  const rows = await db
+    .select({ tag: tags.name, title: prompts.title })
+    .from(promptTags)
+    .innerJoin(tags, eq(promptTags.tagId, tags.id))
+    .innerJoin(prompts, and(eq(prompts.id, promptTags.promptId), eq(prompts.isDraft, 0)))
+    .where(tagSlug ? eq(tags.name, tagSlug) : undefined);
+  return rows.map((r) => ({ tag: r.tag, title: r.title ?? '' }));
+}
+
+/** 每个 tag 各维度保留的条数（导语/FAQ 只需要头部，多了浪费体积） */
+const TAG_STATS_MODELS_TOP_N = 16;
+const TAG_STATS_RELATED_TOP_N = 24;
+const TAG_STATS_WORDS_TOP_N = 8;
+
+/**
+ * 把三份行数据组装成 tag → 全量统计
+ *
+ * 纯函数（无 D1 依赖），便于单测。
+ */
+export function assembleTagStats(params: {
+  modelRows: TagModelRow[];
+  relatedRows: TagRelatedRow[];
+  titleRows: TagTitleRow[];
+}): TagStatsCache {
+  const { modelRows, relatedRows, titleRows } = params;
+
+  // models：按 tag 分组
+  const modelsByTag = new Map<string, { slug: string; name: string; count: number }[]>();
+  for (const r of modelRows) {
+    const list = modelsByTag.get(r.tag) ?? [];
+    list.push({ slug: r.modelSlug, name: r.modelName, count: r.count });
+    modelsByTag.set(r.tag, list);
+  }
+
+  // related：同上（行已按 count 降序）
+  const relatedByTag = new Map<string, { slug: string; name: string; count: number }[]>();
+  for (const r of relatedRows) {
+    const list = relatedByTag.get(r.tag) ?? [];
+    list.push({ slug: r.coTag, name: TAGS_DICT[r.coTag]?.en ?? r.coTag, count: r.count });
+    relatedByTag.set(r.tag, list);
+  }
+
+  // words：先按 tag 收集全部标题，再逐 tag 算词频
+  const titlesByTag = new Map<string, string[]>();
+  for (const r of titleRows) {
+    const list = titlesByTag.get(r.tag) ?? [];
+    list.push(r.title);
+    titlesByTag.set(r.tag, list);
+  }
+
+  const out: TagStatsCache = {};
+  for (const [tag, titles] of titlesByTag) {
+    out[tag] = {
+      models: (modelsByTag.get(tag) ?? []).slice(0, TAG_STATS_MODELS_TOP_N),
+      related: (relatedByTag.get(tag) ?? []).slice(0, TAG_STATS_RELATED_TOP_N),
+      // 排除该 tag 自己的主题词（tag 页叫 cinematic 时，"最常见的是 cinematic" 是废话）
+      words: extractWordStats(titles, TAG_STATS_WORDS_TOP_N, [tag]),
+    };
+  }
+  // 有些 tag 可能没有标题行但有 model 行（理论上不会），兜底也写进去
+  for (const [tag, list] of modelsByTag) {
+    if (!out[tag]) {
+      out[tag] = {
+        models: list.slice(0, TAG_STATS_MODELS_TOP_N),
+        related: [],
+        words: [],
+      };
+    }
+  }
+  return out;
+}
+
+/**
+ * 单个 tag 的全量统计 — tag 页内容化用
+ *
+ * 读 R2 聚合（`_cache/tag-stats/{slug}.json`，每个 tag 一个小文件）。
+ *
+ * 聚合缺失时（首次部署、还没跑过 rebuild）退化为**只算这个 tag**的实时查询 ——
+ * 仍然是真值，只是慢一点、且有 D1 成本。算完顺手写回 R2，下次就是纯缓存读。
+ * 实时查询也失败 → 返回 null，调用方必须据此**省略**对应的句子，绝不能编数字。
+ */
+export async function listTagStats(tagSlug: string): Promise<TagStatsEntry | null> {
+  const key = tagStatsKey(tagSlug);
+  const cached = await readAggregateCache<TagStatsEntry>(key);
+  if (cached) return cached;
+
+  // 兜底：聚合未重建 → 只算当前 tag
+  try {
+    const [modelRows, relatedRows, titleRows] = await Promise.all([
+      queryTagModelRows(tagSlug),
+      queryTagRelatedRows(tagSlug),
+      queryTagTitleRows(tagSlug),
+    ]);
+    const entry = assembleTagStats({ modelRows, relatedRows, titleRows })[tagSlug];
+    if (!entry) return null;
+    await writeAggregateCache(key, entry);
+    // 写完必须 invalidate：readAggregateCache 把 null 写进了 L1+L2，
+    // 不清掉的话接下来 5 分钟读到的还是 null（见 listAllTags 的同款注释）
+    await invalidateAggregateCache(key);
+    return entry;
+  } catch (e) {
+    console.warn('[queries] listTagStats fallback failed for', tagSlug, e);
+    return null;
+  }
+}
+
+/**
+ * 各 model 的共现 model 分布（发布时预计算）
+ *
+ * 语义：count = 与该 model 出现在同一条 prompt 上的其它 model 的共现次数。
+ */
+async function queryModelCoModelRows(): Promise<
+  { model: string; coModel: string; coName: string; count: number }[]
+> {
+  const d1 = await getD1();
+  const db = getDb(d1);
+  const coModelsT = alias(models, 'co_models');
+  const coPromptModels = alias(promptModels, 'co_prompt_models');
+  const rows = await db
+    .select({
+      model: models.slug,
+      coModel: coModelsT.slug,
+      coName: coModelsT.name,
+      count: sql<number>`count(*)`,
+    })
+    .from(promptModels)
+    .innerJoin(models, eq(promptModels.modelId, models.id))
+    .innerJoin(prompts, and(eq(prompts.id, promptModels.promptId), eq(prompts.isDraft, 0)))
+    .innerJoin(coPromptModels, eq(coPromptModels.promptId, promptModels.promptId))
+    .innerJoin(coModelsT, eq(coPromptModels.modelId, coModelsT.id))
+    .where(ne(coModelsT.slug, models.slug))
+    .groupBy(models.slug, coModelsT.slug, coModelsT.name)
+    .orderBy(desc(sql`count(*)`), models.slug);
+
+  return rows.map((r) => ({
+    model: r.model,
+    coModel: r.coModel,
+    coName: r.coName || MODELS_DICT[r.coModel]?.name || r.coModel,
+    count: Number(r.count),
+  }));
+}
+
+/** 组装 model → 共现 model 分布（纯函数，便于单测） */
+export function assembleModelCoModels(
+  rows: { model: string; coModel: string; coName: string; count: number }[],
+): ModelCoModelsCache {
+  const out: ModelCoModelsCache = {};
+  for (const r of rows) {
+    const list = out[r.model] ?? [];
+    list.push({ slug: r.coModel, name: r.coName, count: r.count });
+    out[r.model] = list;
+  }
+  return out;
+}
+
+/**
+ * 单个 model 的共现 model — model 页内容化用
+ *
+ * 读 R2 聚合（model-comodels.json）。缺失时返回空数组：
+ * model 页的「共现 model」只是导语里的一句，缺失就省略该句。
+ */
+export async function listModelCoModels(
+  modelSlug: string,
+): Promise<{ slug: string; name: string; count: number }[]> {
+  const cached = await readAggregateCache<ModelCoModelsCache>(AGG_CACHE_KEYS.modelCoModels);
+  return cached?.[modelSlug] ?? [];
+}
+
+
 /**
  * 单条 prompt 查询（按 slug）— 跨实例缓存版本
  *
@@ -616,6 +904,36 @@ export async function rebuildAllAggregateCaches(): Promise<void> {
   ]);
   await writeAggregateCache(AGG_CACHE_KEYS.relatedMap, relatedMap);
   await writeAggregateCache(AGG_CACHE_KEYS.adjacentMap, adjacentMap);
+
+  // 2026-10-22 内容页化：预计算 tag 全量统计 + model 共现 model
+  //
+  // 为什么必须预计算：tag 页正文里的数字必须是**全量真值**。
+  // 只用当前页 48 条现算，会把"本页计数"和"tag 总数"混在一起
+  // （实测：cinematic 5,018 条却渲染成 "covering 41 of the 5,018"）。
+  //
+  // 成本：+3 次全表聚合查询（重建时一次性，不是每次请求）+ N 个小 R2 文件写入。
+  // 运行时只读 R2 → **D1 查询数不增加**。
+  const [modelRows, relatedRows, titleRows, coModelRows] = await Promise.all([
+    queryTagModelRows(),
+    queryTagRelatedRows(),
+    queryTagTitleRows(),
+    queryModelCoModelRows(),
+  ]);
+  const tagStats = assembleTagStats({ modelRows, relatedRows, titleRows });
+  // 每个 tag 一个小文件（~2KB），读端几乎零成本。
+  // 分批写，避免一次 376 个并发 PUT 打爆 R2 限流。
+  const tagEntries = Object.entries(tagStats);
+  for (let i = 0; i < tagEntries.length; i += 20) {
+    await Promise.all(
+      tagEntries.slice(i, i + 20).map(([slug, entry]) =>
+        writeAggregateCache(tagStatsKey(slug), entry),
+      ),
+    );
+  }
+  await writeAggregateCache(
+    AGG_CACHE_KEYS.modelCoModels,
+    assembleModelCoModels(coModelRows),
+  );
 }
 
 /**

@@ -6,7 +6,7 @@ import { Footer } from '@/components/Footer';
 import { GridEngine } from '@/components/GridEngine';
 import { Pagination } from '@/components/Pagination';
 import { HEADER_TAG_LIMIT, LIST_DESCRIPTION_LIMIT } from '@/components/types';
-import { listAllTags, listPrompts } from '@/db/queries';
+import { listAllTags, listPrompts, listTagStats } from '@/db/queries';
 import { AGG_CACHE_KEYS, readAggregateCache, type CountsCache } from '@/db/aggregate-cache';
 import { PAGE_SIZE, TAG_PAGE_MAX_DEPTH, lastUsablePage, MIN_PAGE_ITEMS } from '@/lib/pagination';
 import {
@@ -14,7 +14,6 @@ import {
   buildTagFaq,
   buildTagIntro,
   buildFaqSchema,
-  extractWordStats,
 } from '@/lib/content-pages';
 import { SITE_URL } from '@/lib/site';
 
@@ -45,23 +44,20 @@ export async function TagPageView({ locale, tag, page }: Props) {
 
   // 该 tag 下的 prompts（不分 locale）
   // descriptionLimit：只下发摘要（卡片 UI 只显示 180 字符），复制全文时懒加载。
-  const [result, allTags, counts] = await Promise.all([
+  const [result, allTags, counts, tagStats] = await Promise.all([
     listPrompts({ tag, limit: PAGE_SIZE, offset, descriptionLimit: LIST_DESCRIPTION_LIMIT }),
     listAllTags(),
     readAggregateCache<CountsCache>(AGG_CACHE_KEYS.counts),
+    // 全量统计（model 分布 / 共现 tag / 标题词频）—— 发布时预计算落 R2，运行时零 D1。
+    // ⚠️ 2026-10-22 修正：原来这些是从**当前页 48 条**现算的，
+    //    拿去和 tag 总数比较就是错的（"covering 41 of the 5,018"）。
+    listTagStats(tag),
   ]);
   const tagItems = result.items;
 
-  // 该 tag 下的 model 分布
-  const modelSet = new Map<string, number>();
-  for (const p of tagItems) {
-    for (const m of p.models) {
-      modelSet.set(m.slug, (modelSet.get(m.slug) ?? 0) + 1);
-    }
-  }
-  const modelOptions = [...modelSet.entries()]
-    .map(([slug, count]) => ({ slug, name: slug, count }))
-    .sort((a, b) => b.count - a.count);
+  // 该 tag 下的 model 分布 —— **全量真值**（不是当前页的 48 条）
+  // 拿不到时留空数组：对应的导语/FAQ 整段省略，绝不拿本页计数冒充全量。
+  const modelOptions = tagStats?.models ?? [];
 
   // 全集 tagOptions（顶部 tag tabs，不分 locale）—— 必须截断，见文件头注释 2
   const allTagsSliced = allTags.slice(0, HEADER_TAG_LIMIT);
@@ -84,21 +80,13 @@ export async function TagPageView({ locale, tag, page }: Props) {
   // 关键成本约束：下面两块内容**全部复用已经加载进内存的数据**，
   // 不新增任何 D1 查询 —— related tags 来自本页已 hydrate 的 tagItems，
   // model 分布同理。HTML 增量约 1~2KB / 页。
-  const relatedTagSet = new Map<string, number>();
-  for (const p of tagItems) {
-    for (const tt of p.tags) {
-      if (tt.slug === tag) continue;
-      relatedTagSet.set(tt.slug, (relatedTagSet.get(tt.slug) ?? 0) + 1);
-    }
-  }
-  const relatedTags = [...relatedTagSet.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 24)
-    .map(([slug, coCount]) => ({
-      slug,
-      count: allTags.find((x) => x.slug === slug)?.count ?? 0,
-      coCount,
-    }));
+  // 相关 tag —— 按**全量共现次数**排序（不是当前页 48 条的共现）
+  // count 用全站该 tag 的 prompt 总数（UI 上显示的那个数），coCount 是共现次数
+  const relatedTags = (tagStats?.related ?? []).slice(0, 24).map((rt) => ({
+    slug: rt.slug,
+    count: allTags.find((x) => x.slug === rt.slug)?.count ?? 0,
+    coCount: rt.count,
+  }));
 
   const modelNames = modelOptions.slice(0, 3).map((m) => m.name);
   // 2026-10-15：主力 model 交叉链（tag → model 是 sitemap 里两类主体之间的唯一连接，
@@ -108,33 +96,20 @@ export async function TagPageView({ locale, tag, page }: Props) {
 
   // ---- 2026-10-22：内容页化 ----
   // 把 tag 页从「筛选列表」升级成「内容页」：导语 + FAQ + 结构化数据。
-  // 数据全部来自本页已加载的 tagItems / modelOptions / allTags / counts，
+  // 数据全部来自本页已加载的 tagStats（全量统计，发布时预计算）+ allTags + counts，
   // **零新增 D1 查询**（新增查询 = 新增 rows read = 关联成本）。
   // 详见 src/lib/content-pages.ts 的设计铁律。
-  const tagWords = extractWordStats(
-    tagItems.map((p) => p.title),
-    8,
-    // 排除本页自己的主题词：tag 页叫 cinematic 时，
-    // 导语写"最常见的是 cinematic"是废话，浪费导语里最宝贵的位置。
-    [tag, displayName],
-  );
   const introParagraphs = buildTagIntro({
     tagName: displayName,
     count: result.total,
     total: totalCount,
-    topModels: topModels.map((m) => ({ slug: m.slug, name: m.name, count: m.count })),
-    words: tagWords,
+    stats: tagStats,
   });
   const faqItems = buildTagFaq({
     tagName: displayName,
     count: result.total,
     total: totalCount,
-    topModels: topModels.map((m) => ({ slug: m.slug, name: m.name, count: m.count })),
-    topTags: relatedTags.map((rt) => ({
-      slug: rt.slug,
-      name: allTags.find((x) => x.slug === rt.slug)?.name ?? rt.slug,
-      count: rt.count,
-    })),
+    stats: tagStats,
   });
 
   // 结构化数据只在第 1 页输出：

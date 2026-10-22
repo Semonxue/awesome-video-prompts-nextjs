@@ -36,7 +36,33 @@ export const AGG_CACHE_KEYS = {
    * slug → { prev: {slug,title,coverUrl} | null, next: {slug,title,coverUrl} | null }
    */
   adjacentMap: '_cache/adjacent-map.json',
+  /**
+   * 各 tag 的全量统计（2026-10-22 内容页化）—— **每个 tag 一个文件**
+   * `_cache/tag-stats/{slug}.json` → { models, related, words }
+   *
+   * 为什么需要：tag 页的 model 分布/共现 tag/词频如果只从**当前页 48 条**现算，
+   * 拿去和 tag 总数比较就是错的（实测 bug：cinematic 5,018 条，
+   * 却写成 "seedance25 covering 41 of the 5,018" —— 41 是当前页的计数）。
+   * 页面正文里的数字必须是全量真值。
+   *
+   * 为什么不是一个总文件：376 个 tag × (16 model + 24 related + 8 word)
+   * ≈ 700KB，单文件意味着每次缓存失效都要 parse 700KB。
+   * 拆成每 tag ~2KB 的小文件后，读端几乎零成本。
+   *
+   * 零运行时 D1：全部在 rebuildAllAggregateCaches（publish/unpublish/delete 时）算好落 R2。
+   */
+  tagStatsPrefix: '_cache/tag-stats/',
+  /**
+   * 各 model 的共现 model 分布（2026-10-22 内容页化）
+   * model slug → [{slug, name, count}]（与该 model 出现在同一条 prompt 上的其它 model）
+   */
+  modelCoModels: '_cache/model-comodels.json',
 } as const;
+
+/** 单个 tag 的统计文件 key */
+export function tagStatsKey(slug: string): string {
+  return `${AGG_CACHE_KEYS.tagStatsPrefix}${slug}.json`;
+}
 
 /** counts.json 结构 */
 export interface CountsCache {
@@ -47,6 +73,26 @@ export interface CountsCache {
   /** model slug -> count */
   models: Record<string, number>;
 }
+
+/**
+ * tag-stats.json 结构（2026-10-22 内容页化）
+ *
+ * 每个 tag 的**全量**统计。三个维度都必须是真值：
+ * - models：该 tag 下所有 prompt 的 model 分布（不是当前页 48 条的）
+ * - related：与该 tag 共现最多的其它 tag
+ * - words：该 tag 下所有 prompt 标题的词频（已剔除停用词与该 tag 自身的主题词）
+ */
+export interface TagStatsEntry {
+  models: { slug: string; name: string; count: number }[];
+  related: { slug: string; name: string; count: number }[];
+  words: { word: string; count: number }[];
+}
+
+/** tag-stats.json 结构：tag slug → 全量统计 */
+export type TagStatsCache = Record<string, TagStatsEntry>;
+
+/** model-comodels.json 结构：model slug → 与其共现的其它 model */
+export type ModelCoModelsCache = Record<string, { slug: string; name: string; count: number }[]>;
 
 /** adjacent-map.json 的 prev/next 条目（仅 3 个导航字段，不含完整 PromptCardData） */
 export interface AdjacentEntry {

@@ -44,6 +44,26 @@ export interface ModelCount {
 }
 
 /**
+ * 类别页的全量统计
+ *
+ * 结构与 `src/db/aggregate-cache.ts` 的 `TagStatsEntry` 一致，
+ * 但在这里独立声明 —— 本文件必须保持"无 D1 / 无 CF SDK 依赖"才能单测。
+ * TypeScript 的结构化类型让 db 层的对象可以直接传进来。
+ *
+ * ⚠️ 这里的每个 count 都必须是**全量真值**（该 tag/model 下所有 prompt 的统计），
+ *    不能是"当前页 48 条"的现算值 —— 拿本页计数去和 tag 总数比较就是错的
+ *    （实测 bug：cinematic 5,018 条却写成 "covering 41 of the 5,018"）。
+ */
+export interface CategoryStats {
+  /** 该类别下所有 prompt 的 model 分布 */
+  models: { slug: string; name: string; count: number }[];
+  /** 与该类别共现最多的其它类别 */
+  related: { slug: string; name: string; count: number }[];
+  /** 该类别下所有 prompt 标题的词频 */
+  words: { word: string; count: number }[];
+}
+
+/**
  * 描述词分布（用页面内 prompts 的实际词频算出的"这个类别最常见什么"）
  *
  * ⚠️ 只统计**有信息量**的词：长度 ≥ 4、纯字母、不在停用词表里。
@@ -123,10 +143,9 @@ export function buildTagIntro(params: {
   tagName: string;
   count: number;
   total: number;
-  topModels: ModelCount[];
-  words: WordStat[];
+  stats: CategoryStats | null;
 }): string[] {
-  const { tagName, count, total, topModels, words } = params;
+  const { tagName, count, total, stats } = params;
   const paragraphs: string[] = [];
 
   // 第 1 段：规模与地位
@@ -138,6 +157,8 @@ export function buildTagIntro(params: {
   );
 
   // 第 2 段：最常见什么（词频事实）
+  // ⚠️ 统计不可用时**整段省略** —— 宁可少一句，也不能拿"当前页"的词频冒充全量。
+  const words = stats?.words ?? [];
   if (words.length > 0) {
     const wordList = words.slice(0, 5).map((w) => w.word);
     const last = wordList[wordList.length - 1];
@@ -151,18 +172,20 @@ export function buildTagIntro(params: {
   }
 
   // 第 3 段：用什么模型做（分布事实）
-  if (topModels.length > 0) {
-    const modelList = topModels.slice(0, 4);
+  const models = stats?.models ?? [];
+  if (models.length > 0) {
+    const modelList = models.slice(0, 4);
     const names = modelList.map((m) => m.name);
     const last = names[names.length - 1];
     const joined =
       names.length === 1 ? last : `${names.slice(0, -1).join(', ')} and ${last}`;
-    const topShare = count > 0 ? (modelList[0].count / count) * 100 : 0;
+    const top = modelList[0];
+    const topShare = count > 0 ? (top.count / count) * 100 : 0;
     paragraphs.push(
       `The models behind these prompts are ${joined}` +
         (topShare >= 20
-          ? `, with ${modelList[0].name} alone accounting for ${topShare.toFixed(0)}% of them.`
-          : '.'),
+          ? `, and ${top.count.toLocaleString()} of these prompts (${topShare.toFixed(0)}%) were generated with ${top.name}.`
+          : `, with ${top.name} the most used of them at ${top.count.toLocaleString()} prompts.`),
     );
   }
 
@@ -181,9 +204,12 @@ export function buildModelIntro(params: {
   count: number;
   total: number;
   topTags: TagCount[];
-  topModels: ModelCount[];
+  /** 与该 model 出现在同一条 prompt 上的其它 model（全量真值） */
+  coModels: ModelCount[];
+  /** 该 model 在全站的用量排名（真值，来自全站 model 计数） */
+  modelRank: { rank: number; totalModels: number } | null;
 }): string[] {
-  const { modelName, count, total, topTags, topModels } = params;
+  const { modelName, count, total, topTags, coModels, modelRank } = params;
   const paragraphs: string[] = [];
 
   const share = total > 0 ? (count / total) * 100 : 0;
@@ -193,7 +219,7 @@ export function buildModelIntro(params: {
       : `All ${count.toLocaleString()} ${modelName} video prompts in our library, collected in one place. Every card shows the clip it was generated from and the model it came from; one click copies the prompt, and the title opens the entry page where the full text is written out.`,
   );
 
-  // 第 2 段：这个模型下最常见的风格（tag 分布事实）
+  // 第 2 段：这个模型下最常见的风格（tag 分布事实 —— listModelTagDistribution 是全量）
   if (topTags.length > 0) {
     const tagList = topTags.slice(0, 5);
     const names = tagList.map((t) => t.name);
@@ -205,15 +231,23 @@ export function buildModelIntro(params: {
     );
   }
 
-  // 第 3 段：与其他模型的关系（分布事实）
-  if (topModels.length > 1) {
-    const others = topModels.slice(1, 4);
+  // 第 3 段：与其它 model 的关系
+  // ⚠️ 两个分支都必须有真值支撑：
+  //   - 共现 model 存在 → 写共现（同一批 prompt 上用过哪些 model）
+  //   - 共现 model 为空（实测：绝大多数 prompt 只挂一个 model）→ 改写全站用量排名
+  //   - 两者都没有 → 整段省略
+  if (coModels.length > 0) {
+    const others = coModels.slice(0, 3);
     const names = others.map((m) => m.name);
     const last = names[names.length - 1];
     const joined =
       names.length === 1 ? last : `${names.slice(0, -1).join(', ')} and ${last}`;
     paragraphs.push(
-      `For prompts that need more than one model — the same subject restyled, or a shot that must match an existing clip — the rest of our library is built around ${joined}. The most-used models on this site are listed under the model tabs above.`,
+      `For prompts that need more than one model — the same subject restyled, or a shot that must match an existing clip — ${joined} are the ones most often generated alongside ${modelName}.`,
+    );
+  } else if (modelRank) {
+    paragraphs.push(
+      `By sheer volume it sits ${ordinal(modelRank.rank)} of the ${modelRank.totalModels} models we track, with ${count.toLocaleString()} published prompts of its own.`,
     );
   }
 
@@ -226,6 +260,22 @@ export interface FaqItem {
   answer: string;
 }
 
+/** 英文序数词（1st / 2nd / 3rd / 4th …），用于"全站第 N 名"这类排名表述 */
+export function ordinal(n: number): string {
+  const rem100 = n % 100;
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+}
+
 /**
  * 生成 FAQ（tag 页用）
  *
@@ -236,10 +286,9 @@ export function buildTagFaq(params: {
   tagName: string;
   count: number;
   total: number;
-  topModels: ModelCount[];
-  topTags: TagCount[];
+  stats: CategoryStats | null;
 }): FaqItem[] {
-  const { tagName, count, total, topModels, topTags } = params;
+  const { tagName, count, total, stats } = params;
   const faq: FaqItem[] = [];
 
   faq.push({
@@ -251,15 +300,17 @@ export function buildTagFaq(params: {
         : '.'),
   });
 
-  if (topModels.length > 0) {
-    const m = topModels[0];
+  // 统计不可用 → 省略该问答（不能编数字）
+  const models = stats?.models ?? [];
+  if (models.length > 0) {
+    const m = models[0];
     const share = count > 0 ? (m.count / count) * 100 : 0;
     faq.push({
       question: `Which model is most used for ${tagName} prompts?`,
       answer:
         `${m.name} is the most used model for this category, covering ${m.count.toLocaleString()} of the ${count.toLocaleString()} ${tagName} prompts (${share.toFixed(0)}%).` +
-        (topModels.length > 1
-          ? ` After it come ${topModels
+        (models.length > 1
+          ? ` After it come ${models
               .slice(1, 3)
               .map((x) => x.name)
               .join(' and ')}.`
@@ -267,14 +318,18 @@ export function buildTagFaq(params: {
     });
   }
 
-  if (topTags.length > 0) {
-    const related = topTags.slice(0, 3).map((t) => t.name);
-    const last = related[related.length - 1];
+  const related = stats?.related ?? [];
+  if (related.length > 0) {
+    const relatedNames = related.slice(0, 3).map((t) => t.name);
+    const last = relatedNames[relatedNames.length - 1];
     const joined =
-      related.length === 1 ? last : `${related.slice(0, -1).join(', ')} and ${last}`;
+      relatedNames.length === 1
+        ? last
+        : `${relatedNames.slice(0, -1).join(', ')} and ${last}`;
+    const top = related[0];
     faq.push({
       question: `Which styles pair well with ${tagName}?`,
-      answer: `The tags that most often appear alongside ${tagName} in the same prompt are ${joined}. Following those links is the fastest way to move from a look you like to the specific prompts that achieve it.`,
+      answer: `The tags that most often appear alongside ${tagName} in the same prompt are ${joined} — ${top.name} alone shares a prompt with ${top.count.toLocaleString()} of them. Following those links is the fastest way to move from a look you like to the specific prompts that achieve it.`,
     });
   }
 
@@ -295,9 +350,12 @@ export function buildModelFaq(params: {
   count: number;
   total: number;
   topTags: TagCount[];
-  topModels: ModelCount[];
+  /** 与该 model 出现在同一条 prompt 上的其它 model（全量真值） */
+  coModels: ModelCount[];
+  /** 该 model 在全站的用量排名（真值） */
+  modelRank: { rank: number; totalModels: number } | null;
 }): FaqItem[] {
-  const { modelName, count, total, topTags, topModels } = params;
+  const { modelName, count, total, topTags, coModels, modelRank } = params;
   const faq: FaqItem[] = [];
 
   faq.push({
@@ -320,14 +378,21 @@ export function buildModelFaq(params: {
     });
   }
 
-  if (topModels.length > 1) {
-    const others = topModels.slice(1, 3).map((m) => m.name);
-    const last = others[others.length - 1];
+  // 聚合不可用 → 省略该问答（不能编数字）
+  if (coModels.length > 0) {
+    const others = coModels.slice(0, 3);
+    const names = others.map((m) => m.name);
+    const last = names[names.length - 1];
     const joined =
-      others.length === 1 ? last : `${others.slice(0, -1).join(', ')} and ${last}`;
+      names.length === 1 ? last : `${names.slice(0, -1).join(', ')} and ${last}`;
     faq.push({
       question: `Which other models should I look at for ${modelName}?`,
-      answer: `For the same subject rendered a different way, the most common alternatives in our library are ${joined}. Every model page lists the tags that go with it, so you can compare the same style across models.`,
+      answer: `For the same subject rendered a different way, the models most often generated alongside ${modelName} in our library are ${joined}. Every model page lists the tags that go with it, so you can compare the same style across models.`,
+    });
+  } else if (modelRank) {
+    faq.push({
+      question: `How does ${modelName} compare with the other models here?`,
+      answer: `By published prompt count it is the ${ordinal(modelRank.rank)} most used of the ${modelRank.totalModels} models we track, with ${count.toLocaleString()} prompts. Each model page lists the styles that go with it, so you can compare the same look across models.`,
     });
   }
 

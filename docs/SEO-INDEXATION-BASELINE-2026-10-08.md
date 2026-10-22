@@ -256,6 +256,7 @@ curl -sS --max-time 40 "https://awesomevideoprompts.com/en/tags" -o tagidx.html
 | 2026-10-08 | **84** | 37,374 | 4,265 | 220 | 13,053 | 19,530 | **4,743** | ❌ 未取到 | 基线，改动前 |
 | 2026-10-11 | 84 | 37.4K | 4,265 | 220 | 13,053 | 19,530 | 未重测 | ❌ 未取到 | **索引类报告全部无变化**（报告数据日期早于改动） |
 | 2026-10-15 | **21** | 37.8K | **3,822** | 202 | 13,046 | 20,421 | 未重测 | ❌ 未取到 | **Indexed -63，但 404 -443；见下方解读** |
+| 2026-10-22 | **3** | 24.6K | **3,692** | 199 | 13,056 | **7,414** | 未重测 | ≈177M/天 | **en-only 收敛生效**：zh/ja 退出 Discovered 桶（−64%，reason 转 Passed）；Indexed 已是真实值 |
 
 ### 2026-10-15 复测（部署后第 7 天）
 
@@ -433,3 +434,142 @@ CPU 181M ms/月 vs 30M 免费额度 → 约 **$3/月超额**，是唯一瓶颈
 2. 手动跑 `curl -X POST -H "Authorization: Bearer $ADMIN_SECRET" \
    https://awesomevideoprompts.com/api/admin/rebuild-aggregates`
    让 related 6→12 生效（`.dev.vars` 的 secret 与线上不一致，未做）
+
+---
+
+## 2026-10-22 复测 + model/tag 页内容化
+
+### 一、GSC 复测（域名属性 `sc-domain:awesomevideoprompts.com`）
+
+> ⚠️ GSC URL 必须用 `resource_id=sc-domain%3Aawesomevideoprompts.com`（域名属性），
+> 用 `site%3A` 一律 400/404。
+
+| 指标 | 10/08 | 10/15 | 10/22 | Δ(10/15→10/22) | 判断 |
+|---|---|---|---|---|---|
+| **Indexed** | 84 | 21 | **3** | −18 | ⚠️ 继续下滑，但已是**真实值**（见 10-15 解读） |
+| Not indexed 合计 | 37,374 | 37.8K | **24.6K** | −13.2K | ✅ zh/ja 退出 Discovered 桶 |
+| **Crawled - not indexed** | 13,053 | 13,046 | **13,056** | +10 | ⚠️ **纹丝不动**（唯一撬得动的桶） |
+| Not found (404) | 4,265 | 3,822 | **3,692** | −130 | ✅ |
+| Soft 404 | 161 | 173 | **171** | −2 | ✅ |
+| Excluded by noindex | 220 | 202 | **199** | −3 | ✅ |
+| **Discovered - not indexed** | 19,530 | 20,421 | **7,414** | **−13,007（−64%）** | ✅ **reason 状态转 Passed** |
+| Page with redirect | 135 | 106 | **87** | −19 | ✅ |
+| Server error (5xx) | 8 | 8 | **8** | 0 | ✅ 无回归 |
+| Blocked by robots.txt | 2 | 2 | **2** | 0 | ✅ |
+| Duplicate canonical | 0 | 0 | **0** | 0 | ✅ |
+
+**Performance（3 个月）**：178 曝光 / 6 点击 / CTR 3.4% / 平均位置 6.8。
+有曝光的 query 仍然只有 **2 个**。
+
+**Links**：
+- 外链 **27 条**，来自 4 个站：x.com 23 / github.com 2 / jyang.top 1 / twstalker.com 1
+  → **全部指向首页**，没有任何一条指向具体的 prompt / model / tag 页
+- 内链 17 条 → **全部指向 `/en`**
+
+**Sitemaps**：`sitemap.xml` Status=Success，Discovered pages **420**（10/15 是 1,083 → 10/08 是 21,429），
+最后读取时间 Oct 20。
+
+### 二、判断：en-only 收敛生效了，但那是「收敛」不是「增长」
+
+`Discovered - not indexed` 从 20,421 掉到 7,414（**−64%**），且 GSC 把这个 reason 的状态
+从「未处理」变成 **Passed** —— 这正是 `SEO_INDEXABLE_LOCALES = ['en']`（zh/ja 走 `noindex,follow`）
+想要的效果：**站点不再以三种语言形态稀释自己的可发现性**。
+
+但方向必须说清楚：
+
+- Discovered 桶下降，是因为**URL 被移出了可发现集合**，不是因为它们被索引了。
+- Indexed 3 这个数字 —— 10/08 的 84 里绝大部分是旧站 Hugo 遗留 URL，
+  **真实属于当前站点的 indexed 一直是个位数**（10-15 那轮已实测确认）。
+- **Crawled - not indexed 13,056，7 天只动了 +10。** 这个桶是 Google **爬过之后主动拒绝**的页面，
+  与可发现性无关，与站点有没有内容也基本无关 —— 唯一能撬动它的是外部权重与真实搜索需求。
+
+所以三条结论：
+
+1. **可发现性收敛完成** ✅ —— 站点现在只以 `/en` 的形态面对 Google
+2. **内容质量门槛仍未跨过** ⚠️ —— 内部优化（内链、分页、结构化数据）对这 13K 无效
+3. **外链是唯一的杠杆** —— 27 条外链全指首页，没有一条指向具体内容页（人力活，见 §6.1）
+
+### 三、本轮做了什么：model / tag 页内容化（commit 9ea5a8f）
+
+把 model 页和 tag 页从「筛选列表」升级成「内容页」。业界调研见
+`docs/research-model-tag-pages-as-content-pages.md`（实测了 OpenArt / Replicate / fal.ai /
+HuggingFace / AIMLAPI / Google Veo 官方 guide / Sora guide / Kling 文档 等 10+ 站点）。
+
+**四条设计铁律**（写在 `src/lib/content-pages.ts` 文件头）：
+
+1. **零虚构**。调研建议的「参数规格表（时长/分辨率/参考输入数）」**故意没做** ——
+   本站 `data/models.yaml` 只有 `name` 字段，**没有任何规格数据源**，
+   写出来就是编造，直接踩 Google `scaled content abuse` 红线。
+   只写能从 D1 实际数据算出来的事实。
+2. **零新增 D1 查询**。所有输入都来自调用方已加载的数据（本页 items / counts 聚合 / tags 聚合），
+   新增查询 = 新增 rows read，而 D1 是本站唯一在花钱项的关联成本。
+3. **每页内容必须不同**。内容由该页自己的数据（数量、占比、分布、排名）决定，
+   两个不同的 tag 页不会有相同的导语与 FAQ。
+   **绝不使用「固定模板句 + 变量填充」** —— 那是 scaled content 的典型形态。
+4. **纯函数、可单测**。`src/lib/content-pages.ts`（24 项测试），不需要 D1 binding。
+
+**接入点**：
+
+| 页面 | 导语 | FAQ | 结构化数据 |
+|---|---|---|---|
+| tag 页 `/en/tags/{tag}` | ✅ 规模占比 + 标题词频 + model 分布 | ✅ 4 条 | ✅ CollectionPage/ItemList + FAQPage |
+| model 页 `/en/models/{model}` | ✅ 规模占比 + tag 分布 + 相关 model | ✅ 4 条 | ✅ CollectionPage/ItemList + FAQPage |
+
+**门控（防 doorway / scaled content abuse）**：
+
+- tag 页**只在第 1 页**输出内容与结构化数据 —— 分页页 `/p/2` 与第 1 页内容重叠，
+  输出会造成实质重复（Google `doorway abuse`：
+  "substantially similar pages that are closer to search results than a clearly defined hierarchy"）
+- model 页**只在主变体 + 第 1 页**输出 —— 带 `?tag=` 筛选的变体页与主页面高度重叠，同样不输出
+- tag 页导语**排除本页自己的主题词**（`extractWordStats` 的 `excludeWords`）——
+  tag 页叫 `cinematic` 时写「最常见的是 cinematic」是废话
+
+**文案准确性自查**（零虚构铁律的落地）：初稿里写了「including the negative prompt and the
+generation settings」「so what you paste is always the full version」——
+核实代码后发现**站内没有 `negative_prompt` 字段**（`grep -rn "negative" src/db/ data/` 无命中），
+且 `/api/prompt/[slug]` 网络失败时会降级成摘要。已全部改写成可验证的表述。
+
+### 四、踩坑：Next.js 15 支持窗口 10-21 到期，pipeline 连续失败两次
+
+10-22 推了 2 个 commit，**pipeline 全部 failure**（`2e340c6` 与 `9ea5a8f`），
+线上跑的还是 10-18 那次部署（`39126538420`）。
+
+失败原因与本次改动**完全无关**：
+
+```
+ERROR Next.js version 15.5.19 is not supported by the Next.js team.
+Major versions are supported for 2 years from their release date.
+If you want to proceed anyway, use the --dangerouslyUseUnsupportedNextVersion flag.
+```
+
+Next.js 官方支持窗口 = **major 首次发布起 2 年**：Next 15 首发 2024-10-21 → **到期 2026-10-21**。
+今天是 10-22，**刚好过线一天**。10-18 的部署还能过，10-22 就过不去了 —— 这是时间炸弹，不是回归。
+
+**关键细节**：OpenNext 的判定只看 **major 的首次发布日期**，不看 patch 版本
+（源码 `@opennextjs/aws/dist/build/helper.js` 的 `NEXT_RELEASE_DATES`），
+所以**换任何一个 15.x patch 都救不了**。只有两个选项：
+
+| 方案 | 说明 | 状态 |
+|---|---|---|
+| ① `build:cf` 加 `--dangerouslyUseUnsupportedNextVersion` | 继续用 Next 15，构建时打印 warning 但不 exit | ✅ **本次采用**（commit `a8dabf1`） |
+| ② 升级 Next 16 | Next 16 首发 2025-10-21，支持到 2027-10-21 | ⏳ 独立大工程，需单独立项 |
+
+已本地验证：`npm run build:cf` 成功产出 `.open-next/worker.js`。
+
+> ⚠️ 选 ① 的代价要记清楚：**Next 15 从 2026-10-21 起不再有官方安全补丁**。
+> 本项目部署在 Cloudflare Workers 上，攻击面主要在 Next 的请求解析/路由层，
+> 但这是**已知且被接受的风险**，升级 Next 16 应该进 backlog。
+
+### 五、本轮尚未做 / 下一步
+
+1. **外链 outreach** —— 10-18 文档 §6.1 判定为「唯一可能让 Indexed 离开个位数」的动作。
+   当前 27 条外链**全指首页**，需要的是指向具体 prompt / model / tag 页的外链。纯人力，未启动。
+2. **RSC BYPASS 修复** —— 已搁置（用户判断"会不会太复杂"）。方案 A/B/C 在
+   `docs/CPU-DIAGNOSIS-2026-10-22.md` §4。它是 CPU 优化，与收录量无直接关系。
+3. **`related` 6→12** —— 仍需用户手动跑（第 6 次提醒）：
+   ```bash
+   curl -X POST -H "Authorization: Bearer $ADMIN_SECRET" \
+     https://awesomevideoprompts.com/api/admin/rebuild-aggregates
+   ```
+   （`.dev.vars` 的 `NEW_SITE_ADMIN_SECRET` 与线上 CF secret 不一致）
+4. **Next 16 升级** —— 见上文方案 ②。

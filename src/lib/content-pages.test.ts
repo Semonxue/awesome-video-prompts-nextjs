@@ -73,15 +73,18 @@ describe('buildTagIntro', () => {
     tagName: 'cinematic',
     count: 4985,
     total: 7374,
-    topModels: [
-      { slug: 'seedance2', name: 'Seedance 2.0', count: 3200 },
-      { slug: 'veo3', name: 'Veo 3', count: 900 },
-    ],
-    words: [
-      { word: 'cinematic', count: 30 },
-      { word: 'portrait', count: 20 },
-      { word: 'lighting', count: 15 },
-    ],
+    stats: {
+      models: [
+        { slug: 'seedance2', name: 'Seedance 2.0', count: 3200 },
+        { slug: 'veo3', name: 'Veo 3', count: 900 },
+      ],
+      related: [{ slug: 'portrait', name: 'portrait', count: 300 }],
+      words: [
+        { word: 'cinematic', count: 30 },
+        { word: 'portrait', count: 20 },
+        { word: 'lighting', count: 15 },
+      ],
+    },
   };
 
   it('导语包含数量与占比（数据事实）', () => {
@@ -103,21 +106,41 @@ describe('buildTagIntro', () => {
 
   it('不同 tag 页的导语必须不同（防 scaled content abuse）', () => {
     const a = buildTagIntro(base).join(' ');
-    const b = buildTagIntro({ ...base, tagName: 'portrait', count: 1041, topModels: [] }).join(' ');
+    const b = buildTagIntro({
+      ...base,
+      tagName: 'portrait',
+      count: 1041,
+      stats: { ...base.stats, models: [] },
+    }).join(' ');
     expect(a).not.toBe(b);
     expect(b).not.toContain('4,985');
   });
 
   it('没有词频数据时只输出规模段，不编造内容', () => {
-    const paras = buildTagIntro({ ...base, words: [] });
+    const paras = buildTagIntro({ ...base, stats: { ...base.stats, words: [] } });
     expect(paras).toHaveLength(2); // 规模 + 模型
     expect(paras.join(' ')).not.toContain('undefined');
   });
 
   it('没有模型数据时不输出模型段（不写空句子）', () => {
-    const paras = buildTagIntro({ ...base, topModels: [] });
+    const paras = buildTagIntro({ ...base, stats: { ...base.stats, models: [] } });
     expect(paras).toHaveLength(2);
     expect(paras.join(' ')).not.toContain('are ,');
+  });
+
+  it('统计整体缺失时只输出规模段，绝不编数字', () => {
+    const paras = buildTagIntro({ ...base, stats: null });
+    expect(paras).toHaveLength(1);
+    expect(paras[0]).toContain('4,985');
+    expect(paras.join(' ')).not.toContain('undefined');
+  });
+
+  it('model 计数必须与传入的全量计数一致（2026-10-22 口径修正）', () => {
+    // 回归测试：曾经用「当前页 48 条」的计数去比 tag 总数，
+    // 线上渲染成 "covering 41 of the 5,018" —— 41 是本页计数，5,018 是全量。
+    const paras = buildTagIntro(base).join(' ');
+    expect(paras).toContain('3,200');
+    expect(paras).not.toContain('41');
   });
 });
 
@@ -130,10 +153,11 @@ describe('buildModelIntro', () => {
       { slug: 'cinematic', name: 'cinematic', count: 1041 },
       { slug: 'action', name: 'action', count: 620 },
     ],
-    topModels: [
-      { slug: 'seedance2', name: 'Seedance 2.0', count: 4194 },
+    coModels: [
       { slug: 'veo3', name: 'Veo 3', count: 300 },
+      { slug: 'kling4', name: 'Kling 4.0', count: 120 },
     ],
+    modelRank: { rank: 3, totalModels: 32 },
   };
 
   it('导语包含数量与占比', () => {
@@ -155,9 +179,28 @@ describe('buildModelIntro', () => {
     expect(paras).not.toMatch(/\b(fps|4k|1080p|720p)\b/i);
   });
 
+  it('没有共现 model 时改用全站排名（真值），而不是留空或编造', () => {
+    const paras = buildModelIntro({ ...base, coModels: [] });
+    expect(paras).toHaveLength(3); // 规模 + 风格 + 排名
+    expect(paras[2]).toContain('3rd');
+    expect(paras[2]).toContain('32');
+  });
+
+  it('既无共现又无排名时省略该段（不编造）', () => {
+    const paras = buildModelIntro({ ...base, coModels: [], modelRank: null });
+    expect(paras).toHaveLength(2); // 规模 + 风格
+    expect(paras.join(' ')).not.toContain('undefined');
+  });
+
   it('不同 model 页导语不同', () => {
     const a = buildModelIntro(base).join(' ');
-    const b = buildModelIntro({ ...base, modelName: 'Veo 3', count: 97, topTags: [] }).join(' ');
+    const b = buildModelIntro({
+      ...base,
+      modelName: 'Veo 3',
+      count: 97,
+      topTags: [],
+      coModels: [],
+    }).join(' ');
     expect(a).not.toBe(b);
   });
 });
@@ -167,8 +210,11 @@ describe('buildTagFaq', () => {
     tagName: 'cinematic',
     count: 4985,
     total: 7374,
-    topModels: [{ slug: 'seedance2', name: 'Seedance 2.0', count: 3200 }],
-    topTags: [{ slug: 'portrait', name: 'portrait', count: 300 }],
+    stats: {
+      models: [{ slug: 'seedance2', name: 'Seedance 2.0', count: 3200 }],
+      related: [{ slug: 'portrait', name: 'portrait', count: 300 }],
+      words: [],
+    },
   };
 
   it('FAQ 至少 3 条且每条都有问答', () => {
@@ -186,6 +232,20 @@ describe('buildTagFaq', () => {
     expect(faq[0].answer).toContain('7,374');
   });
 
+  it('统计缺失时省略依赖统计的问答，只保留规模与用法', () => {
+    const faq = buildTagFaq({ ...base, stats: null });
+    expect(faq).toHaveLength(2);
+    expect(faq[0].answer).toContain('4,985');
+    expect(JSON.stringify(faq)).not.toContain('undefined');
+  });
+
+  it('FAQ 里的 model 计数必须是全量计数（2026-10-22 口径修正）', () => {
+    const faq = buildTagFaq(base);
+    const modelFaq = faq.find((f) => f.question.includes('most used'));
+    expect(modelFaq?.answer).toContain('3,200');
+    expect(modelFaq?.answer).toContain('4,985');
+  });
+
   it('不同 tag 页的 FAQ 不同', () => {
     const a = JSON.stringify(buildTagFaq(base));
     const b = JSON.stringify(buildTagFaq({ ...base, tagName: 'portrait', count: 1041 }));
@@ -199,10 +259,11 @@ describe('buildModelFaq', () => {
     count: 4194,
     total: 7374,
     topTags: [{ slug: 'cinematic', name: 'cinematic', count: 1041 }],
-    topModels: [
-      { slug: 'seedance2', name: 'Seedance 2.0', count: 4194 },
+    coModels: [
       { slug: 'veo3', name: 'Veo 3', count: 300 },
+      { slug: 'kling4', name: 'Kling 4.0', count: 120 },
     ],
+    modelRank: { rank: 3, totalModels: 32 },
   };
 
   it('FAQ 包含数量问答与主力风格问答', () => {
@@ -210,6 +271,18 @@ describe('buildModelFaq', () => {
     expect(faq[0].question).toContain('Seedance 2.0');
     expect(faq[0].answer).toContain('4,194');
     expect(faq.some((f) => f.answer.includes('cinematic'))).toBe(true);
+  });
+
+  it('没有共现 model 时改用排名问答', () => {
+    const faq = buildModelFaq({ ...base, coModels: [] });
+    expect(faq.some((f) => f.question.includes('Which other models'))).toBe(false);
+    expect(faq.some((f) => f.question.includes('compare'))).toBe(true);
+    expect(faq.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('既无共现又无排名时省略排名问答', () => {
+    const faq = buildModelFaq({ ...base, coModels: [], modelRank: null });
+    expect(faq.some((f) => f.question.includes('compare'))).toBe(false);
   });
 
   it('不同 model 页 FAQ 不同', () => {
