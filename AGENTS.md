@@ -24,6 +24,48 @@
 
 **踩坑实录（2026-08-15）**：只跑 `npm run build` 不跑 `build:cf` → `.open-next/` 不更新 → 部署的是旧 worker → 改了等于没改、D1 cost 反而涨。
 
+## 类别页内容化的数据口径铁律（2026-10-22）
+
+model 页 / tag 页已经做成「内容页」（导语 + FAQ + CollectionPage/ItemList + FAQPage）。
+实现见 `src/lib/content-pages.ts`（纯函数）+ `src/db/queries.ts` 的统计聚合。
+
+**铁律：正文里的每个数字必须是「全量真值」，不能是「当前页现算」。**
+
+2026-10-22 上线当天就踩了这个坑：tag 页的 model 分布是从**当前页 48 条**现算的，
+却拿去和 tag 总数比较，线上渲染成：
+
+    "seedance25 covering 41 of the 5,018 cinematic prompts (1%)"
+
+41 是本页计数，5,018 是 tag 总数 —— 两个口径混用。更糟的是**排名也错了**：
+D1 实测该 tag 真值是 seedance2 2854 / seedance25 1074 / kling3 326，
+即 top model 是 seedance2(57%)，不是 seedance25(1%)。
+
+**现成的全量数据源（都已存在，零新增 D1）**：
+
+| 维度 | 数据源 | 状态 |
+|---|---|---|
+| model → tag 分布 | `_cache/model-tags.json`（`listModelTagDistribution`） | ✅ 早已存在，全量 |
+| tag → model 分布 | `_cache/tag-stats/{slug}.json` | ✅ 2026-10-22 新增 |
+| tag → 共现 tag | 同上 | ✅ 同上 |
+| tag → 标题词频 | 同上 | ✅ 同上 |
+| model → 共现 model | `_cache/model-comodels.json` | ✅ 新增（实测全站只有 1 条多模型 prompt，基本为空） |
+| 全站 model 计数/排名 | `_cache/counts.json` | ✅ 早已存在 |
+
+**新增聚合的生成时机**：`rebuildAllAggregateCaches()`（publish/unpublish/delete 都会调）
+→ 数据自动保持新鲜，不需要额外的手工步骤。
+重建时 +3 次全表聚合查询（一次性），运行时只读 R2 → **运行时 D1 查询数不增加**。
+
+**兜底行为**（关键）：聚合文件缺失时（还没跑过 rebuild），
+`listTagStats` 退化为「只算当前 tag」的实时查询 —— 仍是真值，只是慢一点，
+并顺手写回 R2，下次就是纯缓存读。实时查询也失败 → 返回 null，
+内容生成函数据此**整段省略**对应句子/问答，**绝不编数字**。
+
+⚠️ 写文案前先核实事实。已修掉的失真表述：
+- "including the negative prompt and the generation settings" ——
+  站内**没有 negative_prompt 字段**（`grep -rn "negative" src/db/ data/` 无命中）
+- "so what you paste is always the full version" ——
+  `/api/prompt/[slug]` 网络失败会降级成摘要，不是"总是全文"
+
 ## Next.js 版本支持窗口（2026-10-22 踩坑，时间炸弹）
 
 OpenNext 在 `build:cf` 时会检查 Next.js major 是否还在官方支持窗口内，**不在就直接 `exit(1)`**，

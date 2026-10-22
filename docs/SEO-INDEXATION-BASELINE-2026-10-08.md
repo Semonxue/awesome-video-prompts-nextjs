@@ -560,7 +560,61 @@ Next.js 官方支持窗口 = **major 首次发布起 2 年**：Next 15 首发 20
 > 本项目部署在 Cloudflare Workers 上，攻击面主要在 Next 的请求解析/路由层，
 > 但这是**已知且被接受的风险**，升级 Next 16 应该进 backlog。
 
-### 五、本轮尚未做 / 下一步
+### 五、10-22 当天的返工：数字口径修正（commit 1d36789）
+
+内容页化（9ea5a8f）上线后当天做线上验收，发现**正文里的数字是错的**：
+
+    tag 页 /en/tags/cinematic 渲染成
+    "seedance25 is the most used model for this category,
+     covering 41 of the 5,018 cinematic prompts (1%)"
+
+41 是**当前页 48 条**里的计数，5,018 是 tag 总数，两个口径混在一起。
+而且**排名也错了** —— D1 实测该 tag 的真值分布是：
+
+| model | 真值 count | 旧页面写的 |
+|---|---|---|
+| seedance2 | **2,854**（57%） | 没出现 |
+| seedance25 | 1,074 | "41"（本页计数）+ 排在第 1 ❌ |
+| kling3 | 326 | — |
+| grok | 187 | — |
+| minimaxh3 | 161 | — |
+
+同样的口径错误在**共现 tag**、**标题词频**、以及 model 页的 relatedModels 上都存在。
+注意这不是新引入的 bug —— tag 页的 "Most used models" 区块**改之前**就在显示本页计数。
+
+**修法**：把三个维度做成发布时预计算的 R2 聚合（运行时零 D1）：
+
+| 聚合 | 文件 | 大小 |
+|---|---|---|
+| tag → model 分布 / 共现 tag / 标题词频 | `_cache/tag-stats/{slug}.json`（**每 tag 一个文件**） | ~2.2KB |
+| model → 共现 model | `_cache/model-comodels.json` | ~1KB |
+
+- 生成时机：`rebuildAllAggregateCaches()`（publish/unpublish/delete 都会调）→ 自动保持新鲜
+- 重建时 +3 次全表聚合查询（一次性）；运行时只读 R2 → **运行时 D1 查询数不增加**
+- 拆成每 tag 一个文件而不是一个总文件：376 tag × (16+24+8) ≈ 700KB，
+  单文件每次缓存失效都要 parse 700KB；拆开后读端几乎零成本
+- 兜底：文件缺失时 `listTagStats` 退化为「只算当前 tag」的实时查询（仍是真值），
+  算完写回 R2 → **逐 tag 自愈，不需要人工触发**（已实测：cinematic / portrait 都是首次访问自动生成）
+
+**线上验收（2026-10-22 23:4x，commit 1d36789，pipeline 12/12 绿）**：
+
+| 检查项 | 结果 |
+|---|---|
+| tag 页数字 | ✅ "2,854 of these prompts (57%)"、"action alone shares a prompt with 1,610" —— 与 D1 实跑值逐一吻合 |
+| 交叉验证 | ✅ model→tag 聚合与 tag→model 聚合**两个独立方向**都给出 cinematic×seedance2 = 2,854 |
+| model 页 | ✅ "4,198 prompts / 56.7%"、"1st of the 25 models we track"（全站排名，真值） |
+| 结构化数据 | ✅ 3 个 ld+json：BreadcrumbList + CollectionPage/ItemList(48) + FAQPage(4 问) |
+| 分页门控 | ✅ `/en/tags/cinematic/p/2` → content-page-body 0 处、CollectionPage 0 处 |
+| 变体门控 | ✅ `/en/models/seedance2?tag=cinematic` → 同样 0 处 |
+| 边缘缓存 | ✅ 全部 `cf-cache-status: HIT` |
+| 体积 | tag p1 248,402 B（其中 ItemList JSON-LD 9,012 B + FAQ 1,270 B + 可见导语 2,421 B，净增 ~12.7KB） |
+| 稳态 D1 | ✅ 聚合文件生成后第二次渲染纯读 R2，无 D1 |
+
+**遗留**：`_cache/model-comodels.json` 要等下次 publish/unpublish/delete 才会生成
+（实测全站只有 1 条 prompt 挂了两个 model，所以 model 页实际走的是「全站第 N 名」分支，
+那条分支的数据来自早就存在的 `_cache/counts.json`，一直是真值）。
+
+### 六、本轮尚未做 / 下一步
 
 1. **外链 outreach** —— 10-18 文档 §6.1 判定为「唯一可能让 Indexed 离开个位数」的动作。
    当前 27 条外链**全指首页**，需要的是指向具体 prompt / model / tag 页的外链。纯人力，未启动。
