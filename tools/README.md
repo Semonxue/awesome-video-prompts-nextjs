@@ -172,4 +172,5 @@ python3 tools/collect.py hygiene --trash  # 未入库的残留移进回收站（
 
 - `AGENTS.md` — 收录内容定性闸门、models 字段铁律、删除不持久 → 永久跳过名单
 - `tools/download.md` — 单帖下载 → 草稿流程（标题生成规则在这）
+- `tools/bookmark_collect.md` — **bookmark 收录**流程指南（手动触发，不是时间线那条）
 - `docs/SEO-STATUS-AND-COST-NEUTRAL-PLAN-2026-10-18.md` — tag 归一化误伤的现场记录
