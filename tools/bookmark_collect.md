@@ -127,6 +127,26 @@ opencli twitter unbookmark "<推文URL>" --site-session ephemeral
 
 只对**已成功收录**的条目 unbookmark；处理失败的保留书签，下轮再来。
 
+**⚠️ 失败形态**：`opencli twitter unbookmark` 对少数条目会报
+`Could not find Remove Bookmark button on the requested tweet. Are you logged in?`
+—— 页面**是登录态、按钮也真实存在**（2026-10-23 第二轮实测 3/42 条），
+是 CLI 的选择器没命中，不是账号掉线，也不是条目没收藏。
+
+**兜底用 browser 直接点**（每条独立 session，避免互相挤）：
+
+```bash
+opencli browser --session bmfix open "<推文URL>" --window background
+opencli browser --session bmfix wait time 6
+opencli browser --session bmfix eval 'JSON.stringify([...document.querySelectorAll("[data-testid=removeBookmark]")].map((e,i)=>({i,vis:!!(e.offsetWidth||e.offsetHeight)})))'
+opencli browser --session bmfix click '[data-testid="removeBookmark"]'
+opencli browser --session bmfix wait time 3
+# 验证：removeBookmark 消失、bookmark 按钮 aria-label 变成「加入书签」
+opencli browser --session bmfix close
+```
+
+**必做终检**：跑完后重新拉一次 `opencli twitter bookmarks --limit 100`，
+比对目标 id 是否还有残留 —— 逐条返回 `success` 不代表真的移干净了。
+
 ---
 
 ## 不要做
