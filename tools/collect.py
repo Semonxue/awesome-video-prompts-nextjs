@@ -706,10 +706,19 @@ def process_one(tweet_id: str, min_text: int = 100) -> dict:
                 ["magick", str(src_thumb), "-resize", "600x600>", "-quality", "60", str(dst_cover)],
                 check=True, capture_output=True, timeout=30,
             )
-            # 30k 限制，超出再压一次
-            if dst_cover.stat().st_size > 35_000:
+            # 30k 限制（tools/download.md 的规格是 30KB=30720 字节），超出再压一次
+            # ⚠️ 阈值必须跟规格一致：以前用 35_000，30k~35k 这一段会漏过
+            if dst_cover.stat().st_size > 30_720:
                 subprocess.run(
                     ["magick", str(src_thumb), "-resize", "600x600>", "-quality", "55", str(dst_cover)],
+                    check=True, capture_output=True, timeout=30,
+                )
+            # 55 质量仍然超限就逐级降质，别留超标封面
+            for q in (45, 38):
+                if dst_cover.stat().st_size <= 30_720:
+                    break
+                subprocess.run(
+                    ["magick", str(src_thumb), "-resize", "600x600>", "-quality", str(q), str(dst_cover)],
                     check=True, capture_output=True, timeout=30,
                 )
         except Exception as e:
@@ -726,7 +735,8 @@ def process_one(tweet_id: str, min_text: int = 100) -> dict:
             return result
         try:
             shutil.copy2(str(src_preview), str(dst_video))
-            if dst_video.stat().st_size > 1_050_000:
+            # 1M 限制（tools/download.md 规格 = 1MB = 1048576 字节）
+            if dst_video.stat().st_size > 1_048_576:
                 # 重压
                 subprocess.run(
                     ["ffmpeg", "-y", "-i", str(src_preview),
