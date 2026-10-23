@@ -2,7 +2,7 @@
 
 ### 输入上下文：
 - 先使用 x 帖子地址判断是否已经重复存在（一定要全字段匹配）
-- 使用 tools/dl-x-videos.py + x 帖子地址 下载视频及元数据，存储在 temp/<TWEET_ID>/ 目录
+- 使用 tools/download.py + x 帖子地址 下载视频及元数据，存储在 temp/<TWEET_ID>/ 目录
 - temp/<TWEET_ID>/ 目录包含（`<n>` 为视频序号，从 1 开始；单视频帖子即 `n=1`）：
   - `info.json`：帖子元数据
   - `video_<n>.mp4`：原画
@@ -14,10 +14,17 @@
 
 ### 文件卫生（强制要求，所有子任务都适用）
 
-- ❌ **不要创建非必要的一次性脚本**：不要新建 `batch*.py` / `tmp*.sh` / 临时 `*.mjs` / helper 等。优先用现成工具（`tools/dl-x-videos.py`、`jq`、`ffmpeg`、命令行内联）直接完成。
+> 完整规则见 `tools/README.md`「文件卫生铁律」。核心三条：
+
+- ❌ **不要创建非必要的一次性脚本**：不要新建 `scripts/_*.py` / `batch*.py` / `tmp*.sh` / 临时 `*.mjs` / helper / `*.bak`。
+  优先用现成工具（`tools/download.py`、`tools/prompts.py`、`jq`、`ffmpeg`、命令行内联）直接完成。
+- ❌ **不要把数据 hardcode 进 `.py`**：`OVERRIDES = {"<tid>": ("Title", ["tag"])}` 这种写法每改一条就要新开一个文件，
+  正确做法是数据放 JSON、逻辑用现成工具（如 `tools/prompts.py apply <config.json>`）。
 - ❌ **不要写非产出文件到仓库**：日志/调试输出写 stdout 或系统临时目录（`/tmp`），不要写进 `logs/`、项目根目录，或 `temp/` 之外的任何位置。
 - ✅ **中间文件只允许存在于 `temp/<TWEET_ID>/`**：所有下载、预览、缩略图、info.json 都只放这里，不散落到别处。
-- ✅ **确有需要创建临时文件/脚本时**：任务结束（无论成功或失败）前必须**全部清除**，不留任何残留。
+- ✅ **确有需要创建临时脚本时**：写进 `/tmp`，且任务结束（无论成功或失败）前必须**全部清除**，不留任何残留。
+- ✅ **收尾自检**：`python3 tools/collect.py hygiene`（有未入库的一次性脚本会 exit=2）。
+- ✅ **反复要用的能力**：写成 `tools/extract/prompts.py` 的新子命令（argparse + `--help`），然后 commit。
 
 ### 批量查重 (Batch Dedup)
 
@@ -94,14 +101,14 @@
 
 `title` 字段**统一由 LLM 理解生成**（不再依赖纯启发式）。具体规则：
 
-- **统一实现位置**：`tools/dl-x-videos.py` 的 `gen_title_via_llm(text)` 函数（`process-bookmarks.py` 通过 importlib 复用）
-- **触发条件**：`process-bookmarks.py` 的 `gen_title()` 在启发式提取不到 ≥3 词时，自动调 LLM
+- **统一实现位置**：`tools/download.py` 的 `gen_title_via_llm(text)` 函数
+  （`tools/collect.py` 通过 `from dl_videos import gen_title_via_llm` 复用）
+- **触发条件**：`collect.py` 的 `XTC_LLM_TITLE=1`（**默认 0**，默认走启发式标题）
 - **统一命令**（推荐，每次跑批都加）：
   ```bash
-  LLM_TITLE=1 python3 tools/process-bookmarks.py
+  XTC_LLM_TITLE=1 python3 tools/collect.py run
   ```
-  > 注：当前版本 `gen_title()` 已默认走 LLM 兜底，理论上不加 env 也行；保留 `LLM_TITLE=1` 是显式标注，方便排查。
-  > 设 `LLM_TITLE=0` 可强制只走启发式（不推荐）。
+  > 设 `XTC_LLM_TITLE=0` 可强制只走启发式（默认行为）。
 - **依赖**：`~/.minimax/.builtin-skills/llm-call/scripts/llm_call.py`
   - 默认模型 `minimax/MiniMax-M3`（可用 `LLM_TITLE_MODEL` 覆盖）
   - 默认 bin 路径（可用 `LLM_CALL_BIN` 覆盖）

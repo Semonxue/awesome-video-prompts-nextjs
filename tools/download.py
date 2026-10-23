@@ -11,11 +11,20 @@ X (Twitter) 视频/帖子信息提取工具
     - yt-dlp (需安装在指定路径或系统 PATH 中)
 
 使用方法:
-    python tools/dl-x-videos.py <URL> [选项]
+    python tools/download.py <URL> [选项]
 
 参数:
     url         X (Twitter) 帖子的 URL 地址
     --json      (可选/默认) 以格式化的 JSON 字符串输出提取结果
+
+文件卫生（2026-10-23 定规则，完整规则见 tools/README.md）:
+    本工具只负责「下载 → temp/<TWEET_ID>/」这一步。不要为了批量处理或数据修复
+    再写一次性脚本：
+    - 禁止在 scripts/、tools/、仓库根创建 _*.py / batch*.py / tmp*.sh / *.bak
+    - 数据（tweet_id → title/tags/models）放 JSON 配置，不要 hardcode 进 .py
+      （改草稿用 tools/prompts.py apply <config.json>）
+    - 确实需要的一次性脚本写进 /tmp，任务结束前删除
+    - 收尾自检：python3 tools/collect.py hygiene
 """
 
 import subprocess
@@ -25,6 +34,30 @@ import argparse
 import os
 import shutil
 import re
+
+
+def parse_opencli_json(stdout: str):
+    """解析 opencli 的 JSON 输出。
+
+    opencli >= 2.0.0 把结果包成 {"ok": true, "data": <payload>}（失败时是
+    {"ok": false, "error": {...}}），1.8.x 则直接输出裸 payload。两种都支持。
+    另外 stdout 尾部可能夹带 "Extension update available" 之类的提示行，
+    所以用 raw_decode 只取第一个合法 JSON 值。
+    """
+    text = stdout.strip()
+    start = 0
+    for i, ch in enumerate(text):
+        if ch in "[{":
+            start = i
+            break
+    obj, _ = json.JSONDecoder().raw_decode(text, start)
+    if isinstance(obj, dict):
+        if obj.get("ok") is True and "data" in obj:
+            return obj["data"]
+        if obj.get("ok") is False:
+            err = obj.get("error")
+            raise RuntimeError(f"opencli error: {err}")
+    return obj
 
 
 def extract_tweet_id(url: str) -> str:
@@ -66,7 +99,7 @@ def extract_tweet_info(url: str) -> dict:
                 timeout=120
             )
 
-            data = json.loads(result.stdout.strip())
+            data = parse_opencli_json(result.stdout)
             items = data if isinstance(data, list) else [data]
 
             # thread 返回 [原帖, 回复...], 取 id 匹配的原帖
@@ -439,7 +472,7 @@ def main():
     args = parser.parse_args()
 
     if not args.url:
-        print("用法: python dl-x-videos.py <url>")
+        print("用法: python tools/download.py <url>")
         sys.exit(1)
 
     # 执行提取逻辑

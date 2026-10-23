@@ -237,7 +237,7 @@ npx wrangler d1 insights awesomevideoprompts-db
 - **对比帖取产出侧**：`FLUX 3 Max is 22x faster than Seedance 2.5` → `["flux3"]`，不登记被对比的一方
 - 标题里**不能出现模型名**（含 `Kling 4.0` / `Seedance 2.5` / `Veo 3` 等）
 
-**采集器根因（已修）**：`tools/x_timeline_collect.py` 的 `detect_model()` 旧版兜底 `return "seedance2"`，
+**采集器根因（已修）**：`tools/collect.py` 的 `detect_model()` 旧版兜底 `return "seedance2"`，
 导致**每一条没点名模型的稿子都被打上 Seedance 2.0**（第九轮实测 200 条里 62 条错标）。
 现已改为：正文没点名 → 返回 `None` → 写入 `models: []`；并补齐 Kling 4.0 / PixVerse / FLUX 3 /
 MiniMax H3 / Gemini Omni / Veo 3 等关键词 + 作者错拼（`Seadance` / `Seednace` / `seedenc`）。
@@ -259,7 +259,7 @@ MiniMax H3 / Gemini Omni / Veo 3 等关键词 + 作者错拼（`Seadance` / `See
 ### 两层闸门
 | 层 | 位置 | 作用 |
 |---|---|---|
-| 代码粗筛 | `tools/x_timeline_collect.py` → `looks_like_non_ai_content()` | 命中就**根本不下载**。12 类规则，命中会在 cron.log 打 `skip 非AI视频内容 [规则] <id>` |
+| 代码粗筛 | `tools/collect.py` → `looks_like_non_ai_content()` | 命中就**根本不下载**。12 类规则，命中会在 cron.log 打 `skip 非AI视频内容 [规则] <id>` |
 | 人工判断 | cron `x-timeline-collect-2h` 的 prompt | **主闸门**。每轮新收录的草稿都要逐条读正文判断去留 |
 
 **代码层必须保守**：拦掉的条目没人能补救（用户看不到、没法申诉），所以宁可漏过交给人工，也不可误杀。
@@ -276,7 +276,50 @@ MiniMax H3 / Gemini Omni / Veo 3 等关键词 + 作者错拼（`Seadance` / `See
 1. `mavis-trash` 删草稿 + 素材（**不要** `rm`）
 2. 素材目录用草稿的 `image` 字段推导：`static/_drafts` + `os.path.dirname(image)`
    ——**不要**对草稿路径做 `dirname().replace()`（会得到月份目录，曾把整个月素材删光）
-3. tweet id 追加进 `tools/x_timeline_collect.skip.json` 的 `ids`（永久、永不过期）
+3. tweet id 追加进 `tools/skip.json` 的 `ids`（永久、永不过期）
 
-跳过名单由 `tools/x_timeline_collect.py` 的 `load_skip_ids()` 读取，`pick_candidates` 里过滤。
-验证：`python3 tools/x_timeline_collect.py dryrun` 看 `skip_list_size` 和候选里有没有命中名单的。
+跳过名单由 `tools/collect.py` 的 `load_skip_ids()` 读取，`pick_candidates` 里过滤。
+验证：`python3 tools/collect.py dryrun` 看 `skip_list_size` 和候选里有没有命中名单的。
+
+## 工具目录只有两条任务线（2026-10-23 整合）
+
+`tools/` 下**只有两个业务任务**；`scripts/` 只放构建/部署脚本。
+
+| 任务 | 脚本 |
+|---|---|
+| ① **发现**（从时间线找值得收录的推文） | `collect.sh`（cron 入口）/ `collect.py`（主逻辑 + hygiene）/ `download.py`（素材下载）/ `skip.json`（永久跳过名单） |
+| ② **提取**（从推文抽出结构化 prompt） | `prompts.py` —— 统一入口：`review` / `apply` / `verify` / `snapshot` / `ledger` |
+
+**一条线一个入口**：提取线原本散成 6 个 `xtc_*.py`（rev / extract_frames / fetch_thread_replies /
+finalize / verify / refresh_snapshot）+ 独立的 ledger.py，每个都要人记路径和参数格式，
+串一轮最容易漏步骤（尤其"刷快照"漏了就让下轮 verify 报「历史条目被改动」假阳性）。
+现全部合并进 `tools/prompts.py` 的子命令，`apply` 结束自动刷快照。
+
+**agent 的操作指南在 `tools/README.md`**（工作流 / 定性闸门 / 字段铁律 / 删除规范 / 禁则）。
+
+- 导出一轮正文 / 抽帧 / 抓作者自回复 → `python3 tools/prompts.py review …`
+- 改 title/tags/models、合并提示词、删草稿、追加 skip → `python3 tools/prompts.py apply <config.json>`
+- 校验一轮 → `python3 tools/prompts.py verify --date … --hour …`；全库审计 → `verify --audit`
+- 台账/规则基准 → `python3 tools/prompts.py ledger`
+
+## 本地一次性脚本卫生（2026-10-23 定规则）
+
+**仓库里不允许留一次性脚本。** 2026-10-08~10 和 10-22 两轮数据修复在 `scripts/` 里累积了
+23 个未入库脚本（`_fix_workset200*.py`、`_merge_*.py`、`_fetch_threads_batch2..5.py`、`*.bak2`…），
+其中 `batch2~5` 只差一个输出目录常量；后果是 SEO 报告只能写「工作区里有大量未提交的 `_fix_*.py`」，
+且 `360` tag 从 3,604 收窄到 4 的误伤无法归因。
+
+**2026-10-23 已全部清理**：23 个脚本 + `.bak/.bak2` 进回收站，`scripts/seed-from-old.ts`（空占位）
+和仓库根 `shoot-niji.mjs`（一次性截图脚本）一并删除；能力全部提升为 `tools/prompts.py` 的子命令。
+
+- **禁止**：`scripts/_*.py`、`scripts/batch*.py`、`tmp*.sh`、`tools/_*.py`、`*.bak`、仓库根临时脚本
+- **禁止**：把数据 hardcode 进 `.py`（`OVERRIDES = {"<tid>": ("Title", ["tag"])}`）
+- **禁止**：新建**旁路**脚本 —— 需要新能力时往 `tools/prompts.py` 加子命令，不要另起文件
+- **替代**：改草稿/删草稿/维护 skip 名单 → `tools/prompts.py apply <config.json>`；
+  校验 → `prompts.py verify`；导出一轮正文 → `prompts.py review`；台账 → `prompts.py ledger`；
+  抓作者自回复补提示词 → `prompts.py review --replies`
+- **一次性脚本只允许写 `/tmp`**，本轮结束前删除；反复要用的能力写成 `prompts.py` 的子命令并 commit
+- **自检**：`python3 tools/collect.py hygiene`（有残留 exit=2；`--trash` 移进回收站）
+  —— cron wrapper 每 tick 也会跑，有残留就写进 `logs/x_timeline_cron/cron.log`
+
+完整操作手册：`tools/README.md`（两条线总览 + 固定脚本清单 + 文件卫生铁律 + 收录线 7 步收尾）。

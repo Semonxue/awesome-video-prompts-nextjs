@@ -74,3 +74,22 @@ logs/
 # Drizzle generated artifacts (regenerable via drizzle-kit)
 # ============================================================
 drizzle/meta/
+
+# R2 聚合缓存的本地落地产物（运行时生成）
+_cache/
+
+# ============================================================
+# 一次性脚本残留（见 tools/README.md「不要写一次性脚本」）
+# 这些是"现场写完就扔"的脚本，不该进 git。
+# 真正需要的能力应该加进 tools/prompts.py 的子命令。
+# ============================================================
+scripts/_*.py
+scripts/batch*.py
+scripts/tmp*.py
+scripts/tmp*.sh
+tools/_*.py
+tools/tmp*
+*.bak
+*.bak2
+*.orig
+*.rej

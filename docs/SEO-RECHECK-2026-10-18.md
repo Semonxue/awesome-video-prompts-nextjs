@@ -303,7 +303,8 @@ tags >48 条 = 105 个（>96 = 69 个，>144 = 53 个）
 **归因说明（诚实版）**：`360` 这个 tag 当前页面上确实只有 4 条 prompt，且都是真·360 相关内容
 （`...-kling-love-these-videos...`、`...-yellow-sports-car-360-orbit`、`...-bullet-time-nyc-slip`、
 `...-360-drone-shot-grok`）。从 3,604 → 4 只可能是**数据侧**的 tag 重新归一/清理
-（工作区里有大量未提交的 `scripts/_fix_*.py` 数据修复脚本）。
+（工作区里有大量未提交的 `scripts/_fix_*.py` 数据修复脚本 —— 该批脚本已于 2026-10-23 全部删除，
+但 360→4 这个变化本身仍无归因记录）。
 **本任务只读、且不碰数据库，无法归因到具体哪次数据操作** —— 建议 lead 确认这是否为预期清理。
 
 ---
@@ -540,6 +541,7 @@ HTML 里 `_next/static/chunks/*` 是内容哈希，不能映射回 git commit。
 
 1. ⚠️ **tag 关联总数 −72.8%、`360` 3,604→4**：数据侧变化，非代码侧。已用三层交叉验证排除抓取误差。
    建议确认是否来自 `scripts/_fix_*.py` 的 tag 归一化；若**非预期**，这可能是一次静默的数据损失。
+   （该批脚本已于 2026-10-23 全部删除，脚本内容无法回溯，归因需靠数据侧排查。）
 2. ⚠️ **`/en` 首页的 hreflang 用了 `http://`**：响应头
    `link: <http://awesomevideoprompts.com/en>; rel="alternate"; hreflang="en"`。
    而 tag 页 / 详情页的 hreflang 都是 `https://`，canonical 也都是 `https://`。
