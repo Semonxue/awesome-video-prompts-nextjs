@@ -281,6 +281,41 @@ MiniMax H3 / Gemini Omni / Veo 3 等关键词 + 作者错拼（`Seadance` / `See
 跳过名单由 `tools/collect.py` 的 `load_skip_ids()` 读取，`pick_candidates` 里过滤。
 验证：`python3 tools/collect.py dryrun` 看 `skip_list_size` 和候选里有没有命中名单的。
 
+## 收录产出质量铁律（两条收录线通用 · 唯一事实源 · 2026-10-23）
+
+**这一节是「拿到一条 prompt 之后怎么做」的唯一定义处**，
+无论条目来自 timeline（`tools/collect.sh` 自动跑）还是 bookmark（手动触发，流程见
+`tools/bookmark_collect.md`），都按这里做；其他文档只引用，不复述。
+
+**① 人工读正文** —— 逐条打开草稿正文读，不许只看 title 就决定去留。人工判断是主闸门，
+代码层粗筛只拦得住约 1/3。
+
+**② 手工产出字段** —— title / tags / models 不许用启发式或默认值，必须理解内容后逐条写：
+
+| 字段 | 铁律 |
+|---|---|
+| `title` | 3–7 词、英文、语义完整、**不含模型名**、不含兜底文案（`Video Prompt Snapshot` / `X Cinematic`）、不以悬空词结尾 |
+| `tags` | 逐个对照 `data/tags.yaml` 的真实 slug，**不得凭记忆猜**；1–5 个；**tag 里不能出现模型名** |
+| `models` | 白名单 `data/models.yaml`（32 个 slug）；正文写明模型名才登记；平台≠模型；对比帖取产出侧（详见上文「models 字段铁律」） |
+| `description` | 完整提示词原文，**不改写不翻译** |
+
+**③ 正文缺提示词 → 必须抓回复**：正文明显不含提示词、且作者写了「提示词在回复里」，
+必须抓作者自回复把完整提示词取回来合进 description —— 否则收录进去的是空壳：
+
+```bash
+python3 tools/prompts.py review --ids <tid> --replies --show 5
+```
+
+合回时在配置里写 `"recovered_prompt": "..."` + `"recovered_from": ["<reply_id>"]`。
+
+**④ 落地**：手工写的字段写进 **JSON 配置**（数据，不是脚本），再执行：
+
+```bash
+python3 tools/prompts.py apply <config.json>
+```
+
+**⑤ 校验**：`python3 tools/prompts.py verify --date <YYYY-MM-DD> --hour <HH> --keep <ids> --junk <ids> --models <id=slug1|slug2>`
+
 ## 工具目录只有两条任务线（2026-10-23 整合）
 
 `tools/` 下**只有两个业务任务**；`scripts/` 只放构建/部署脚本。

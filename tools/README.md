@@ -68,49 +68,23 @@ python3 tools/prompts.py verify --audit --audit-limit 60   # 只看最近 60 条
 
 ## 2. 定性闸门（决定去留，优先级最高）
 
-站点是「AI 视频提示词」库。**主体不是「AI 生成的视频/图像作品或提示词」的推文一律不收录。**
+**唯一定义处 = `AGENTS.md` §收录内容定性闸门**（这里不复述）。
 
-### 绝对不收（看到就删）
+一句话版本：主体不是「AI 生成的视频/图像作品或提示词」的推文一律不收录 ——
+编程/游戏开发过程、纯代码渲染 benchmark、行业新闻八卦公告、工具素材促销、
+真人内容、纯日常寒暄，这 6 类看到就删；产出是 AI 视频/AI 图像（含模型对比、
+镜头拆解、图生视频工具实拍演示）、正文含完整提示词的，留。
 
-1. **编程 / 游戏开发过程**：Claude Code / Cursor / OpenCode 写代码、Three.js / Unity / Unreal / Blender / Godot 做 3D 或游戏、shader / voxel / webgl、MCP server、game dev / game jam、开源项目发布、「我让 AI 造了个 XXX 游戏/网站/应用」
-2. **纯代码渲染 benchmark**：LLM 写代码渲染 3D 场景来比跑分（「MiniMax vs DeepSeek 造火山/鲸鱼/埃菲尔铁塔」、「xx k tokens」、「$0.xx」）
-   - 区分点：**产出是 AI 视频/图像** → 留；**产出是代码渲染的 3D** → 删
-3. **行业新闻 / 八卦 / 公告**：融资、发布会、大会、主题演讲、CEO 言论、榜单排名、财报
-4. **工具 / 软件 / 素材促销**：订阅折扣、coupon、sign up 送 credits、素材包、插件、开源工具发布
-5. **真人内容**：真人拍摄（未过 AI 视频模型）、真人八卦、隐私视频
-6. **纯日常动态 / 社交寒暄**：GM everyone、早安晚安、周末快乐、纯祝贺无内容
-
-### 要留
-
-- 产出是 **AI 视频 / AI 图像**的作品（含模型对比、官方发布稿、镜头拆解）
-- **图生视频 / 视频编辑工具**的实拍演示（产出是视频）
-- 正文含**完整提示词**的帖子
-- 真人出镜但**由 AI 视频模型生成**的（AI 广告片、AI 时尚片）
-
-### 判定顺序
-
-1. 先看**产出是什么**（AI 视频 / AI 图像 / 代码 / 真人 / 没有产出）
-2. 再看是不是**促销引流**（coupon / %off / 送 credits / 求关注）
-3. 两边都过 → 留；任一不过 → 删
-
-> 代码层已内置 `looks_like_non_ai_content()` 做粗筛（命中根本不下载），但它只拦得住约 1/3
-> ——**刻意保守，宁可漏过交给你，也绝不误杀**（拦掉的条目没人能补救）。剩下 2/3 全靠你逐条读。
-
----
+判定顺序：先看**产出是什么** → 再看是不是**促销引流** → 两边都过才留。
 
 ## 3. 字段铁律
 
-- **标题**：3–7 词、英文、语义完整、**不含模型名**、不含兜底文案（`Video Prompt Snapshot` / `X Cinematic`）、不以悬空词结尾
-- **tags**：逐个对照 `data/tags.yaml` 的真实 slug（376 个），**不得凭记忆猜**
-  - 校验：`grep -E "^[a-z0-9_-]+:" data/tags.yaml`
-  - tags.yaml **不含** story / storytelling / logo / coding / film / interactive / strategy / winter / season / product / hdr / color-grading / video-editing / overlay / mocap / godot / vibe-coding / animation-style / character-swap / parody / ugc / photorealistic-subject
-  - **tag 里不能出现模型名**
-- **models**：白名单 `data/models.yaml`（32 个 slug）
-  - 正文明确写出模型名才登记；正文没点名 → `[]`
-  - 正文只提第三方平台（Pollo / Flova / Dreamina / MVLAND / Wizstar / Tesseract / CLO / Frameo / Picsart / ImagineArt / Lovart / @fal）且无法证伪 → `[]`
-  - 平台 ≠ 模型：`Made with MiniMax H3 on @Hailuo_AI` → `minimaxh3`
-  - 对比帖取产出侧：`FLUX 3 Max is 22x faster than Seedance 2.5` → `["flux3"]`
-- **description**：完整提示词原文，**不改写不翻译**；作者自回复里的提示词用 `recovered_prompt` 合回末尾
+**唯一事实源 = `AGENTS.md` §收录产出质量铁律**（两条收录线通用，这里不复述）。
+
+要点：拿到一条 prompt 必须**人工读正文**、**手工写** title / tags / models；
+正文缺提示词（作者说在回复里）必须抓作者自回复合回 description。
+
+标签合法 slug 用 `grep -E "^[a-z0-9_-]+:" data/tags.yaml` 查，**不得凭记忆猜**。
 
 ---
 

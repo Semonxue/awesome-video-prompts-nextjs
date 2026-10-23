@@ -65,13 +65,10 @@ python3 tools/prompts.py review --ids <tweet_id> --replies --show 5
 
 ### 7. 标题和标签全部手工处理
 
-逐条人工写 title 和 tags：
+**铁律见 `AGENTS.md` §收录产出质量铁律**（唯一事实源，这里不复述）。
 
-- 标题 3~7 词、英文、语义完整、**不含模型名**、不含兜底文案
-- tags 逐个对照 `data/tags.yaml` 的真实 slug，**不得凭记忆猜**
-- models 白名单见 `data/models.yaml`，正文写明模型名才登记
-
-完整铁律见 `tools/README.md` §3。
+要点：人工读正文 → 手工写 title（3–7 词、不含模型名）/ tags（对照 `data/tags.yaml`）/
+models（白名单 `data/models.yaml`）。
 
 判断结果写成 **JSON 配置**（数据，不是脚本）：
 
