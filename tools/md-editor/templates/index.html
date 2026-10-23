@@ -67,6 +67,10 @@
         .queue-badge[hidden] { display: none; }
         @keyframes queue-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
         .file-item .file-name::before.queue-icon { content: "⏳ "; color: var(--accent-color); }
+        /* 已还原提示词的草稿：列表里置顶并高亮 */
+        .file-item.recovered { border-left: 3px solid var(--accent-color); }
+        .file-item.recovered .file-name { font-weight: 600; }
+        .file-item .file-name::before.recovered-icon { content: "✨ "; }
         .editor-actions { display: flex; gap: 8px; }
         .btn { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
         .btn-primary { background: var(--accent-color); color: white; }
@@ -441,8 +445,10 @@
                 if (f.published_slug) meta.push(`slug=${f.published_slug}`);
                 if (f.published_error) meta.push(`❌ ${f.published_error.slice(0, 50)}`);
                 const queuePrefix = f.in_queue ? '<span class="queue-icon">⏳ </span>' : '';
-                return `<div class="${cls}" onclick="openFile('${f.path.replace(/'/g, "\\'")}')">
-                    <div class="file-name" title="${f.name}">${queuePrefix}${(f.title || f.name).replace(/</g, '<')}</div>
+                const recoveredPrefix = f.recovered ? '<span class="recovered-icon" title="已从推文串还原提示词">✨ </span>' : '';
+                const cls2 = `file-item ${active ? 'active' : ''} ${f.status} ${f.recovered ? 'recovered' : ''}`;
+                return `<div class="${cls2}" onclick="openFile('${f.path.replace(/'/g, "\\'")}')">
+                    <div class="file-name" title="${f.name}">${queuePrefix}${recoveredPrefix}${(f.title || f.name).replace(/</g, '<')}</div>
                     <div class="file-date">${f.date}${meta.length ? ' · ' + meta.join(' · ') : ''}</div>
                 </div>`;
             }).join('');

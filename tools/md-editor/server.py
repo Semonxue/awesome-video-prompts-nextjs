@@ -27,7 +27,7 @@ from collections import deque
 from datetime import datetime, timezone
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 from typing import Any, Deque, Dict, List, Optional, Set, Tuple
 
 import yaml
@@ -210,6 +210,22 @@ def iter_draft_files():
     for mf in sorted(DRAFT_CONTENT_DIR.rglob("*")):
         if mf.is_file() and mf.suffix.lower() in DRAFT_SUFFIXES:
             yield mf
+
+
+# 合并推文串还原的提示词时写入的溯源标记
+# 只匹配到 "recovered from author"：来源可能是 thread reply / self-quote 等，
+# 用完整精确串会在换一种来源写法时静默失配（草稿不会置顶也不会高亮）。
+RECOVERED_MARKER = "recovered from author"
+
+
+def has_recovered_prompt(fm: Dict[str, Any]) -> bool:
+    """是否是从作者自回复里还原过提示词的草稿。
+
+    还原流程（tools/prompts.py apply 的 recovered_prompt）会在 description 末尾追加
+    "----- Prompt (recovered from author's thread reply <id>) -----"，
+    这里直接按标记判断，md / json 两种格式都适用，且无需改数据结构。
+    """
+    return RECOVERED_MARKER in str(fm.get("description") or "")
 
 
 def read_draft(path: Path) -> Optional[Dict[str, Any]]:
@@ -895,7 +911,11 @@ class EditorHandler(SimpleHTTPRequestHandler):
             ".gif": "image/gif", ".webp": "image/webp", ".mp4": "video/mp4",
             ".webm": "video/webm",
         }
-        relative = Path(media_path.lstrip("/"))
+        # 浏览器会把 fm.image 里的非 ASCII slug（如中文推文生成的目录名）
+        # 百分号编码后再发过来，这里必须先还原，否则 '%E7%94%A8...' 会被当成
+        # 字面文件名：既找不到文件，长 slug 还会触发 OSError ENAMETOOLONG
+        # 直接把连接打断（前端表现是"加载失败"而不是 404）。
+        relative = Path(unquote(media_path).lstrip("/"))
         for root in (DRAFT_STATIC_DIR,):
             # fm.image 形如 /prompts/2026-06/xxx/cover.jpg
             # 实际文件在 DRAFT_STATIC_DIR/2026-06/xxx/cover.jpg
@@ -904,16 +924,21 @@ class EditorHandler(SimpleHTTPRequestHandler):
             if parts and parts[0] == "prompts":
                 relative = Path(*parts[1:]) if len(parts) > 1 else Path()
             candidate = root / relative
-            if candidate.exists() and candidate.is_file():
-                ext = candidate.suffix.lower()
-                self.send_response(200)
-                self.send_header("Content-type", mime_map.get(ext, "application/octet-stream"))
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.send_header("Content-Length", str(candidate.stat().st_size))
-                self.end_headers()
-                with open(candidate, "rb") as f:
-                    self.wfile.write(f.read())
-                return
+            try:
+                if not candidate.is_file():
+                    continue
+            except OSError:
+                # 路径过长 / 非法字符等：降级成 404，不要打断连接
+                continue
+            ext = candidate.suffix.lower()
+            self.send_response(200)
+            self.send_header("Content-type", mime_map.get(ext, "application/octet-stream"))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Content-Length", str(candidate.stat().st_size))
+            self.end_headers()
+            with open(candidate, "rb") as f:
+                self.wfile.write(f.read())
+            return
         self.send_error(404, "media not found")
 
     # -------------------- 文件列表（按状态分类，md/json 通用） --------------------
@@ -941,13 +966,16 @@ class EditorHandler(SimpleHTTPRequestHandler):
                 "published_slug": get_published_slug(fm),
                 "published_error": get_published_error(fm),
                 "title": fm.get("title", ""),
+                "recovered": has_recovered_prompt(fm),
             }
             # queued 文件归到 unpublished tab（极简：不单独建 tab）
             bucket = "unpublished" if status == "queued" else status
             files_by_status[bucket].append(item)
-        # 各自按时间倒序
+        # 还原过提示词的排前面，组内仍按时间倒序
         for k in files_by_status:
-            files_by_status[k].sort(key=lambda x: x["date"], reverse=True)
+            files_by_status[k].sort(
+                key=lambda x: (x["recovered"], x["date"]), reverse=True
+            )
 
         self.send_json({
             "files": files_by_status,
