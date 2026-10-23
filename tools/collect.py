@@ -571,10 +571,15 @@ def pick_candidates(
 # Phase 2: Process One
 # ============================================================
 
-def process_one(tweet_id: str) -> dict:
+def process_one(tweet_id: str, min_text: int = 100) -> dict:
     """
     处理单条：download → compress → write JSON → like
     返回 {"ok": bool, "reason": str, "draft": str, "title": str, "model": str, "tags": list}
+
+    min_text: 正文最小长度门槛。默认 100 —— 正文太短通常只是 credits 没有提示词。
+    bookmark 收录线例外：很多作者正文只有一句「Prompt ⤵️」+ 链接，完整提示词在
+    作者自回复里（用 tools/prompts.py review --replies 抓 → apply 的 recovered_prompt
+    合回 description）。这类条目传 --min-text 0 放行。
     """
     result = {"tweet_id": tweet_id, "ok": False, "reason": "", "draft": "", "title": "", "model": "", "tags": []}
     temp_dir = TEMP_DIR / tweet_id
@@ -639,12 +644,14 @@ def process_one(tweet_id: str) -> dict:
         author_username = info.get("author_username", "")
         post_url = info.get("url", url)
 
-        if not text or len(text) < 100:
+        if not text or len(text) < min_text:
             result["reason"] = "text_too_short"
             log("WARN", f"  {tweet_id}: text too short ({len(text)} chars) - likely no prompt")
             return result
 
-        if not looks_like_has_prompt(text):
+        # min_text == 0 = 显式放行（bookmark 收录线：提示词在作者自回复里）
+        # 此时正文只有一句「Prompt ⤵️」也放过，正文判定交给 prompts.py apply 的 recovered_prompt
+        if min_text > 0 and not looks_like_has_prompt(text):
             result["reason"] = "no_prompt_detected"
             log("WARN", f"  {tweet_id}: no prompt pattern in text (len={len(text)})")
             return result
@@ -1259,9 +1266,13 @@ def main():
         print(json.dumps(result, ensure_ascii=False, indent=2))
     elif cmd == "process":
         if len(sys.argv) < 3:
-            print("usage: process <tweet_id>")
+            print("usage: process <tweet_id> [--min-text N]")
             sys.exit(1)
-        result = process_one(sys.argv[2])
+        # --min-text 0：放行「正文只有一句 Prompt ⤵️ + 链接、完整提示词在作者自回复」的条目
+        min_text = 100
+        if "--min-text" in sys.argv:
+            min_text = int(sys.argv[sys.argv.index("--min-text") + 1])
+        result = process_one(sys.argv[2], min_text=min_text)
         print(json.dumps(result, ensure_ascii=False, indent=2))
     elif cmd == "hygiene":
         result = run_hygiene(trash="--trash" in sys.argv[2:])
