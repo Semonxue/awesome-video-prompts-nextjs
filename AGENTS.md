@@ -296,8 +296,19 @@ MiniMax H3 / Gemini Omni / Veo 3 等关键词 + 作者错拼（`Seadance` / `See
 |---|---|
 | `title` | 3–7 词、英文、语义完整、**不含模型名**、不含兜底文案（`Video Prompt Snapshot` / `X Cinematic`）、不以悬空词结尾 |
 | `tags` | 逐个对照 `data/tags.yaml` 的真实 slug，**不得凭记忆猜**；1–5 个；**tag 里不能出现模型名** |
-| `models` | 白名单 `data/models.yaml`（32 个 slug）；正文写明模型名才登记；平台≠模型；对比帖取产出侧（详见上文「models 字段铁律」） |
+| `models` | 白名单 `data/models.yaml`；正文写明模型名才登记；平台≠模型；对比帖取产出侧（详见上文「models 字段铁律」） |
 | `description` | 完整提示词原文，**不改写不翻译** |
+
+**字典以文件为准，不要信任何写死的数量**（字典会增删）：
+```bash
+grep -E "^[a-z0-9_-]+:" data/tags.yaml     # 合法 tag slug 全集
+grep -E "^[a-z0-9_-]+:" data/models.yaml   # 合法 model slug 全集
+```
+常见误猜（这些**不在** tags.yaml 里，但快照会过期，以文件为准）：
+`story` / `storytelling` / `logo` / `coding` / `film` / `interactive` / `strategy` /
+`winter` / `season` / `product` / `hdr` / `color-grading` / `video-editing` /
+`overlay` / `mocap` / `godot` / `vibe-coding` / `animation-style` /
+`character-swap` / `parody` / `ugc`
 
 **③ 正文缺提示词 → 必须抓回复**：正文明显不含提示词、且作者写了「提示词在回复里」，
 必须抓作者自回复把完整提示词取回来合进 description —— 否则收录进去的是空壳：

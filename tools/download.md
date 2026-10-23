@@ -87,10 +87,9 @@
   ```
 
 - 字段约束：
-  - `title`：3-7 个单词，语义完整且吸引人，不含模型名，英文。**统一由 LLM 理解生成**（见下方「标题生成」章节）
+  - `title` / `tags` / `models`：**铁律见 `AGENTS.md` §收录产出质量铁律**（人工读正文后逐条手写，
+    此处不复述）。下方「标题生成」章的 LLM 只产出**初稿**，最终 title 仍要人工复核改写。
   - `description`：从 full_text 提取完整提示词；不要有遗漏、截取或提炼；不要翻译；若 full_text 不完整看上下文；多行直接换行（JSON 字符串天然支持 `\n`，无需 YAML 块语法）
-  - `models`：数组，自动匹配 1 个视频模型，优先 `data/models.yaml` 关键词
-  - `tags`：数组，最匹配，不超过 5 个，llm理解生成，不包含 model；优先 `data/tags.yaml`；如必要才新增
   - 如果新增标签或模型，更新 `data/models.yaml` 和 `data/tags.yaml`
   - `source_url`：原帖链接（**注意：不要用 url 字段，因为那是 Hugo 保留字段**）
   - `post_date`：ISO 8601 YYYY-MM-DD
