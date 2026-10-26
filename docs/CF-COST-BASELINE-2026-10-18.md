@@ -347,7 +347,8 @@ npx wrangler deployments list
 # 3) Dashboard（session 名固定 cf）
 opencli browser cf open "https://dash.cloudflare.com/a5dfcda3d7f7b488c2597d8dcdf54cca/billing/billable-usage"
 opencli browser cf eval "document.querySelector('main').innerText"
-opencli browser cf screenshot temp/cf-billing-N.png
+# 数字一律走文本/JSON（页面内 fetch 结构化取数，见 6.4）；不要 screenshot 后把图读进模型上下文
+# ——图像很费 token，且本文件所有数字都不依赖截图（铁律见 AGENTS.md §收录内容定性闸门）
 ```
 
 **关键 API（在页面上下文 fetch，需已登录）**

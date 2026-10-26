@@ -4,7 +4,7 @@
 这一条线只做一件事：**把已经发现（发现线）的推文，变成能入库的 prompt 草稿**。
 四个子命令对应四个动作：
 
-  review    取证：导出本轮正文（人工逐条判断用），可选抽帧图 + 抓作者自回复
+  review    取证：导出本轮正文（人工逐条判断用），抓作者自回复
   apply     落地：按配置合并提示词、改写 title/tags/models、删不合格草稿、追加 skip 名单
   verify    校验：本轮专项 + 全库审计（--audit）
   snapshot  刷基线：把当前库的人工标题/标签刷进 manual_titles_snapshot.json
@@ -18,9 +18,6 @@ fetch_thread_replies / finalize / verify / refresh_snapshot 六个脚本，每�
 用法:
   # ① 取证（人工判断）：导出本轮正文
   python3 tools/prompts.py review --date 2026-10-23 --hour 06
-
-  # ① 取证：再抽帧看产出是不是 AI 视频（内容定性闸门用）
-  python3 tools/prompts.py review --date 2026-10-23 --hour 06 --frames
 
   # ① 取证：正文缺提示词时抓作者自回复（作者常把提示词放在自己的回复里）
   python3 tools/prompts.py review --ids 2103849845467537562 --replies
@@ -58,8 +55,13 @@ fetch_thread_replies / finalize / verify / refresh_snapshot 六个脚本，每�
 - opencli >= 2.0.0 输出 {"ok": true, "data": [...]}; 1.8.x 是裸数组 → 两种都要兼容
 - 超时必须 killpg 杀整个进程组: opencli 派生的 browser helper 会持有管道写端，
   只 kill 主进程会让 communicate() 一直等 EOF(采集器里踩过: 卡 15~41 分钟)
-- magick 冷启动 ~31s，抽帧前先预热，否则第一次 montage 调用会超时
 - 删除一律走 mavis-trash；素材目录由草稿 image 字段 dirname 推导(绝不做 replace)
+
+铁律（2026-10-26 用户明确要求，优先级最高）:
+- **禁止视觉取证**：图片/视频一律不进模型上下文。`review --frames` / `--montage` 调用即报错退出；
+  也不要用 read 打开 cover.jpg / video.mp4，不要自己 ffmpeg 抽帧、不要 mcp_browser screenshot
+- 定性判断只依据文本（推文正文 / 作者自回复 / 链接域名 / 正文里的模型名与措辞）
+- 正文不足以判断产出是不是 AI 视频 → 保守判为不收（宁可漏收，不拿图喂模型）
 """
 from __future__ import annotations
 
@@ -68,7 +70,6 @@ import glob
 import json
 import os
 import re
-import shutil
 import signal
 import subprocess
 import sys
@@ -349,75 +350,17 @@ def show_thread(tid: str, data: list, n: int) -> None:
     print()
 
 
-def extract_frames(ids: list[str], out: str, times: list[float], width: int,
-                   montage: bool, tile: str) -> None:
-    """按 tweet id 批量抽帧 + 拼 montage（内容定性闸门取证）。
-
-    素材路径严格由草稿的 video/image 字段推导 = static/_drafts + 字段值.lstrip('/')。
-    """
-    if os.path.isdir(out):
-        shutil.rmtree(out)
-    os.makedirs(out, exist_ok=True)
-
-    # magick 冷启动 ~31s, 先预热, 否则第一次 montage 调用会超时
-    try:
-        subprocess.run(["magick", "-version"], capture_output=True, timeout=180)
-    except Exception as e:  # noqa: BLE001
-        print(f"[warn] magick warmup failed: {e}")
-
-    made = []
-    for idx, tid in enumerate(ids, 1):
-        fs = glob.glob(str(DRAFTS / "*" / (tid + "-*.json")))
-        if not fs:
-            print(f"[skip] {tid}: no draft")
-            continue
-        d = json.load(open(fs[0], encoding="utf-8"))
-        rel = (d.get("video") or d.get("image") or "").lstrip("/")
-        p = str(STATIC / rel)
-        if not os.path.exists(p):
-            print(f"[skip] {tid}: media missing {rel}")
-            continue
-        stem = f"{idx:02d}_{tid}"
-        for t in times:
-            outp = os.path.join(out, f"{stem}_t{int(t)}.jpg")
-            r = subprocess.run(
-                ["ffmpeg", "-y", "-loglevel", "error", "-ss", str(t), "-i", p,
-                 "-frames:v", "1", "-vf", f"scale={width}:-1", outp],
-                capture_output=True, text=True)
-            if r.returncode == 0 and os.path.exists(outp):
-                made.append(outp)
-            else:
-                # 短视频末尾取不到帧时回退到 0.5s
-                r2 = subprocess.run(
-                    ["ffmpeg", "-y", "-loglevel", "error", "-ss", "0.5", "-i", p,
-                     "-frames:v", "1", "-vf", f"scale={width}:-1", outp],
-                    capture_output=True, text=True)
-                if r2.returncode == 0 and os.path.exists(outp):
-                    made.append(outp)
-        print(f"[ok] {idx:02d} {tid} -> {len([m for m in made if tid in m])} frames")
-
-    print(f"\ntotal frames: {len(made)}  dir={out}")
-
-    if montage and made:
-        # 按 tweet 分组: 每个 tweet 取第一帧, 拼成总图
-        firsts = []
-        seen = set()
-        for m in made:
-            tid = os.path.basename(m).split("_", 1)[1].rsplit("_t", 1)[0]
-            if tid not in seen:
-                seen.add(tid)
-                firsts.append(m)
-        sheet = os.path.join(out, "sheet.jpg")
-        cmd = (["magick", "montage", "-label", "%f"] + firsts +
-               ["-tile", tile, "-geometry", "380x380+8+8", "-background", "#222",
-                "-fill", "white", "-pointsize", "14", sheet])
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        print(f"montage: rc={r.returncode} -> {sheet}")
-        if r.returncode != 0:
-            print(r.stderr[-800:])
-
-
 def cmd_review(args) -> int:
+    if args.frames or args.montage:
+        # 铁律（2026-10-26 用户明确要求，优先级最高）：图片/视频一律不进模型上下文。
+        # 这里硬拦截，别靠自觉 —— 正文不足以判断就判「不收」。
+        print("!! 禁止视觉取证（AGENTS.md §收录内容定性闸门）：图片 / 视频不得进入模型上下文。\n"
+              "   --frames / --montage 已停用；不要 read cover.jpg / video.mp4，不要自己 ffmpeg 抽帧。\n"
+              "   正确做法：只读正文文本判断产出类型（见 AGENTS.md 的「文本信号判定表」）；\n"
+              "             正文不足以判断产出是不是 AI 视频 → 保守判为「不收」。",
+              file=sys.stderr)
+        return 1
+
     ids = [x.strip() for x in (args.ids or "").split(",") if x.strip()]
     if args.date and args.hour:
         ids += round_ids(args.date, args.hour)
@@ -442,11 +385,6 @@ def cmd_review(args) -> int:
         print(f"  MODELS: {d.get('models')}")
         print(f"  DESC({len(desc)}): {desc[:args.chars]}")
         print()
-
-    if args.frames:
-        extract_frames(ids, args.frames_out,
-                       [float(x) for x in args.times.split(",") if x.strip()],
-                       args.width, args.montage, args.tile)
 
     if args.replies:
         out = Path(args.replies_out)
@@ -1074,17 +1012,15 @@ def main() -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     # ---- review ----
-    rv = sub.add_parser("review", help="取证：导出本轮正文（可抽帧 / 抓作者自回复）")
+    rv = sub.add_parser("review", help="取证：导出本轮正文（抓作者自回复；不抽帧）")
     rv.add_argument("--date", default="", help="YYYY-MM-DD")
     rv.add_argument("--hour", default="", help="HH，例如 06")
     rv.add_argument("--ids", default="", help="逗号分隔的 tweet id")
     rv.add_argument("--chars", type=int, default=1400, help="正文截断长度")
-    rv.add_argument("--frames", action="store_true", help="同时抽帧（判断产出是不是 AI 视频）")
-    rv.add_argument("--frames-out", default="/tmp/prompts_frames", help="抽帧输出目录")
-    rv.add_argument("--times", default="2,6,10", help="抽帧秒数，逗号分隔")
-    rv.add_argument("--width", type=int, default=400)
-    rv.add_argument("--montage", action="store_true", help="额外拼一张 montage 总图")
-    rv.add_argument("--tile", default="4x3")
+    rv.add_argument("--frames", action="store_true",
+                    help="已停用：禁止视觉取证（调用即报错退出，见 AGENTS.md）")
+    rv.add_argument("--montage", action="store_true",
+                    help="已停用：禁止视觉取证（调用即报错退出，见 AGENTS.md）")
     rv.add_argument("--replies", action="store_true", help="抓作者自回复（联网）")
     rv.add_argument("--replies-report-only", action="store_true", help="只汇总已有自回复结果（不联网）")
     rv.add_argument("--replies-out", default="/tmp/thread_replies", help="自回复输出目录")

@@ -268,6 +268,32 @@ MiniMax H3 / Gemini Omni / Veo 3 等关键词 + 作者错拼（`Seadance` / `See
 踩过的坑：`blender` 会撞厨房搅拌机、`Unreal Engine` 是提示词里的**风格引用**、`godot` 是 `#godot` 话题标签、
 `gameplay`/`game engine` 会误伤「GTA 风格」「open-world game sequence」这类**合法** AI 视频提示词。
 
+### 定性判断只依据文本，禁止视觉取证（2026-10-26 用户明确要求 · 优先级最高）
+
+**任何图片 / 视频 / 动图都不得进入模型上下文。** 看图很贵（一张 ≈ 1–1.5K token，一次 montage 十几张），
+而且定性判定的信息量 95% 都在正文里 —— 本节覆盖 tools/README.md、cron prompt 与任何脚本的默认行为。
+
+- ❌ `prompts.py review --frames` / `--montage`（工具层已硬拦截，调用即报错退出）
+- ❌ 用 `read` 打开 `cover.jpg` / `video.mp4` / 任何 `.jpg .png .webp .gif .mp4 .mov`
+- ❌ `mcp_browser screenshot`、自己 ffmpeg / magick 抽帧、自己拼九宫格、把图片路径或 base64 粘进消息
+- ✅ 允许脚本把素材下载落盘到 `static/_drafts/...`（站点产物，不经过模型）
+- **定性判断只依据文本**：推文正文、作者自回复、链接域名、正文里的模型名与明确措辞
+- 正文不足以判断产出是不是 AI 视频 → 保守判为**不收**（宁可漏收，不拿图喂模型）
+
+#### 文本信号判定表
+
+| 文本信号 | 判定 |
+|---|---|
+| 正文点名模型（Seedance / Kling / Veo / Sora / MiniMax / Wan / Hailuo / PixVerse / Flux…） | AI 视频 → **留** |
+| 正文含 `prompt` / `AI video` / `generated with` / `AI generated` | AI 视频或提示词帖 → **留** |
+| 正文含分镜（`Shot 1` / 镜头 / camera movement / aspect ratio） | 提示词帖 → **留** |
+| 正文出现真人拍摄信号（`实拍` / `shot on my iPhone` / `behind the scenes` / `our camera` / 真人自述） | 真人拍摄嫌疑 → **删**（除非正文同时点名 AI 模型） |
+| 正文是代码 / benchmark / 融资 / 发布会 / coupon | 命中不收的 5 类 → **删** |
+| 正文只有问候 / 祝贺 / 生活琐碎 | 纯社交 → **删** |
+
+**默认按「AI 生成」处理（要留）**，只有文本出现明确真人拍摄信号才删 ——
+这样绝大多数条目**不需要任何视觉确认**。
+
 ### 删除不持久 → 永久跳过名单（重要）
 采集器只按**线上 D1** 去重，不知道你本地删过草稿 → 删掉的条目会被重新下载、连 title/tags 都被重置
 （踩坑：删掉的 Claude Code 螃蟹游戏第二天又回来了，标题被打回 `Video Prompt Snapshot`）。
@@ -343,7 +369,7 @@ finalize / verify / refresh_snapshot）+ 独立的 ledger.py，每个都要人�
 
 **agent 的操作指南在 `tools/README.md`**（工作流 / 定性闸门 / 字段铁律 / 删除规范 / 禁则）。
 
-- 导出一轮正文 / 抽帧 / 抓作者自回复 → `python3 tools/prompts.py review …`
+- 导出一轮正文 / 抓作者自回复 → `python3 tools/prompts.py review …`（无抽帧，图像不进模型）
 - 改 title/tags/models、合并提示词、删草稿、追加 skip → `python3 tools/prompts.py apply <config.json>`
 - 校验一轮 → `python3 tools/prompts.py verify --date … --hour …`；全库审计 → `verify --audit`
 - 台账/规则基准 → `python3 tools/prompts.py ledger`

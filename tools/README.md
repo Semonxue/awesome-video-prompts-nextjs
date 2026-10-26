@@ -27,8 +27,10 @@
 # ① 取证 —— 导出本轮新收录的草稿正文（你的判断输入）
 python3 tools/prompts.py review --date 2026-10-23 --hour 06
 
-# ①b 看产出到底是不是 AI 视频（拿不准时才做）
-python3 tools/prompts.py review --date 2026-10-23 --hour 06 --frames --montage
+# ①b ❌ 不抽帧（2026-10-26 起）：图片/视频一律不进模型上下文
+#    「产出是不是 AI 视频」只依据正文文本判断 → AGENTS.md §收录内容定性闸门 的「文本信号判定表」
+#    正文不足以判断 → 保守判为不收（宁可漏收，不拿图喂模型）
+#    tools/prompts.py review --frames / --montage 已硬拦截，调用即报错退出
 
 # ①c 正文缺提示词时（作者写 "Prompt below 👇"），抓他的自回复
 python3 tools/prompts.py review --ids 2103849845467537562 --replies

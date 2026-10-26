@@ -127,8 +127,10 @@
 - 验证草稿 JSON 与素材都位于 `_drafts/` 目录中
 - 验证 JSON 可被 `json.loads` 正常解析（字段类型正确、无尾逗号、无注释）
 - **不再**做 `git status` 检查——本流程与 git 解耦
-- 运行 `./tools/start-md-editor.sh` 启动编辑器
-- 浏览器打开 `http://localhost:3000/`，找到刚生成的草稿，编辑后点 **"📤 发布"**
+- **以下两步是人工操作，agent 不要代劳**（开浏览器很耗 token，且有误发布风险）：
+  - 人工运行 `./tools/start-md-editor.sh` 启动编辑器
+  - 人工在浏览器打开 `http://localhost:3000/`，找到刚生成的草稿，编辑后点 **"📤 发布"**
+  - agent 的职责到「草稿 JSON + 素材落盘」为止，发布由人来做
 - 发布是异步队列：点发布会先保存当前编辑状态，再写入 `publish_queued_at` 入队；后台 worker 处理完会把 front matter 改写：
   ```json
   {
