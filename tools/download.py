@@ -34,6 +34,7 @@ import argparse
 import os
 import shutil
 import re
+import urllib.request
 
 
 def parse_opencli_json(stdout: str):
@@ -205,6 +206,59 @@ def extract_tweet_info_yt_dlp(url: str) -> dict:
         return {"success": False, "error": str(e)}
 
 
+# 直链下载用的请求头：video.twimg.com / pbs.twimg.com 对空 UA 会回 403
+DIRECT_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    ),
+    "Referer": "https://twitter.com/",
+}
+
+
+def fallback_direct_download(metadata: dict, output_dir: str) -> bool:
+    """yt-dlp 拿不到视频流时，用 metadata 里的直链直接下载兜底。
+
+    背景：yt-dlp 走 X 的 guest token GraphQL，少数推文（比如 amplify_video 源）
+    取不到视频流，报 "No video could be found in this tweet"；但 opencli 路径
+    已经拿到了 video.twimg.com 直链 —— 直接拉直链，别把整条丢掉。
+
+    产出文件名与 yt-dlp 路径保持一致：
+      video_1.mp4       —— 供 preview_1_480p.mp4 生成
+      video_00001.jpg   —— 供封面压缩（collect.py 硬编码这个名字）
+    """
+    vids = metadata.get("videos") or []
+    url = next((v.get("url") for v in vids if v.get("url")), None)
+    if not url:
+        return False
+
+    mp4 = os.path.join(output_dir, "video_1.mp4")
+    req = urllib.request.Request(url, headers=DIRECT_HEADERS)
+    try:
+        with urllib.request.urlopen(req, timeout=180) as r, open(mp4, "wb") as f:
+            shutil.copyfileobj(r, f)
+        if os.path.getsize(mp4) <= 0:
+            raise IOError("empty file")
+    except Exception as e:  # noqa: BLE001
+        print(f"direct video download failed: {e}", file=sys.stderr)
+        if os.path.exists(mp4):
+            os.remove(mp4)
+        return False
+
+    thumb = metadata.get("thumbnail")
+    if thumb:
+        jpg = os.path.join(output_dir, "video_00001.jpg")
+        try:
+            treq = urllib.request.Request(thumb, headers=DIRECT_HEADERS)
+            with urllib.request.urlopen(treq, timeout=90) as r, open(jpg, "wb") as f:
+                shutil.copyfileobj(r, f)
+        except Exception as e:  # noqa: BLE001
+            print(f"direct thumbnail download failed: {e}", file=sys.stderr)
+
+    print("fallback: downloaded media via direct URL", file=sys.stderr)
+    return True
+
+
 def process_download(metadata: dict, url: str) -> dict:
     """下载视频、生成预览并保存相关文件到 temp 目录"""
     # Use URL-extracted id as source of truth (yt-dlp may return a different id for retweets/quotes)
@@ -248,7 +302,12 @@ def process_download(metadata: dict, url: str) -> dict:
         return metadata
     except subprocess.CalledProcessError as e:
         metadata["download_error"] = str(e)
-        return metadata
+        # yt-dlp 偶尔取不到视频流（guest token 看不到 amplify_video 源），
+        # 但 opencli 路径已经有直链 —— 走直链兜底，别把整条丢掉。
+        if fallback_direct_download(metadata, output_dir):
+            metadata.pop("download_error", None)
+        else:
+            return metadata
 
     # 查找所有下载的视频和缩略图
     video_paths = []
