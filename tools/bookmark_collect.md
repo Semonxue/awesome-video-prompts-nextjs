@@ -28,6 +28,11 @@ opencli twitter bookmarks --site-session ephemeral --limit 30 -f json
 
 只处理**带视频**的条目；没视频的直接 `unbookmark` 掉。
 
+**要多拉一点留候补**：`--limit 30` 常常扣掉没视频的条目，凑不满 30 条。
+拉 150 条 → 按时间倒序逐条判定 → 过闸门的取最新 30 条。
+后面判定时又会有条目因为「其实没有提示词」被淘汰（见第 6 步），
+**从排在后面的候补里补齐**，别把 30 的目标缩水。
+
 ### 3. 查重 —— 已经收录的不要再收录
 
 ```bash
@@ -58,6 +63,10 @@ python3 tools/collect.py process <tweet_id> --min-text 0
 （`--min-text 0` 只放行长度和正文特征两道门槛，提示词是否真的存在由第 6 步
 抓回复来确认。默认不传该参数时行为不变，时间线收录线不受影响。）
 
+⚠️ **下载失败要读日志**：失败原因写在 `logs/x_timeline_cron/dl_error_<id>.log`
+（stderr）。`date_parse_failed` 是历史 bug（yt-dlp 兜底路径的日期格式没被识别），
+2026-11-02 已修 `tools/collect.py`；若又出现，先看日志再决定是重试还是换条目。
+
 ### 5. 落草稿 JSON
 
 字段、目录结构、素材规格、标题生成规则 —— **严格按 `tools/download.md` 执行**
@@ -82,6 +91,10 @@ description 末尾（带溯源 marker，幂等）。
 ⚠️ **回复里也没有提示词的条目**（作者只发了「Thanks!」之类）→ 判不合格，
 放 `junk` 里，不要硬凑。
 
+⚠️ **作者写「Prompt in the comments 👇」但回复里根本没有提示词** —— 这类在
+Picsart 合作账号上很常见（2026-11-02 第四轮实测 4 条）。不要顺着评论区
+扒别人的回复凑数，判不合格放 `junk`。
+
 ### 7. 标题和标签全部手工处理
 
 **铁律见 `AGENTS.md` §收录产出质量铁律**（唯一事实源，这里不复述）。
@@ -98,6 +111,45 @@ models（白名单 `data/models.yaml`）。
 ```
 
 正文缺提示词要合回去的 → `keep` 里加 `"recovered_prompt":"..."` 和 `"recovered_from":["<reply_id>"]`。
+
+#### models 以**原文**为准，不是 description
+
+采集器的 `detect_model()` 跑在**原文**上（含「Made using Seedance 2.5」这类抬头），
+但草稿的 `description` 有可能被人工整段替换成只有提示词本体 —— 此时 description
+里搜不到模型名，不代表原文没写。**判 models 要回原文核对**（`opencli twitter thread <id>`
+的根帖 text 就是原文）。
+
+反过来，**正文只出现平台名**（`@ideogram_ai` / `@PixVerse` / `@makeugc` / `@PolloAI`）
+而没有模型名 → `models` 留空，平台 ≠ 模型。
+
+#### 这几种直接判不合格（2026-11-02 第四轮实测）
+
+- 平台促销 / 引流：`Kling 4.0 is now on PixVerse! Go unlimited for 10 days`、
+  `#광고`、`Comment PICSARTAI and I'll send you`、`Comment PROMPT to unlock`
+- 正文只有一句广告话术、没有任何提示词（"what makes a luxury ad unforgettable…"）
+- 音乐 MV 回顾帖：正文讲的是配乐，视频只是附带（`Video : Seedance 2.5 + 2.0` 这种
+  一行不算提示词）
+
+#### 同一 tid 可能出现两个草稿文件
+
+slug 由 `标题` 决定，标题变了就会多出一个 `content/_drafts/prompts/<月>/<tid>-<新slug>.json`。
+两轮下载撞在一起、或标题被人工改过，都会留下**同 tid 的重复副本**（上线会重复）。
+`apply` 按 tid 只取一个文件，不会清副本 —— 落地后必须扫一遍：
+
+```bash
+python3 - <<'PY'
+import glob,os,re
+from collections import defaultdict
+g=defaultdict(list)
+for p in glob.glob('content/_drafts/prompts/*/*.json'):
+    m=re.match(r'^(\d+)-', os.path.basename(p))
+    if m: g[m.group(1)].append(p)
+for k,v in g.items():
+    if len(v)>1: print(k, v)
+PY
+```
+
+副本用 `mavis-trash` 删（草稿 JSON + `static/_drafts` 下的同名素材目录）。
 
 ### 8. 落地
 
@@ -146,6 +198,11 @@ opencli browser --session bmfix close
 
 **必做终检**：跑完后重新拉一次 `opencli twitter bookmarks --limit 100`，
 比对目标 id 是否还有残留 —— 逐条返回 `success` 不代表真的移干净了。
+
+**限流**：连续抓 thread（`opencli twitter thread`）会触发 Twitter 的 TweetDetail
+配额，表现为 `HTTP 429: TweetDetail fetch failed — rate-limited by Twitter`，
+需冷却 15–30 分钟。**`unbookmark` 走的是另一个 GraphQL 变更，不受影响** ——
+撞到 429 时可以先把 unbookmark 做完，回复留到冷却后再抓。
 
 ---
 
