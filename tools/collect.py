@@ -657,12 +657,19 @@ def process_one(tweet_id: str, min_text: int = 100) -> dict:
             return result
 
         # 2. parse post_date
-        try:
-            # 格式: "Fri Aug 28 03:33:04 +0000 2026"
-            post_dt = datetime.strptime(post_date_str, "%a %b %d %H:%M:%S %z %Y")
-        except Exception as e:
-            result["reason"] = f"date_parse_failed: {e}"
-            log("WARN", f"  {tweet_id}: date parse failed: {e}")
+        # opencli 路径: "Fri Aug 28 03:33:04 +0000 2026"
+        # yt-dlp 兜底路径: upload_date = "20261026"（只有日期，无时间）
+        # 旧实现只认第一种格式 → 走 yt-dlp 兜底的推文全部被静默丢弃（2026-11-02 实测）
+        post_dt = None
+        for fmt in ("%a %b %d %H:%M:%S %z %Y", "%Y%m%d", "%Y-%m-%d"):
+            try:
+                post_dt = datetime.strptime(post_date_str, fmt)
+                break
+            except ValueError:
+                continue
+        if post_dt is None:
+            result["reason"] = f"date_parse_failed: {post_date_str!r}"
+            log("WARN", f"  {tweet_id}: date parse failed: {post_date_str!r}")
             return result
         post_date = post_dt.strftime("%Y-%m-%d")
         year_month = post_dt.strftime("%Y-%m")
