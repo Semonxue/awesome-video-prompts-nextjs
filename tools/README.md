@@ -35,6 +35,15 @@ python3 tools/prompts.py review --date 2026-10-23 --hour 06
 # ①c 正文缺提示词时（作者写 "Prompt below 👇"），抓他的自回复
 python3 tools/prompts.py review --ids 2103849845467537562 --replies
 
+# ①d 自回复里已抓到完整提示词 → 批量合回 description（幂等，可重复跑）
+python3 tools/prompts.py recover --replies-out /tmp/thread_replies
+#    自动挑作者自回复里最长且 >200 字的那条当提示词，剥掉 "Prompt:" 引导语、
+#    尾部署名行（Made with X）、纯点噪声行，再按 recovered marker 合回 description
+#    ⚠️ TweetDetail 端点批量抓会触发 HTTP 429（会话配额，冷却 15~30 分钟）；
+#      429 时用兜底路径（Timeline 端点不占 TweetDetail 配额）：
+python3 tools/recover_via_timeline.py --ids-file /tmp/retry_ids.txt --out /tmp/tl_replies
+#      它从作者时间线里定位"主帖之后同作者的最长回复"，产出与 review --replies 同格式
+
 # ② 判断 —— 逐条读正文，按下面的「定性闸门」决定去留（**主闸门，在你这**）
 
 # ③ 写决定 —— 写成 JSON 配置（是数据，不是脚本！）→ /tmp/round_1023_06.json

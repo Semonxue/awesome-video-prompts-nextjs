@@ -175,6 +175,212 @@ def model_in(text):
     return None
 
 
+# ============================================================
+# recover —— 从作者自回复还原完整提示词并合回 description
+# ============================================================
+
+# 首行的"提示词引导语" —— 只在正文开头出现时才剥，剥完正文本身不动
+# 分两组：
+#   LEAD_INLINE —— 前缀后同一行还有内容（"Prompt : 0-3s: ..."）→ 只剥前缀，保留同行内容
+#   LEAD_SOLO   —— 整行就是引导语（"Prompt:" / "VIDEO PROMPT 🎬" / "提示词："）→ 整行剥掉
+LEAD_INLINE = re.compile(
+    r"^\s*(?:"
+    r"(?:seedance\s*[\d.]*\s*|video\s*|ai\s*video\s*|full\s*)?prompt\s*[:：]\s*|"
+    r"prompt\s*(?:below|here)\s*[:：]?\s*|"
+    r"提示词\s*[:：]\s*"
+    r")",
+    re.I,
+)
+# "VIDEO PROMPT 16:9 widescreen storyboard sheet, ..." —— 这类前缀后面直接接正文，
+# 它本身就是提示词的第一句（不是引导语），剥了会丢信息 → 只在同行剩余为空时才剥。
+LEAD_INLINE_KEEP = re.compile(
+    r"^\s*(?:video\s*prompt|ai\s*video\s*prompt|full\s*prompt)\s*[:：]?\s*",
+    re.I,
+)
+# 花体/全角变体的字母（如 𝗩𝗜𝗗𝗢𝗢 → VIDEO）—— Unicode Mathematical Alphanumeric Symbols
+# 数学粗体/花体大写 A-Z 落在 0x1D5D4..0x1D607，小写落在 0x1D608..0x1D63B
+def _build_fancy_map() -> dict:
+    m = {}
+    for base, off in ((0x1D5D4, 0), (0x1D5EE, 26)):      # 粗体大写 / 花体大写
+        for i in range(26):
+            m[chr(base + i)] = chr(ord("A") + i)
+    for base, off in ((0x1D608, 0), (0x1D622, 26)):      # 粗体小写 / 花体小写
+        for i in range(26):
+            m[chr(base + i)] = chr(ord("a") + i)
+    return m
+
+
+FANCY_TABLE = str.maketrans(_build_fancy_map())
+
+LEAD_SOLO = re.compile(
+    r"^\s*(?:"
+    r"prompt\s*[:：]?\s*|"
+    r"prompt\s*(?:below|here|⤵️|👇|🔽|⬇️)\s*[:：]?\s*|"
+    r"video\s*prompt\s*[:：]?\s*|"
+    r"ai\s*video\s*prompt\s*[:：]?\s*|"
+    r"full\s*prompt\s*[:：]?\s*|"
+    r"提示词\s*[:：]?\s*|"
+    r"prompt\s*\.\.\.\s*|"
+    r"\.{2,}\s*video\s*📷\s*"
+    r")[\s🎬🎥👇⬇️⤵️🔽…\.。]*$",
+    re.I,
+)
+
+# 尾部署名行 —— "Made with X" / "Created with X" / "Created Using https://..."
+SIGNOFF = re.compile(
+    r"^\s*(?:"
+    r"(?:made|created|generated|upscaled|graded|edited)\s+(?:with|using|on|in)\b.*|"
+    r"created\s+using\b.*|"
+    r"music\s+is\s+suno\b.*|"
+    r"base\s+image\s+@.*|"
+    r"seedance\s*[\d.]*\s+on\s+@\S+\s*$|"
+    r"#\S+\s*"
+    r")\s*$",
+    re.I,
+)
+
+# 纯点/符号噪声行（作者打完字留的 ".." / "..."）
+DOTS_ONLY = re.compile(r"^\s*\.{2,}\s*$")
+
+
+def clean_prompt_text(text: str) -> str:
+    """把作者自回复原文洗成"纯提示词正文"。
+
+    只洗外壳，不动内容：
+    - 剥开头的 "Prompt:" / "VIDEO PROMPT:" / "提示词：" 引导语
+      （前缀与内容同行时只剥前缀，保留同行内容）
+    - 剥结尾的署名行（Made with X / Created using ... / #标签）
+    - 剥纯点噪声行
+    """
+    lines = (text or "").split("\n")
+    # 剥头部引导语（最多连续 3 行）
+    i = 0
+    while i < len(lines) and i < 3:
+        s = lines[i]
+        # 花体字母先折叠回 ASCII 再匹配（𝗩𝗜𝗗𝗢𝗢 𝗣𝗥𝗢𝗠𝗣𝗧 → VIDEO PROMPT）
+        s_norm = s.translate(FANCY_TABLE)
+        st = s.strip()
+        if not st:
+            i += 1
+            continue
+        m_inline = LEAD_INLINE.match(s_norm)
+        m_keep = LEAD_INLINE_KEEP.match(s_norm)
+        if m_keep:
+            # "VIDEO PROMPT 16:9 ..." —— 同行还有实质内容 → 整行保留
+            rest = s[m_keep.end():].strip()
+            if rest:
+                break
+            m_inline = m_keep
+        if m_inline:
+            rest = s[m_inline.end():].strip()
+            if rest:
+                # 前缀与内容同行 → 只剥前缀
+                lines[i] = rest
+            else:
+                # 整行只有前缀 → 丢掉这一行
+                i += 1
+                while i < len(lines) and (not lines[i].strip() or DOTS_ONLY.match(lines[i])):
+                    i += 1
+                continue
+            break
+        if LEAD_SOLO.match(s_norm):
+            i += 1
+            while i < len(lines) and (not lines[i].strip() or DOTS_ONLY.match(lines[i])):
+                i += 1
+            continue
+        break
+    lines = lines[i:]
+    # 剥尾部署名行
+    while lines:
+        s = lines[-1].strip()
+        if not s or DOTS_ONLY.match(s) or SIGNOFF.match(s):
+            lines.pop()
+            continue
+        break
+    out = "\n".join(lines).strip()
+    return out
+
+
+def pick_recovered(data: list) -> tuple[str | None, list, str | None]:
+    """从线程数据里挑出承载完整提示词的作者自回复。
+
+    返回 (author, replies, best_reply_id)；best_reply_id 为 None 表示没有可用提示词。
+    挑法：作者自己的回复里，正文最长且 >200 字的那条（提示词几乎总是最长的那条）。
+    """
+    author, replies = author_replies(data)
+    cands = [r for r in replies if len((r.get("text") or "").strip()) > 200]
+    if not cands:
+        return author, replies, None
+    best = max(cands, key=lambda r: len(r.get("text") or ""))
+    return author, replies, best.get("id")
+
+
+def cmd_recover(args) -> int:
+    """recover: 把 review --replies 抓到的作者自回复里的完整提示词合回 description。
+
+    幂等：description 里已有 recovered marker 就跳过。
+    """
+    out = Path(args.replies_out)
+    if not out.exists():
+        print(f"!! 自回复目录不存在 {out}（先跑 review --replies）", file=sys.stderr)
+        return 1
+
+    ids = [x.strip() for x in (args.ids or "").split(",") if x.strip()]
+    if not ids:
+        ids = [p.stem for p in sorted(out.glob("*.json"))]
+
+    ok = skip = miss = 0
+    for tid in ids:
+        p = draft_path(tid)
+        if not p:
+            print(f"  !! {tid} 草稿缺失")
+            miss += 1
+            continue
+        src = out / f"{tid}.json"
+        if not src.exists():
+            print(f"  -- {tid} 无自回复文件（限流未抓到）")
+            miss += 1
+            continue
+        try:
+            data = json.loads(src.read_text(encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            print(f"  !! {tid} 自回复解析失败: {exc}")
+            miss += 1
+            continue
+        if not data:
+            print(f"  -- {tid} 线程为空（无回复）")
+            miss += 1
+            continue
+
+        d = json.loads(Path(p).read_text(encoding="utf-8"))
+        cur = d.get("description") or ""
+        if RECOVERED_MARKER in cur:
+            print(f"  -- {tid} 已含 recovered marker，跳过")
+            skip += 1
+            continue
+
+        author, replies, best_id = pick_recovered(data)
+        if not best_id:
+            print(f"  -- {tid} @{author} 作者回复里无 >200 字提示词")
+            miss += 1
+            continue
+
+        raw = next(r for r in replies if r.get("id") == best_id)
+        prompt = clean_prompt_text(raw.get("text") or "")
+        if len(prompt) < 100:
+            print(f"  !! {tid} 清洗后仅 {len(prompt)} 字，过短，不写入")
+            miss += 1
+            continue
+
+        notes = apply_description(d, {"recovered_prompt": prompt, "recovered_from": [best_id]})
+        Path(p).write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"  ✓ {tid} @{author} +{len(prompt)} 字 (reply {best_id}) {'/'.join(notes)}")
+        ok += 1
+
+    print(f"\nrecover: 合回 {ok}  跳过 {skip}  未命中 {miss}")
+    return 0
+
+
 def apply_description(d, spec):
     """按 spec 应用 description 变更, 就地改 d。返回变更备注列表。
 
@@ -1050,6 +1256,12 @@ def main() -> int:
     # ---- snapshot ----
     sn = sub.add_parser("snapshot", help="刷新 manual_titles_snapshot.json（从当前库重扫）")
     sn.set_defaults(func=lambda _a: (lambda r: (print(f"snapshot: {r[0]} -> {r[1]} 条"), 0)[1])(refresh_snapshot()))
+
+    # ---- recover ----
+    rc = sub.add_parser("recover", help="把作者自回复里的完整提示词合回 description（幂等）")
+    rc.add_argument("--ids", default="", help="逗号分隔的 tweet id（默认全部已抓到的）")
+    rc.add_argument("--replies-out", default="/tmp/thread_replies", help="自回复目录（review --replies 的输出）")
+    rc.set_defaults(func=cmd_recover)
 
     # ---- ledger ----
     lg = sub.add_parser("ledger", help="重建垃圾台账 + 规则回测基准")

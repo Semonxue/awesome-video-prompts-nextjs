@@ -71,6 +71,19 @@
         .file-item.recovered { border-left: 3px solid var(--accent-color); }
         .file-item.recovered .file-name { font-weight: 600; }
         .file-item .file-name::before.recovered-icon { content: "✨ "; }
+        /* 人工审核档位：A=正文点名模型且含完整提示词原文（置顶待确认），B=提示词在回复里 */
+        .file-item.tiered { border-left: 3px solid var(--success-color); }
+        .file-item.tiered .file-name { font-weight: 600; }
+        .file-item.tier-B { border-left-color: var(--warning-color, #d69e2e); }
+        .file-item .file-name .tier-badge {
+            display: inline-block; padding: 0 5px; margin-right: 4px;
+            border-radius: 3px; font-size: 10px; font-weight: 700; line-height: 15px;
+            vertical-align: 1px;
+        }
+        .file-item .file-name .tier-badge.tier-A { background: var(--success-color); color: #fff; }
+        .file-item .file-name .tier-badge.tier-B { background: var(--warning-color, #d69e2e); color: #fff; }
+        .file-item.active .file-name .tier-badge.tier-A { background: #fff; color: var(--success-color); }
+        .file-item.active .file-name .tier-badge.tier-B { background: #fff; color: var(--warning-color, #d69e2e); }
         .editor-actions { display: flex; gap: 8px; }
         .btn { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
         .btn-primary { background: var(--accent-color); color: white; }
@@ -446,9 +459,13 @@
                 if (f.published_error) meta.push(`❌ ${f.published_error.slice(0, 50)}`);
                 const queuePrefix = f.in_queue ? '<span class="queue-icon">⏳ </span>' : '';
                 const recoveredPrefix = f.recovered ? '<span class="recovered-icon" title="已从推文串还原提示词">✨ </span>' : '';
-                const cls2 = `file-item ${active ? 'active' : ''} ${f.status} ${f.recovered ? 'recovered' : ''}`;
+                const tier = f.review_tier || '';
+                const tierPrefix = tier
+                    ? `<span class="tier-badge tier-${tier}" title="${tier === 'A' ? '正文点名模型且含完整提示词原文' : '正文点名模型，提示词在作者回复里'}">${tier}</span>`
+                    : '';
+                const cls2 = `file-item ${active ? 'active' : ''} ${f.status} ${f.recovered ? 'recovered' : ''} ${tier ? 'tiered tier-' + tier : ''}`;
                 return `<div class="${cls2}" onclick="openFile('${f.path.replace(/'/g, "\\'")}')">
-                    <div class="file-name" title="${f.name}">${queuePrefix}${recoveredPrefix}${(f.title || f.name).replace(/</g, '<')}</div>
+                    <div class="file-name" title="${f.name}">${tierPrefix}${queuePrefix}${recoveredPrefix}${(f.title || f.name).replace(/</g, '<')}</div>
                     <div class="file-date">${f.date}${meta.length ? ' · ' + meta.join(' · ') : ''}</div>
                 </div>`;
             }).join('');

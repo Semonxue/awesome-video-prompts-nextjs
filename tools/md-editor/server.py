@@ -228,6 +228,18 @@ def has_recovered_prompt(fm: Dict[str, Any]) -> bool:
     return RECOVERED_MARKER in str(fm.get("description") or "")
 
 
+# 人工审核档位（正文点名模型 + 含完整提示词原文 → 值得优先看）
+# 写入草稿 front matter 的 review_tier 字段：A=两者俱全，B=提示词在回复里
+REVIEW_TIER_KEY = "review_tier"
+REVIEW_TIER_ORDER = {"A": 0, "B": 1}
+
+
+def get_review_tier(fm: Dict[str, Any]) -> str:
+    """读取人工审核档位（A/B/其它），非 A/B 返回空串。"""
+    tier = str(fm.get(REVIEW_TIER_KEY) or "").strip().upper()
+    return tier if tier in REVIEW_TIER_ORDER else ""
+
+
 def read_draft(path: Path) -> Optional[Dict[str, Any]]:
     """读取草稿 → { path, data, raw, format, body }；失败返回 None"""
     if not path.exists():
@@ -967,14 +979,21 @@ class EditorHandler(SimpleHTTPRequestHandler):
                 "published_error": get_published_error(fm),
                 "title": fm.get("title", ""),
                 "recovered": has_recovered_prompt(fm),
+                "review_tier": get_review_tier(fm),
             }
             # queued 文件归到 unpublished tab（极简：不单独建 tab）
             bucket = "unpublished" if status == "queued" else status
             files_by_status[bucket].append(item)
-        # 还原过提示词的排前面，组内仍按时间倒序
+        # 排序优先级：人工审核档位 A > B > 还原过提示词 > 时间倒序
+        # （A 档 = 正文点名模型且含完整提示词原文，是最值得人工确认的一批）
         for k in files_by_status:
             files_by_status[k].sort(
-                key=lambda x: (x["recovered"], x["date"]), reverse=True
+                key=lambda x: (
+                    -REVIEW_TIER_ORDER.get(x.get("review_tier") or "", 9),
+                    x["recovered"],
+                    x["date"],
+                ),
+                reverse=True,
             )
 
         self.send_json({
