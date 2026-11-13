@@ -403,8 +403,26 @@ def prompt_only(desc: str) -> str:
 #                             冷却 15-30 分钟 → 22 个作者要等几小时，不适合批量
 #
 #   所以批量路径是 article 优先、thread 兜底，时间线只作为最后手段。
+#
+#   ⚠️ 抓取时必须用 **source_url 里的真实推文 id**，不是草稿文件名里的 id
+#      （2026-11-13 实测：两者常常不同，文件名 id 拿去查会得到 "Article not found"，
+#       用 source id 才能拿到 2000-5000 字的完整长推文）。
+#      → 优先查 source id，查不到再回退文件名 id。
 
 TCO_RE = re.compile(r"https?://t\.co/\S+")
+
+
+def _source_url_id(tid: str) -> str:
+    """草稿 source_url 里的真实推文 id（可能与文件名 id 不同）。"""
+    p = draft_path(tid)
+    if not p:
+        return ""
+    try:
+        d = json.loads(Path(p).read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return ""
+    m = re.search(r"/status/(\d{10,25})", d.get("source_url") or "")
+    return m.group(1) if m else ""
 
 
 def _norm_for_fulltext(s: str) -> str:
@@ -438,27 +456,43 @@ def _run_opencli_json(args: list[str], timeout: int, retries: int = 3):
 def fetch_fulltext(tid: str, session: str = "persistent", timeout: int = 120) -> dict:
     """抓一条推文的完整正文。
 
-    返回 {"state": "full"|"no-article"|"err", "text": str, "author": str|None}
+    依次尝试 **source_url 里的真实 id** 和草稿文件名 id（两者常不同，
+    文件名 id 常常查不到 —— 见 fulltext 段落注释）。
+
+    返回 {"state": "full"|"no-article"|"err", "text": str, "author": str|None,
+           "src_id": str}
       - full      → 有 Note Tweet，text 是完整原文
       - no-article→ 该推文没有长推文扩展，草稿正文本身就是完整正文
-      - err       → 抓取失败（配额/超时）
+      - err       → 抓取失败（配额/超时/推文已删）
     """
-    obj, _ = _run_opencli_json(
-        ["twitter", "article", tid, "--site-session", session, "-f", "json"], timeout)
-    if obj is None:
-        return {"state": "err", "text": "", "author": None}
-    if isinstance(obj, dict) and obj.get("ok"):
-        data = obj.get("data") or []
-        if isinstance(data, list) and data:
-            return {"state": "full", "text": data[0].get("content") or "",
-                    "author": data[0].get("author")}
-        return {"state": "err", "text": "", "author": None}
-    msg = ""
-    if isinstance(obj, dict):
-        msg = str((obj.get("error") or {}).get("message") or "")
-    if "no article content" in msg:
-        return {"state": "no-article", "text": "", "author": None}
-    return {"state": "err", "text": "", "author": None}
+    src_id = _source_url_id(tid)
+    candidates = [x for x in ([src_id] if src_id else []) + [tid] if x]
+    seen = set()
+    last_state = "err"
+    for cid in candidates:
+        if cid in seen:
+            continue
+        seen.add(cid)
+        obj, _ = _run_opencli_json(
+            ["twitter", "article", cid, "--site-session", session, "-f", "json"], timeout)
+        if obj is None:
+            last_state = "err"
+            continue
+        if isinstance(obj, dict) and obj.get("ok"):
+            data = obj.get("data") or []
+            if isinstance(data, list) and data:
+                return {"state": "full", "text": data[0].get("content") or "",
+                        "author": data[0].get("author"), "src_id": cid}
+            last_state = "err"
+            continue
+        msg = ""
+        if isinstance(obj, dict):
+            msg = str((obj.get("error") or {}).get("message") or "")
+        if "no article content" in msg:
+            # 推文活着但没有长推文扩展 → 草稿正文本身即完整
+            return {"state": "no-article", "text": "", "author": None, "src_id": cid}
+        last_state = "err"
+    return {"state": last_state, "text": "", "author": None, "src_id": src_id or tid}
 
 
 def fetch_thread(tid: str, session: str = "persistent", timeout: int = 120) -> list:
@@ -507,9 +541,11 @@ def cmd_fulltext(args) -> int:
             rec = fetch_fulltext(tid, args.site_session, args.timeout)
             if rec["state"] == "full":
                 target.write_text(json.dumps(
-                    {"ok": True, "content": rec["text"], "author": rec["author"]},
+                    {"ok": True, "content": rec["text"], "author": rec["author"],
+                     "src_id": rec.get("src_id") or tid, "matched_tid": tid},
                     ensure_ascii=False), encoding="utf-8")
-                print(f"  ✓ [{n}/{len(ids)}] {tid} 有长推文 len={len(rec['text'])}")
+                print(f"  ✓ [{n}/{len(ids)}] {tid} 有长推文 len={len(rec['text'])} "
+                      f"(src {rec.get('src_id')})")
                 got += 1
             elif rec["state"] == "no-article":
                 target.write_text(json.dumps(
@@ -568,10 +604,14 @@ def cmd_fulltext(args) -> int:
             if args.dry_run:
                 print(f"  · {tid} [{rec.get('author')}] {len(cur)} → {len(prompt)} 字")
                 continue
-            d["description"] = (RECOVERED_TEMPLATE.format(ids=tid) + "\n" + prompt.strip())
+            # 溯源用**真实推文 id**（source_url 里的），不是草稿文件名 id
+            trace_id = str(rec.get("src_id") or _source_url_id(tid) or tid)
+            d["description"] = (RECOVERED_TEMPLATE.format(ids=trace_id) + "\n" +
+                                prompt.strip())
             Path(p).write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n",
                                encoding="utf-8")
-            print(f"  ✓ {tid} [{rec.get('author')}] 整段替换 → {len(prompt)} 字")
+            print(f"  ✓ {tid} [{rec.get('author')}] 整段替换 → {len(prompt)} 字 "
+                  f"(from {trace_id})")
             ok += 1
         print(f"\nfulltext apply: 写入 {ok}  跳过 {skip}  未处理 {miss}")
     return 0
