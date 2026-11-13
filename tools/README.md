@@ -44,6 +44,18 @@ python3 tools/prompts.py recover --replies-out /tmp/thread_replies
 python3 tools/recover_via_timeline.py --ids-file /tmp/retry_ids.txt --out /tmp/tl_replies
 #      它从作者时间线里定位"主帖之后同作者的最长回复"，产出与 review --replies 同格式
 
+# ①e 草稿正文疑似被 X 长推文截断 → 抓完整正文并**整段替换** description
+python3 tools/prompts.py fulltext --ids-file /tmp/need.txt --out /tmp/fulltext
+#    核心机制（2026-11-13 实测，勿改回去）：
+#    - X 长推文（Note Tweet）在 TweetDetail 端点返回的是**中段截断版** ——
+#      草稿里存的既不是开头也不是结尾 → 补全是「整段替换」，不是往后追加
+#    - `twitter article <id>` **不占时间线配额**，对有 Note Tweet 的推文返回完整原文，
+#      对没有的报 "has no article content" → 可当**权威截断判定器**
+#    - ⚠️ 别再用「正文末尾 t.co 后无实质内容」判截断 —— 普通推文本来就以媒体
+#      t.co 链接结尾（实测 100 条里启发式误判 24 条，真实截断只有 26 条）
+#    - 配额行为：article ✅ 不占配额 / thread ✅ 不占配额 / tweets ⚠️ 连打就 429
+#    - 安全阀：同源校验（全文与草稿必须有实质交集）+ 长度门槛 + 幂等 marker
+
 # ② 判断 —— 逐条读正文，按下面的「定性闸门」决定去留（**主闸门，在你这**）
 
 # ③ 写决定 —— 写成 JSON 配置（是数据，不是脚本！）→ /tmp/round_1023_06.json
