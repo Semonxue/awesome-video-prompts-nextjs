@@ -387,6 +387,196 @@ def prompt_only(desc: str) -> str:
     return out
 
 
+# ---------------------------------------------------------------------------
+# fulltext —— 长推文（Note Tweet）完整正文抓取与落地
+# ---------------------------------------------------------------------------
+# 背景（2026-11-13 实测，重要）：
+#   X 的长推文正文超 280 字时，TweetDetail 端点返回的是**中段截断版** ——
+#   草稿里存的既不是开头也不是结尾，而是中间一段。所以补全是「整段替换」，
+#   不是「往后追加」。
+#
+#   抓全文有三条路，配额行为完全不同：
+#     twitter article <id>   ✅ 不占时间线配额，对有 Note Tweet 的推文返回完整原文，
+#                             对没有的报 "has no article content" → 可当**截断判定器**
+#     twitter thread <id>    ✅ 不占时间线配额，返回 45-50 条回复（作者自回复里常贴提示词）
+#     twitter tweets <handle>⚠️  能拿完整正文，但**受会话配额限制**，连打几次就 429，
+#                             冷却 15-30 分钟 → 22 个作者要等几小时，不适合批量
+#
+#   所以批量路径是 article 优先、thread 兜底，时间线只作为最后手段。
+
+TCO_RE = re.compile(r"https?://t\.co/\S+")
+
+
+def _norm_for_fulltext(s: str) -> str:
+    return re.sub(r"\s+", "", TCO_RE.sub("", s or ""))
+
+
+def _run_opencli_json(args: list[str], timeout: int, retries: int = 3):
+    """跑 opencli 并解析 JSON。返回 (obj|None, err)。"""
+    err = ""
+    for attempt in range(retries):
+        try:
+            proc = subprocess.run(["opencli"] + args, capture_output=True, text=True,
+                                  timeout=timeout)
+        except subprocess.TimeoutExpired:
+            err = "timeout"
+            time.sleep(3 * (attempt + 1))
+            continue
+        out = (proc.stdout or proc.stderr or "").strip()
+        if not out:
+            err = "empty"
+            time.sleep(3 * (attempt + 1))
+            continue
+        try:
+            return json.loads(out), ""
+        except Exception:  # noqa: BLE001
+            err = "json"
+            time.sleep(3 * (attempt + 1))
+    return None, err
+
+
+def fetch_fulltext(tid: str, session: str = "persistent", timeout: int = 120) -> dict:
+    """抓一条推文的完整正文。
+
+    返回 {"state": "full"|"no-article"|"err", "text": str, "author": str|None}
+      - full      → 有 Note Tweet，text 是完整原文
+      - no-article→ 该推文没有长推文扩展，草稿正文本身就是完整正文
+      - err       → 抓取失败（配额/超时）
+    """
+    obj, _ = _run_opencli_json(
+        ["twitter", "article", tid, "--site-session", session, "-f", "json"], timeout)
+    if obj is None:
+        return {"state": "err", "text": "", "author": None}
+    if isinstance(obj, dict) and obj.get("ok"):
+        data = obj.get("data") or []
+        if isinstance(data, list) and data:
+            return {"state": "full", "text": data[0].get("content") or "",
+                    "author": data[0].get("author")}
+        return {"state": "err", "text": "", "author": None}
+    msg = ""
+    if isinstance(obj, dict):
+        msg = str((obj.get("error") or {}).get("message") or "")
+    if "no article content" in msg:
+        return {"state": "no-article", "text": "", "author": None}
+    return {"state": "err", "text": "", "author": None}
+
+
+def fetch_thread(tid: str, session: str = "persistent", timeout: int = 120) -> list:
+    """抓一条推文的 thread（回复数组）。失败返回 []。"""
+    obj, _ = _run_opencli_json(
+        ["twitter", "thread", tid, "--site-session", session, "-f", "json"], timeout)
+    if not isinstance(obj, dict):
+        return []
+    data = obj.get("data")
+    return data if isinstance(data, list) else []
+
+
+def cmd_fulltext(args) -> int:
+    """fulltext: 抓长推文完整正文并整段替换 description。
+
+    分三步（可用 --only 控制）：
+      fetch   抓全文 → 落盘 <out>/<tid>.json
+      apply   用抓到的全文整段替换 description（幂等）
+      一步到位（默认）= fetch + apply
+
+    为什么是「整段替换」：草稿里存的是 X 长推文的**中段截断版**，
+    补全不是往后追加，而是换成完整原文。
+    """
+    ids = [x.strip() for x in (args.ids or "").split(",") if x.strip()]
+    if args.ids_file:
+        ids += [x.strip() for x in Path(args.ids_file).read_text(encoding="utf-8")
+                .split(",") if x.strip()]
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        print("!! 需要 --ids 或 --ids-file", file=sys.stderr)
+        return 1
+
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    only = args.only or "both"
+
+    # ---- fetch ----
+    if only in ("fetch", "both"):
+        got = skipped = failed = 0
+        for n, tid in enumerate(ids, 1):
+            target = out / f"{tid}.json"
+            if target.exists() and not args.refresh:
+                print(f"  = [{n}/{len(ids)}] {tid} 已有缓存")
+                skipped += 1
+                continue
+            rec = fetch_fulltext(tid, args.site_session, args.timeout)
+            if rec["state"] == "full":
+                target.write_text(json.dumps(
+                    {"ok": True, "content": rec["text"], "author": rec["author"]},
+                    ensure_ascii=False), encoding="utf-8")
+                print(f"  ✓ [{n}/{len(ids)}] {tid} 有长推文 len={len(rec['text'])}")
+                got += 1
+            elif rec["state"] == "no-article":
+                target.write_text(json.dumps(
+                    {"ok": False, "content": None, "author": None,
+                     "err": "no-article"}, ensure_ascii=False), encoding="utf-8")
+                print(f"  - [{n}/{len(ids)}] {tid} 无长推文（草稿正文即完整）")
+                skipped += 1
+            else:
+                print(f"  ! [{n}/{len(ids)}] {tid} 抓取失败")
+                failed += 1
+            time.sleep(args.sleep)
+        print(f"\nfulltext fetch: 抓到 {got}  跳过 {skipped}  失败 {failed}\n")
+
+    # ---- apply ----
+    if only in ("apply", "both"):
+        ok = skip = miss = 0
+        for tid in ids:
+            p = draft_path(tid)
+            if not p:
+                print(f"  !! {tid} 草稿缺失")
+                miss += 1
+                continue
+            d = json.loads(Path(p).read_text(encoding="utf-8"))
+            cur = d.get("description") or ""
+            if RECOVERED_MARKER in cur:
+                print(f"  -- {tid} 已有 recovered marker，跳过")
+                skip += 1
+                continue
+            src = out / f"{tid}.json"
+            if not src.exists():
+                print(f"  -- {tid} 无抓取结果")
+                miss += 1
+                continue
+            rec = json.loads(src.read_text(encoding="utf-8"))
+            text = (rec.get("content") or rec.get("text") or "") if isinstance(rec, dict) else ""
+            if not text:
+                print(f"  -- {tid} 无全文内容")
+                miss += 1
+                continue
+            if len(text) <= len(cur.strip()) + args.min_extra:
+                print(f"  -- {tid} 全文 {len(text)} 字不比草稿 {len(cur.strip())} 字长，跳过")
+                skip += 1
+                continue
+            # 同源校验：草稿（截断版）与全文必须有实质交集
+            a, b = _norm_for_fulltext(cur), _norm_for_fulltext(text)
+            if not (b.startswith(a[:80]) or a.startswith(b[:80]) or
+                    (len(a) >= 60 and a[:60] in b) or (len(b) >= 60 and b[:60] in a)):
+                print(f"  !! {tid} 全文与草稿正文无交集，拒绝写入")
+                miss += 1
+                continue
+            prompt = clean_prompt_text(text)
+            if len(prompt) < 100:
+                print(f"  !! {tid} 清洗后仅 {len(prompt)} 字，过短，不写入")
+                miss += 1
+                continue
+            if args.dry_run:
+                print(f"  · {tid} [{rec.get('author')}] {len(cur)} → {len(prompt)} 字")
+                continue
+            d["description"] = (RECOVERED_TEMPLATE.format(ids=tid) + "\n" + prompt.strip())
+            Path(p).write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n",
+                               encoding="utf-8")
+            print(f"  ✓ {tid} [{rec.get('author')}] 整段替换 → {len(prompt)} 字")
+            ok += 1
+        print(f"\nfulltext apply: 写入 {ok}  跳过 {skip}  未处理 {miss}")
+    return 0
+
+
 def cmd_normalize(args) -> int:
     """normalize: 把 description 整理成线上标准的"纯提示词"形态。
 
@@ -1401,6 +1591,22 @@ def main() -> int:
     nz = sub.add_parser("normalize", help="把 description 整理成线上标准的'纯提示词'形态")
     nz.add_argument("--ids", default="", help="逗号分隔的 tweet id")
     nz.set_defaults(func=cmd_normalize)
+
+    # ---- fulltext ----
+    ft = sub.add_parser("fulltext",
+                        help="抓长推文完整正文并整段替换 description（article 端点，不占时间线配额）")
+    ft.add_argument("--ids", default="", help="逗号分隔的 tweet id")
+    ft.add_argument("--ids-file", default="", help="逗号分隔的 tweet id 文件")
+    ft.add_argument("--out", default="/tmp/fulltext", help="抓取结果目录")
+    ft.add_argument("--only", default="both", choices=["fetch", "apply", "both"])
+    ft.add_argument("--site-session", default="persistent")
+    ft.add_argument("--timeout", type=int, default=120)
+    ft.add_argument("--sleep", type=float, default=3.0)
+    ft.add_argument("--min-extra", type=int, default=50,
+                    help="全文至少比草稿多多少字才写")
+    ft.add_argument("--refresh", action="store_true", help="忽略缓存重新抓")
+    ft.add_argument("--dry-run", action="store_true")
+    ft.set_defaults(func=cmd_fulltext)
 
     # ---- ledger ----
     lg = sub.add_parser("ledger", help="重建垃圾台账 + 规则回测基准")
