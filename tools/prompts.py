@@ -315,6 +315,111 @@ def pick_recovered(data: list) -> tuple[str | None, list, str | None]:
     return author, replies, best.get("id")
 
 
+def _norm_for_match(s: str) -> str:
+    """归一化正文用于比对：去掉 t.co 媒体链接与所有空白。
+
+    长推文里媒体链接位置在不同端点不一致（草稿是截断版，全文版 t.co 可能在中间），
+    直接 startswith 会失败 → 先归一化再比。
+    """
+    s = re.sub(r"https?://t\.co/\S+", "", s or "")
+    return re.sub(r"\s+", "", s)
+
+
+def same_source(draft_desc: str, full_text: str, meta: dict) -> bool:
+    """校验补回的全文与草稿原正文是否同源。
+
+    背景（2026-11-13 踩坑）：`opencli twitter search` 返回的是"相关推文"不是
+    "同一条推文"。早先版本在严格匹配失败时 fallback 到"结果里最长的一条"，
+    15 条里有 8 条抓成了完全无关的推文（'Creating ads was never easier…'），
+    直接写进草稿会污染站点内容。
+
+    判定（任一通过即认为同源）：
+      1. meta 里的 id 与草稿 source_url / 文件名 id 一致
+      2. 归一化后，全文的前 60 字与原正文的前 60 字完全一致
+    """
+    want = {str(x) for x in (meta.get("expect_ids") or []) if x}
+    src_id = str(meta.get("id") or "")
+    if want and src_id in want:
+        return True
+    if want and src_id:
+        # id 不在期望集合里 → 只有内容能证明同源才放行
+        pass
+
+    a = _norm_for_match(draft_desc)
+    b = _norm_for_match(full_text)
+    if len(a) >= 40 and len(b) >= 40 and a[:60] == b[:60]:
+        return True
+    # 草稿被截断时，原正文是全文的前缀 → 只要全文以原正文开头即可
+    if len(a) >= 20 and len(b) > len(a) and b[:len(a)] == a:
+        return True
+    return False
+
+
+def prompt_only(desc: str) -> str:
+    """从 description 里提取"纯提示词正文"。
+
+    线上既有条目的形态标准（2026-11-13 核对 3 条已发布条目）：
+      description == 提示词正文本身，**不含**原推文正文、不含 recovered marker、不含 t.co。
+
+    输入可能是三种形态：
+      1. 原推文正文（可能 280 字被截断）→ 无法提取，只能靠抓全文重写
+      2. 原推文正文 + recovered marker 段 → 取 marker 之后那段
+      3. 已是纯提示词 → 原样返回（只做尾巴清理）
+    """
+    if not desc:
+        return ""
+    # 形态 2：取 recovered 段
+    m = re.search(r"----- Prompt \(recovered from author's thread reply [^)]*\) -----\n", desc)
+    if m:
+        desc = desc[m.end():]
+    # 剥尾部署名行 / 纯点噪声行
+    lines = desc.split("\n")
+    while lines:
+        s = lines[-1].strip()
+        if not s or DOTS_ONLY.match(s) or SIGNOFF.match(s):
+            lines.pop()
+            continue
+        break
+    out = "\n".join(lines).strip()
+    # 去掉正文里残留的 t.co 媒体链接（线上既有条目都没有）
+    out = re.sub(r"[ \t]*https?://t\.co/\S+\s*", "\n", out)
+    out = re.sub(r"\n{3,}", "\n\n", out).strip()
+    return out
+
+
+def cmd_normalize(args) -> int:
+    """normalize: 把 description 整理成线上标准的"纯提示词"形态。
+
+    幂等：已经是纯提示词的条目不动。
+    """
+    ids = [x.strip() for x in (args.ids or "").split(",") if x.strip()]
+    if not ids:
+        print("!! 需要 --ids", file=sys.stderr)
+        return 1
+    ok = skip = 0
+    for tid in ids:
+        p = draft_path(tid)
+        if not p:
+            print(f"  !! {tid} 草稿缺失")
+            continue
+        d = json.loads(Path(p).read_text(encoding="utf-8"))
+        cur = d.get("description") or ""
+        new = prompt_only(cur)
+        if not new:
+            print(f"  -- {tid} 提取不到提示词内容")
+            continue
+        if new == cur:
+            print(f"  -- {tid} 已是纯提示词形态")
+            skip += 1
+            continue
+        d["description"] = new
+        Path(p).write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"  ✓ {tid} {len(cur)} → {len(new)} 字")
+        ok += 1
+    print(f"\nnormalize: 整理 {ok}  已合规 {skip}")
+    return 0
+
+
 def cmd_recover(args) -> int:
     """recover: 把 review --replies 抓到的作者自回复里的完整提示词合回 description。
 
@@ -347,16 +452,45 @@ def cmd_recover(args) -> int:
             print(f"  !! {tid} 自回复解析失败: {exc}")
             miss += 1
             continue
-        if not data:
-            print(f"  -- {tid} 线程为空（无回复）")
-            miss += 1
-            continue
 
         d = json.loads(Path(p).read_text(encoding="utf-8"))
         cur = d.get("description") or ""
         if RECOVERED_MARKER in cur:
             print(f"  -- {tid} 已含 recovered marker，跳过")
             skip += 1
+            continue
+
+        # 两种来源：
+        #   a) 列表 → thread 格式（review --replies），取作者自回复里最长的提示词
+        #   b) 字典 → 时间线全文（recover_via_timeline.py），X 长推文的完整正文
+        if isinstance(data, dict):
+            text = data.get("text") or ""
+            author = data.get("author")
+            src_id = data.get("id")
+            if len(text) < 200:
+                print(f"  -- {tid} @{author} 全文仅 {len(text)} 字，不足以补全")
+                miss += 1
+                continue
+            # 同源校验：补回的全文必须与草稿原正文指向同一条推文
+            # （防 search "相关推文"误配 —— 2026-11-13 曾 15 条里错配 8 条）
+            if not same_source(cur, text, data):
+                print(f"  !! {tid} 全文与草稿正文不同源，拒绝写入")
+                miss += 1
+                continue
+            prompt = clean_prompt_text(text)
+            if len(prompt) < 100:
+                print(f"  !! {tid} 清洗后仅 {len(prompt)} 字，过短，不写入")
+                miss += 1
+                continue
+            notes = apply_description(d, {"recovered_prompt": prompt, "recovered_from": [src_id]})
+            Path(p).write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            print(f"  ✓ {tid} @{author} +{len(prompt)} 字 (full-text {src_id}) {'/'.join(notes)}")
+            ok += 1
+            continue
+
+        if not data:
+            print(f"  -- {tid} 线程为空（无回复）")
+            miss += 1
             continue
 
         author, replies, best_id = pick_recovered(data)
@@ -1262,6 +1396,11 @@ def main() -> int:
     rc.add_argument("--ids", default="", help="逗号分隔的 tweet id（默认全部已抓到的）")
     rc.add_argument("--replies-out", default="/tmp/thread_replies", help="自回复目录（review --replies 的输出）")
     rc.set_defaults(func=cmd_recover)
+
+    # ---- normalize ----
+    nz = sub.add_parser("normalize", help="把 description 整理成线上标准的'纯提示词'形态")
+    nz.add_argument("--ids", default="", help="逗号分隔的 tweet id")
+    nz.set_defaults(func=cmd_normalize)
 
     # ---- ledger ----
     lg = sub.add_parser("ledger", help="重建垃圾台账 + 规则回测基准")
