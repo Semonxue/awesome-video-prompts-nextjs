@@ -430,7 +430,11 @@ def _norm_for_fulltext(s: str) -> str:
 
 
 def _run_opencli_json(args: list[str], timeout: int, retries: int = 3):
-    """跑 opencli 并解析 JSON。返回 (obj|None, err)。"""
+    """跑 opencli 并解析 JSON。返回 (obj|None, err)。
+
+    `detached_mid_command` 是浏览器租约抖动（多个 worker 并行抢同一个租约时
+    常见），**不是真失败** → 必须重试，且退避要比普通失败长。
+    """
     err = ""
     for attempt in range(retries):
         try:
@@ -446,10 +450,18 @@ def _run_opencli_json(args: list[str], timeout: int, retries: int = 3):
             time.sleep(3 * (attempt + 1))
             continue
         try:
-            return json.loads(out), ""
+            obj = json.loads(out)
         except Exception:  # noqa: BLE001
             err = "json"
             time.sleep(3 * (attempt + 1))
+            continue
+        # 租约抖动 → 退避重试，不当成业务错误返回
+        if isinstance(obj, dict) and not obj.get("ok") and \
+                "detached_mid_command" in str((obj.get("error") or {}).get("message") or ""):
+            err = "detached"
+            time.sleep(5 * (attempt + 1))
+            continue
+        return obj, ""
     return None, err
 
 
