@@ -369,6 +369,11 @@ def update_publish_status_in_fm(
     if success:
         out["published"] = True
         out["published_at"] = published_at or datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+        # 2026-11-17：单独记一份"媒体最后一次成功发布的时刻"。
+        # 不能直接用 published_at —— 草稿一旦重新入队，set_publish_queued_in_fm 会把
+        # published / published_at 清成 False/None（UI 靠它显示 pending），
+        # worker 读到的就是"从没发布过"，媒体跳过判断永远失效。
+        out["media_published_at"] = out["published_at"]
         if published_slug:
             out["published_slug"] = published_slug
         out["published_error"] = None
@@ -456,9 +461,8 @@ def media_unchanged_since_publish(fm: Dict[str, Any], asset_dir: Path) -> bool:
     收益（2026-11-17 实测）：1MB 视频经代理上传到 workers.dev 要 3~6s，
     而绝大多数"重新发布"只改了 title/tags，媒体根本没变。
     """
-    if not parse_boolish(fm.get("published")):
-        return False
-    ts = _parse_iso_dt(fm.get("published_at"))
+    # 注意：不能用 fm["published"] 做前置条件 —— 入队时它会被清成 False。
+    ts = _parse_iso_dt(fm.get("media_published_at") or fm.get("published_at"))
     if ts is None:
         return False
     files = [p for p in (asset_dir / "cover.jpg", asset_dir / "video.mp4") if p.exists()]

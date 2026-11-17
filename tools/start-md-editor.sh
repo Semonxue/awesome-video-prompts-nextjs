@@ -60,4 +60,5 @@ echo "   端口: $PORT"
 echo "   草稿目录: $PROJECT_ROOT/content/_drafts/prompts/"
 echo
 cd "$SCRIPT_DIR/md-editor"
-python3 server.py "$PORT"
+# PYTHONUNBUFFERED：重定向到日志文件时也能实时看到 worker/发布耗时（否则 print 被块缓冲）
+PYTHONUNBUFFERED=1 python3 server.py "$PORT"
