@@ -38,15 +38,18 @@
  *   - OpenNext on Workers：env.ADMIN_SECRET 来自 [env] or secrets
  */
 import { revalidatePath } from 'next/cache';
-import { eq } from 'drizzle-orm';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
-import { getDb } from '@/db';
 import { prompts, tags, models, promptTags, promptModels } from '@/db/schema';
 import { deriveYearMonth, keyFromMediaUrl, R2_KEY_PREFIX } from '@/lib/r2-keys';
 import { invalidateCache, CACHE_KEYS, bumpNamespaceVersion } from '@/db/cache';
 import { rebuildAllAggregateCaches } from '@/db/queries';
-import { AGG_CACHE_KEYS, invalidateAggregateCache } from '@/db/aggregate-cache';
+import {
+  AGG_CACHE_KEYS,
+  invalidateAggregateCache,
+  markAggregatesDirty,
+  clearAggregatesDirty,
+} from '@/db/aggregate-cache';
 import { syncAllDicts, type DictSyncCombined } from '@/lib/dict-sync';
 
 // 显式标记使用 schema 里的 import（防止 lint 报 unused）
@@ -100,6 +103,10 @@ interface PublishResult {
   backup?: { ok: boolean; key?: string; error?: string };
   /** 发布时字典校准结果（data/yaml → D1 models/tags）。best-effort，失败不阻断发布 */
   dictSync?: DictSyncCombined;
+  /** 本次请求是否推迟了聚合缓存重建（rebuild=0，由批量发布客户端稍后统一调用 rebuild-aggregates） */
+  rebuildDeferred?: boolean;
+  /** 各阶段耗时（毫秒），发布慢的时候直接看这里定位 */
+  timings?: Record<string, number>;
 }
 
 interface PublishError {
@@ -242,8 +249,14 @@ async function getR2(): Promise<R2> {
   return r2;
 }
 
-/** revalidate 三语言对应路径 */
-function revalidatePromptPaths(slug: string): string[] {
+/**
+ * revalidate 三语言对应路径
+ *
+ * @param includeIndexes 是否同时刷首页 / 标签页 / 模型页 / sitemap。
+ *   批量发布（rebuild=0）时传 false：这些索引页由批次结束后的
+ *   /api/admin/rebuild-aggregates 统一刷，避免每条发布重复失效 9 个路径。
+ */
+function revalidatePromptPaths(slug: string, includeIndexes = true): string[] {
   const paths = [
     `/${'en'}/prompts/${slug}`,
     `/${'zh'}/prompts/${slug}`,
@@ -257,104 +270,102 @@ function revalidatePromptPaths(slug: string): string[] {
     }
   }
   // 顺手刷首页 + 标签/模型索引
-  for (const p of ['/en', '/zh', '/ja', '/en/tags', '/zh/tags', '/ja/tags', '/en/models', '/zh/models', '/ja/models', '/sitemap.xml']) {
-    try {
-      revalidatePath(p);
-    } catch (e) {
-      // 静默
+  if (includeIndexes) {
+    for (const p of ['/en', '/zh', '/ja', '/en/tags', '/zh/tags', '/ja/tags', '/en/models', '/zh/models', '/ja/models', '/sitemap.xml']) {
+      try {
+        revalidatePath(p);
+      } catch (e) {
+        // 静默
+      }
     }
   }
   return paths;
 }
 
-/** upsert tags 表（去重 + 返回 ids） */
-async function upsertTags(
-  d1: D1,
-  db: ReturnType<typeof getDb>,
-  tagSlugs: string[],
-): Promise<number[]> {
-  if (!tagSlugs.length) return [];
+/**
+ * upsert tags 表（去重 + 返回 ids）
+ *
+ * 2026-11-17：改成 2 次往返（多行 INSERT OR IGNORE + 一次 IN 查询）。
+ * 旧实现每个 tag 2 次往返（INSERT + SELECT），5 个 tag 就是 10 次串行 D1，
+ * 在"批量发布每条都要走一遍"的场景里是纯浪费；顺带删掉了那个 `where(eq(tags.name, tagSlugs[0]))`
+ * 的占位查询（查出来直接丢掉，注释里也写着"占位"）。
+ */
+async function upsertTags(d1: D1, tagSlugs: string[]): Promise<number[]> {
+  const names = [...new Set(tagSlugs.map((t) => String(t).trim()).filter(Boolean))];
+  if (!names.length) return [];
 
-  // 1) 查已存在的
-  const existing = await db
-    .select({ id: tags.id, name: tags.name })
-    .from(tags)
-    .where(eq(tags.name, tagSlugs[0])) // 占位
-    .all();
+  const placeholders = names.map(() => '(?)').join(', ');
+  await d1
+    .prepare(`INSERT OR IGNORE INTO tags (name) VALUES ${placeholders}`)
+    .bind(...names)
+    .run();
 
-  // 简化做法：每个 tag 单独 INSERT OR IGNORE 后查 id
-  // （tags 数量小，无需 batch 优化）
-  const ids: number[] = [];
-  for (const name of tagSlugs) {
-    await d1
-      .prepare('INSERT OR IGNORE INTO tags (name) VALUES (?)')
-      .bind(name)
-      .run();
-    const row = await d1
-      .prepare('SELECT id FROM tags WHERE name = ?')
-      .bind(name)
-      .first<{ id: number }>();
-    if (row) ids.push(row.id);
-  }
-  return ids;
+  const rows = await d1
+    .prepare(`SELECT id, name FROM tags WHERE name IN (${names.map(() => '?').join(', ')})`)
+    .bind(...names)
+    .all<{ id: number; name: string }>();
+
+  const idByName = new Map((rows.results ?? []).map((r) => [r.name, r.id]));
+  return names.map((n) => idByName.get(n)).filter((v): v is number => typeof v === 'number');
 }
 
-/** upsert models 表（去重 + 返回 ids） */
+/** upsert models 表（去重 + 返回 id/slug/name），同上：2 次往返代替 2×N 次 */
 async function upsertModels(
   d1: D1,
-  db: ReturnType<typeof getDb>,
   modelSlugs: string[],
 ): Promise<{ id: number; slug: string; name: string }[]> {
-  if (!modelSlugs.length) return [];
+  const slugs = [...new Set(modelSlugs.map((m) => String(m).trim()).filter(Boolean))];
+  if (!slugs.length) return [];
 
-  const result: { id: number; slug: string; name: string }[] = [];
-  for (const slug of modelSlugs) {
-    const name = slug; // model 显示名就是 slug（schema 上没强制映射）
-    await d1
-      .prepare('INSERT OR IGNORE INTO models (slug, name) VALUES (?, ?)')
-      .bind(slug, name)
-      .run();
-    const row = await d1
-      .prepare('SELECT id, slug, name FROM models WHERE slug = ?')
-      .bind(slug)
-      .first<{ id: number; slug: string; name: string }>();
-    if (row) result.push(row);
-  }
-  return result;
+  // model 显示名就是 slug（schema 上没强制映射）
+  const placeholders = slugs.map(() => '(?, ?)').join(', ');
+  await d1
+    .prepare(`INSERT OR IGNORE INTO models (slug, name) VALUES ${placeholders}`)
+    .bind(...slugs.flatMap((slug) => [slug, slug]))
+    .run();
+
+  const rows = await d1
+    .prepare(`SELECT id, slug, name FROM models WHERE slug IN (${slugs.map(() => '?').join(', ')})`)
+    .bind(...slugs)
+    .all<{ id: number; slug: string; name: string }>();
+  return rows.results ?? [];
 }
 
-/** 重置 prompt 的 tags/models 关联（先全删后插） */
+/**
+ * 重置 prompt 的 tags/models 关联（先全删后插）
+ *
+ * 2026-11-17：用一个 D1 batch 提交（2 条 DELETE + N 条 INSERT 一次往返）。
+ * 旧实现每条 INSERT 单独 await，5 tags + 1 model = 9 次串行往返。
+ */
 async function resetAssociations(
   d1: D1,
   promptId: number,
   tagIds: number[],
   modelIds: number[],
 ): Promise<void> {
-  await d1
-    .prepare('DELETE FROM prompt_tags WHERE prompt_id = ?')
-    .bind(promptId)
-    .run();
-  await d1
-    .prepare('DELETE FROM prompt_models WHERE prompt_id = ?')
-    .bind(promptId)
-    .run();
-
-  for (const tagId of tagIds) {
-    await d1
-      .prepare('INSERT INTO prompt_tags (prompt_id, tag_id) VALUES (?, ?)')
-      .bind(promptId, tagId)
-      .run();
-  }
-  for (const modelId of modelIds) {
-    await d1
-      .prepare('INSERT INTO prompt_models (prompt_id, model_id) VALUES (?, ?)')
-      .bind(promptId, modelId)
-      .run();
-  }
+  const stmts = [
+    d1.prepare('DELETE FROM prompt_tags WHERE prompt_id = ?').bind(promptId),
+    d1.prepare('DELETE FROM prompt_models WHERE prompt_id = ?').bind(promptId),
+    ...tagIds.map((tagId) =>
+      d1.prepare('INSERT INTO prompt_tags (prompt_id, tag_id) VALUES (?, ?)').bind(promptId, tagId),
+    ),
+    ...modelIds.map((modelId) =>
+      d1.prepare('INSERT INTO prompt_models (prompt_id, model_id) VALUES (?, ?)').bind(promptId, modelId),
+    ),
+  ];
+  await d1.batch(stmts);
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse<PublishResult | PublishError>> {
   const startTime = Date.now();
+  // 阶段计时（发布慢时直接看响应/log 里的 timings，不用再猜）
+  const timings: Record<string, number> = {};
+  let mark = startTime;
+  const lap = (name: string) => {
+    const now = Date.now();
+    timings[name] = now - mark;
+    mark = now;
+  };
 
   // 1) 鉴权
   const auth = req.headers.get('authorization') ?? '';
@@ -363,6 +374,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
   if (!adminSecretStr || bearer !== adminSecretStr) {
     return unauthorized();
   }
+  lap('auth');
 
   // 2) 解析 multipart
   let form: FormData;
@@ -371,6 +383,14 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
   } catch (e) {
     return badRequest('Failed to parse multipart body', (e as Error).message);
   }
+  lap('parse');
+
+  // 2.5) 是否在本次请求内重建聚合缓存
+  //     默认 1（单条发布：强一致，立即生效）。
+  //     md-editor 批量发布会传 0：每条只写 D1 + R2 媒体，批次结束再统一调一次
+  //     /api/admin/rebuild-aggregates —— 避免 N 条发布做 N 次全站聚合重建。
+  const rebuildRaw = String(form.get('rebuild') ?? '1').trim().toLowerCase();
+  const shouldRebuild = !(rebuildRaw === '0' || rebuildRaw === 'false');
 
   // 3) 必填字段
   const slug = String(form.get('slug') ?? '').trim();
@@ -389,11 +409,9 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
   // 4) 拿 D1 + R2
   let d1: D1;
   let r2: R2;
-  let db: ReturnType<typeof getDb>;
   try {
     d1 = await getD1();
     r2 = await getR2();
-    db = getDb(d1);
   } catch (e) {
     return serverError('Failed to access D1 or R2 binding', (e as Error).message);
   }
@@ -440,6 +458,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
       return serverError('Failed to upload video to R2', `${videoKey}: ${videoRes.error}`);
     }
   }
+  lap('upload');
 
   // 8) 构建 R2 公开 URL（与实际上传 key 一致；update 未重传媒体时不会写入 D1，见下方 PATCH）
   const R2_PUBLIC = process.env.NEXT_PUBLIC_R2_PUBLIC_URL
@@ -533,18 +552,20 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
       .run();
   }
 
+  lap('d1');
+
   // 10) 处理 tags / models 关联（如果 frontmatter 提供了）
   if (frontmatter.tags !== undefined) {
-    const tagIds = await upsertTags(d1, db, frontmatter.tags);
+    const tagIds = await upsertTags(d1, frontmatter.tags);
     if (frontmatter.models !== undefined) {
-      const modelRecs = await upsertModels(d1, db, frontmatter.models);
+      const modelRecs = await upsertModels(d1, frontmatter.models);
       const modelIds = modelRecs.map((m) => m.id);
       await resetAssociations(d1, promptId, tagIds, modelIds);
     } else {
       await resetAssociations(d1, promptId, tagIds, []);
     }
   } else if (frontmatter.models !== undefined) {
-    const modelRecs = await upsertModels(d1, db, frontmatter.models);
+    const modelRecs = await upsertModels(d1, frontmatter.models);
     const modelIds = modelRecs.map((m) => m.id);
     await resetAssociations(d1, promptId, [], modelIds);
   }
@@ -555,7 +576,7 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
   //       位置：必须在 rebuildAllAggregateCaches() 之前，否则缓存会基于旧字典。
   let dictSync: DictSyncCombined | undefined;
   try {
-    dictSync = await syncAllDicts(d1, db);
+    dictSync = await syncAllDicts(d1);
     const totalChanged =
       dictSync.models.summary.inserted +
       dictSync.models.summary.updated +
@@ -585,14 +606,30 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
   //     → 写 null 进 L1+L2（5min TTL）→ fallback D1。即使 rebuild 写了 R2，5min 内
   //     L1+L2 仍返回 null，导致静态化失效。
   //     修法：先写 R2 → invalidate 可能已有的 null → 再 revalidate。
-  await rebuildAllAggregateCaches();
-  await Promise.allSettled([
-    invalidateAggregateCache(AGG_CACHE_KEYS.relatedMap),
-    invalidateAggregateCache(AGG_CACHE_KEYS.adjacentMap),
-  ]);
+  //
+  // 2026-11-17 批量发布提速：md-editor 批量发布会传 rebuild=0，把这里延后到
+  // 整批结束统一跑一次（见 /api/admin/rebuild-aggregates）。单条发布（默认）
+  // 仍然同步重建，保证"点发布 → 立刻生效"。
+  lap('assoc');
+  let rebuildDeferred = false;
+  if (shouldRebuild) {
+    await rebuildAllAggregateCaches();
+    await Promise.allSettled([
+      invalidateAggregateCache(AGG_CACHE_KEYS.relatedMap),
+      invalidateAggregateCache(AGG_CACHE_KEYS.adjacentMap),
+    ]);
+    // 这次已经同步重建过，之前批量发布留下的脏标记可以清掉
+    await clearAggregatesDirty();
+  } else {
+    rebuildDeferred = true;
+    // 留一个"脏标记"：批次客户端中途挂掉时，下次发布/人工 rebuild 能发现并补跑
+    await markAggregatesDirty(`publish:${slug}`).catch(() => undefined);
+  }
+  lap('rebuild');
 
-  // 12) revalidate
-  const revalidated = revalidatePromptPaths(slug);
+  // 12) revalidate（批量模式下只刷本详情页，索引页交给批次结束后的重建统一刷）
+  const revalidated = revalidatePromptPaths(slug, shouldRebuild);
+  lap('revalidate');
 
   // 13) 失效内存级缓存（recentPrompts / promptBySlug 仍走 cache.ts）
   await Promise.allSettled([
@@ -604,10 +641,13 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
     bumpNamespaceVersion('adjacent'),
   ]);
 
+  lap('cache');
   const elapsed = Date.now() - startTime;
+  timings.total = elapsed;
   console.log(
     `[admin/publish] ${operation} slug=${slug} promptId=${promptId} ` +
-      `uploaded=${JSON.stringify(uploaded)} elapsed=${elapsed}ms`,
+      `uploaded=${JSON.stringify(uploaded)} rebuildDeferred=${rebuildDeferred} ` +
+      `elapsed=${elapsed}ms timings=${JSON.stringify(timings)}`,
   );
 
   return NextResponse.json<PublishResult>({
@@ -619,6 +659,8 @@ export async function POST(req: NextRequest): Promise<NextResponse<PublishResult
     promptId,
     ...(backup ? { backup } : {}),
     ...(dictSync ? { dictSync } : {}),
+    ...(rebuildDeferred ? { rebuildDeferred } : {}),
+    timings,
   });
 }
 

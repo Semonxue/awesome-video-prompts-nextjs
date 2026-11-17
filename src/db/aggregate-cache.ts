@@ -59,6 +59,42 @@ export const AGG_CACHE_KEYS = {
   modelCoModels: '_cache/model-comodels.json',
 } as const;
 
+/** 聚合缓存"脏"标记（批量发布推迟重建时写入，重建完成后清掉） */
+export const AGG_DIRTY_KEY = '_cache/rebuild-dirty.json';
+
+export interface AggregatesDirtyMarker {
+  at: string;
+  reason: string;
+}
+
+/** 标记聚合缓存待重建（best-effort，失败不影响发布） */
+export async function markAggregatesDirty(reason: string): Promise<void> {
+  try {
+    const r2 = await getR2();
+    const payload: AggregatesDirtyMarker = { at: new Date().toISOString(), reason };
+    await r2.put(AGG_DIRTY_KEY, JSON.stringify(payload), {
+      httpMetadata: { contentType: 'application/json' },
+    });
+  } catch {
+    // 标记只是"补救提示"，写失败不阻断发布
+  }
+}
+
+/** 读脏标记（无则返回 null） */
+export async function readAggregatesDirty(): Promise<AggregatesDirtyMarker | null> {
+  return readAggregateCacheRaw<AggregatesDirtyMarker>(AGG_DIRTY_KEY);
+}
+
+/** 清脏标记 */
+export async function clearAggregatesDirty(): Promise<void> {
+  try {
+    const r2 = await getR2();
+    await r2.delete(AGG_DIRTY_KEY);
+  } catch {
+    // 清失败无害：下次重建会覆盖
+  }
+}
+
 /** 单个 tag 的统计文件 key */
 export function tagStatsKey(slug: string): string {
   return `${AGG_CACHE_KEYS.tagStatsPrefix}${slug}.json`;
@@ -148,6 +184,25 @@ export async function readAggregateCache<T>(key: string): Promise<T | null> {
       return null;
     }
   });
+}
+
+/**
+ * 直接读 R2，**绕过 L1/L2 缓存**
+ *
+ * 用途：重建时做「内容没变就别重写」的比对（tag-stats 的 manifest）。
+ * 走 getCachedData 会拿到最长 5 分钟前的旧值，导致该写的文件被跳过，所以这里裸读。
+ */
+export async function readAggregateCacheRaw<T>(key: string): Promise<T | null> {
+  try {
+    const r2 = await getR2();
+    const obj = await r2.get(key);
+    if (!obj) return null;
+    const text = await obj.text();
+    if (!text) return null;
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
 }
 
 /**

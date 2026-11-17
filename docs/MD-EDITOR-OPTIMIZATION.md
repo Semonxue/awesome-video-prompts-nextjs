@@ -182,3 +182,16 @@
 - D. 5 秒内点 3 个草稿的「发布」→ 底部面板出现「3 个待发布 · 距下次发布 01:00 · 倒计时逐秒减少」；点「🚀 立即发布」→ toast 显示「3 个」，3 个草稿几乎同时变 published 状态
 - D. `.dev.vars` 加 `MD_EDITOR_PUBLISH_DELAY_SECONDS=5`，重启服务 → 文件列表点发布后右下「下一批 00:05」
 
+---
+
+## 8. 2026-11-17 发布性能专项（详情见 `docs/PUBLISH-PERF-2026-11-17.md`）
+
+线上实测单条 publish **47–61 秒 / CPU 19–30 秒**，根因是每次发布都在 Worker 里全站重算聚合缓存：
+
+- `related-map` 候选池 O(n²)：8,092 prompt × 5,783 候选 → **15.9s CPU** → 改 k 路有序归并后 **0.44s**（输出逐字一致）
+- `model-tags.json` 按 model 逐条查 32 次全表聚合 → 改 1 次 `GROUP BY tag, model`
+- `tag-stats` 每次无条件重写 376 个 R2 对象 → 改内容指纹 manifest，只写变化的
+- 批量发布每条都重建一次全站 → md-editor 改传 `rebuild=0`，整批结束统一重建一次
+- 顺带修：`/api/admin/rebuild-aggregates` 的 secret 名写错导致生产一直 401；媒体未改动时不再重传
+
+此项覆盖了原 P2-2.11（发布无自动重试之外的另一半：发布太慢）。

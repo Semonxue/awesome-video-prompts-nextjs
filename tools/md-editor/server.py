@@ -73,9 +73,18 @@ NEW_SITE_LIST_PROMPT_URL = _DEV_VARS.get(
     "https://awesome-video-prompts-nextjs.semonxue.workers.dev/api/admin/list-prompt",
 )
 NEW_SITE_ADMIN_SECRET = _DEV_VARS.get("NEW_SITE_ADMIN_SECRET", "")
+# 聚合缓存重建端点（批量发布结束后统一调一次）
+NEW_SITE_REBUILD_URL = _DEV_VARS.get(
+    "NEW_SITE_REBUILD_URL",
+    NEW_SITE_PUBLISH_URL.replace("/publish", "/rebuild-aggregates"),
+)
 
 # D: 发布批次延迟（秒）。可在 .dev.vars 覆盖：MD_EDITOR_PUBLISH_DELAY_SECONDS=0 表示立刻发布
 QUEUE_DELAY_SECONDS = int(_DEV_VARS.get("MD_EDITOR_PUBLISH_DELAY_SECONDS", "60"))
+
+# 2026-11-17 发布提速：批量发布时每条只写 D1+R2 媒体，整批结束再统一重建一次聚合缓存。
+# 设为 0 可退回"每条发布都重建"的旧行为。
+DEFER_AGGREGATE_REBUILD = _DEV_VARS.get("MD_EDITOR_DEFER_REBUILD", "1") != "0"
 
 
 
@@ -437,6 +446,29 @@ def _parse_iso_dt(s):
         return None
 
 
+def media_unchanged_since_publish(fm: Dict[str, Any], asset_dir: Path) -> bool:
+    """
+    媒体文件自上次成功发布后没改动过 → 本次发布可以跳过重传 cover/video。
+
+    判定：published && published_at 可解析，且 cover.jpg / video.mp4 里存在的那些
+    文件的 mtime 都不晚于 published_at。任一文件被替换/重新生成 → mtime 变新 → 重传。
+
+    收益（2026-11-17 实测）：1MB 视频经代理上传到 workers.dev 要 3~6s，
+    而绝大多数"重新发布"只改了 title/tags，媒体根本没变。
+    """
+    if not parse_boolish(fm.get("published")):
+        return False
+    ts = _parse_iso_dt(fm.get("published_at"))
+    if ts is None:
+        return False
+    files = [p for p in (asset_dir / "cover.jpg", asset_dir / "video.mp4") if p.exists()]
+    if not files:
+        return False
+    # 严格比较：published_at 只到秒，媒体文件正常都早于它；加了容差会把
+    # "刚发布完 1 秒内又换了视频"这种改动误判成未变。
+    return all(p.stat().st_mtime <= ts for p in files)
+
+
 def scanned_queued():
     """扫 fs，返回 {count, earliest_publish_at, batch_size}"""
     if not DRAFT_CONTENT_DIR.exists():
@@ -511,7 +543,7 @@ def _to_jsonable(v: Any) -> Any:
     return str(v)
 
 
-def publish_one(rel_path: str) -> Dict[str, Any]:
+def publish_one(rel_path: str, rebuild: bool = True) -> Dict[str, Any]:
     """
     执行一次发布（读草稿 → 构造 multipart → 调新站 → 写状态，md/json 通用）。
     返回 dict 含 success/error/operation/slug/uploaded 等。
@@ -551,16 +583,21 @@ def publish_one(rel_path: str) -> Dict[str, Any]:
     fields = {
         "slug": slug,
         "frontmatter": json.dumps(fm_payload, ensure_ascii=False),
+        # rebuild=0 时服务端只写 D1 + R2 媒体，聚合缓存由批次结束后统一重建
+        "rebuild": "1" if rebuild else "0",
     }
 
     files: Dict[str, Tuple[str, bytes, str]] = {}
     asset_dir = get_asset_dir(year_month, slug)
     cover_path = asset_dir / "cover.jpg"
     video_path = asset_dir / "video.mp4"
-    if cover_path.exists():
-        files["cover"] = ("cover.jpg", cover_path.read_bytes(), "image/jpeg")
-    if video_path.exists():
-        files["video"] = ("video.mp4", video_path.read_bytes(), "video/mp4")
+    if media_unchanged_since_publish(fm, asset_dir):
+        print(f"[publish] 媒体自上次发布未变，跳过重传：{rel_path}")
+    else:
+        if cover_path.exists():
+            files["cover"] = ("cover.jpg", cover_path.read_bytes(), "image/jpeg")
+        if video_path.exists():
+            files["video"] = ("video.mp4", video_path.read_bytes(), "video/mp4")
 
     # 调新站
     status, resp_text = http_multipart_post(
@@ -620,6 +657,51 @@ def _mark_failed_in_fm(rel_path: str, error_msg: str) -> None:
         write_draft(full, new_fm, draft["body"], draft["format"])
     except Exception as e:
         print(f"[worker] mark failed error for {rel_path}: {e}")
+
+
+# 最近一次聚合重建结果（供 /api/queue 展示 + 排查）
+_last_rebuild: Dict[str, Any] = {"at": None, "ok": None, "duration_ms": None, "count": 0}
+
+
+def rebuild_aggregates(published_count: int = 0) -> Dict[str, Any]:
+    """
+    批次结束后统一重建 R2 聚合缓存（related-map / adjacent-map / counts / tag-stats ...）。
+
+    为什么要有这一步：publish 时传了 rebuild=0，服务端只写 D1 + R2 媒体，
+    如果把全站聚合留给"每条发布"，批量发 N 条就白做 N 次全站重建。
+    这里整批只做一次，N 条发布的总耗时从 N×48s 降到 N×2~5s + 一次重建。
+    """
+    if not NEW_SITE_REBUILD_URL or not NEW_SITE_ADMIN_SECRET:
+        return {"ok": False, "error": "NEW_SITE_REBUILD_URL / NEW_SITE_ADMIN_SECRET 未配置"}
+    t0 = time.time()
+    status = 0
+    data: Any = None
+    error = None
+    try:
+        status, data = http_post_json(NEW_SITE_REBUILD_URL, {}, NEW_SITE_ADMIN_SECRET, timeout=180)
+    except Exception as e:
+        error = f"{type(e).__name__}: {e}"
+    duration_ms = int((time.time() - t0) * 1000)
+    ok = status == 200 and isinstance(data, dict) and bool(data.get("ok"))
+    info = {
+        "at": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
+        "ok": ok,
+        "status": status,
+        "duration_ms": duration_ms,
+        "count": published_count,
+        "server_duration_ms": data.get("durationMs") if isinstance(data, dict) else None,
+        "had_dirty_marker": data.get("hadDirtyMarker") if isinstance(data, dict) else None,
+        "error": error or (None if ok else (data if isinstance(data, dict) else str(data))),
+    }
+    _last_rebuild.update(info)
+    if ok:
+        print(
+            f"[worker] 聚合重建完成：{published_count} 条发布后一次重建，"
+            f"耗时 {duration_ms}ms（服务端 {info['server_duration_ms']}ms）"
+        )
+    else:
+        print(f"[worker] 聚合重建失败 status={status} {error or data}")
+    return info
 
 
 def worker_loop() -> None:
@@ -687,20 +769,27 @@ def worker_loop() -> None:
         except Exception as e:
             print(f"[worker] 扫描 fs 时异常: {e}")
         # 串行消费
+        published_ok = 0
         while True:
             path = dequeue_publish()
             if path is None:
                 break
             print(f"[worker] 处理 {path}")
+            t_start = time.time()
             try:
-                result = publish_one(path)
+                result = publish_one(path, rebuild=not DEFER_AGGREGATE_REBUILD)
+                took_ms = int((time.time() - t_start) * 1000)
                 if result.get("success"):
-                    print(f"[worker] OK {path} -> slug={result.get('slug')}")
+                    published_ok += 1
+                    print(f"[worker] OK {path} -> slug={result.get('slug')} ({took_ms}ms)")
                 else:
-                    print(f"[worker] FAIL {path} -> {result.get('error')}")
+                    print(f"[worker] FAIL {path} -> {result.get('error')} ({took_ms}ms)")
             except Exception as e:
                 print(f"[worker] EXC {path}: {e}")
                 _mark_failed_in_fm(path, str(e))
+        # 整批写完后统一重建一次聚合缓存（不是每条发布重建一次）
+        if published_ok and DEFER_AGGREGATE_REBUILD:
+            rebuild_aggregates(published_ok)
     print("[worker] 主循环结束（不应该到这里）")
 
 
@@ -776,7 +865,7 @@ def http_get_json(url: str, secret: str) -> Tuple[int, Any]:
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status, json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         try:
@@ -789,7 +878,7 @@ def http_get_json(url: str, secret: str) -> Tuple[int, Any]:
         return 0, {"error": f"Unknown error: {e}"}
 
 
-def http_post_json(url: str, payload: Any, secret: str) -> Tuple[int, Any]:
+def http_post_json(url: str, payload: Any, secret: str, timeout: int = 30) -> Tuple[int, Any]:
     """发 POST JSON 请求，返回 (status_code, parsed_body)"""
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(
@@ -803,7 +892,7 @@ def http_post_json(url: str, payload: Any, secret: str) -> Tuple[int, Any]:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status, json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         try:
@@ -1188,6 +1277,8 @@ class EditorHandler(SimpleHTTPRequestHandler):
             "earliest_publish_at": scan["earliest_publish_at"],
             "delay_seconds": QUEUE_DELAY_SECONDS,
             "now": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
+            "defer_rebuild": DEFER_AGGREGATE_REBUILD,
+            "last_rebuild": _last_rebuild,
         })
 
     # -------------------- 立即发布（跳过延迟） --------------------

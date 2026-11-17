@@ -27,6 +27,7 @@
  */
 import { revalidatePath } from 'next/cache';
 import { rebuildAllAggregateCaches } from '@/db/queries';
+import { clearAggregatesDirty, readAggregatesDirty } from '@/db/aggregate-cache';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 
@@ -49,24 +50,38 @@ async function getSecret(...names: string[]): Promise<string> {
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
-  const secret = await getSecret('ADMIN_SECRET', 'ADMIN_SCRET');
+  // 2026-11-17 修复：这里原来只查 ADMIN_SECRET / ADMIN_SCRET（还打错一个字母），
+  // 而线上 secret 名是 kebab-case 的 admin-secret → 该端点在生产一直 401，
+  // 相当于"手动重建"这条后路是断的。与 publish/unpublish/delete 统一。
+  const secret = await getSecret('admin-secret', 'ADMIN_SECRET', 'ADMIN_SECRET_DEV');
   const auth = req.headers.get('authorization') ?? '';
   if (!secret || auth !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const started = Date.now();
+  const dirty = await readAggregatesDirty();
   try {
     await rebuildAllAggregateCaches();
+    await clearAggregatesDirty();
     // 聚合缓存变了，列表页与 sitemap 需要跟着刷
-    for (const p of ['/en', '/zh', '/ja', '/en/tags', '/zh/tags', '/ja/tags', '/sitemap.xml']) {
+    for (const p of ['/en', '/zh', '/ja', '/en/tags', '/zh/tags', '/ja/tags', '/en/models', '/zh/models', '/ja/models', '/sitemap.xml']) {
       try {
         revalidatePath(p);
       } catch (e) {
         console.warn(`[admin/rebuild-aggregates] revalidatePath failed for ${p}:`, e);
       }
     }
-    return NextResponse.json({ ok: true, durationMs: Date.now() - started });
+    console.log(
+      `[admin/rebuild-aggregates] ok durationMs=${Date.now() - started} dirty=${dirty?.at ?? 'none'}`,
+    );
+    return NextResponse.json({
+      ok: true,
+      durationMs: Date.now() - started,
+      /** 本次重建前是否存在"发布已写 D1 但聚合未重建"的脏标记 */
+      hadDirtyMarker: dirty !== null,
+      dirtyAt: dirty?.at ?? null,
+    });
   } catch (err) {
     console.error('[admin/rebuild-aggregates] rebuild failed:', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
