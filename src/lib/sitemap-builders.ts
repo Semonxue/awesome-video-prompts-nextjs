@@ -24,7 +24,7 @@
  *     省略 lastmod 与静态页的处理一致（见本文件末尾注释）。
  */
 import type { MetadataRoute } from 'next';
-import { listAllSlugsForSitemap, listAllTags, listAllModels } from '@/db/queries';
+import { listAllSlugsForSitemap, listCuratedPromptsForSitemap, listAllTags, listAllModels } from '@/db/queries';
 import { getCachedData, CACHE_KEYS } from '@/db/cache';
 import { locales } from '@/i18n/request';
 import { SEO_INDEXABLE_LOCALES } from '@/lib/seo';
@@ -91,12 +91,34 @@ export const SITEMAP_PROMPT_LOCALES: ReadonlyArray<(typeof locales)[number]> = [
 export const SUBMIT_PROMPT_DETAIL_PAGES = false;
 
 /**
+ * 精选详情页提交（2026-11-21）
+ *
+ * 全量提交仍然关闭（上面的开关），但把**质量最高的一小批**详情页重新送进 sitemap：
+ *   - 闸门：description ≥ 600 字符（完整提示词正文，不是摘要壳）且至少 1 个 tag
+ *   - 上限 300 条，按 prompt_date 取最新 —— 与模型页编辑内容推荐的示例同批质量线
+ *   - 携带真实 updatedAt 作为 lastmod
+ *
+ * 为什么现在敢开一小口：
+ *   2026-10-15 关掉全量是因为 87% 是零需求长尾；但「正文完整 + 有分类 + 最新」
+ *   的头部条目是站点最好的内容资产，模型页精选示例也在给它们导内链。
+ *   300 条对抓取预算的压力可忽略（Googlebot 当前仅占请求 0.057%），
+ *   详情页 HTML 走 ISR + CDN HIT，Worker CPU 增量趋近零。
+ *
+ * 观察口径：上线 2–4 周后看 GSC 这批 URL 的收录率。
+ *   收录率明显高于全站基线 → 可逐步放大上限；仍全拒 → 改回 false 即可。
+ */
+export const SUBMIT_CURATED_PROMPT_PAGES = true;
+export const CURATED_PROMPT_LIMIT = 300;
+export const CURATED_MIN_DESC_LENGTH = 600;
+
+/**
  * 子表清单：由开关推导，不是手写数组。
- * 把 SUBMIT_PROMPT_DETAIL_PAGES 改回 true 就能一键恢复详情页提交，
+ * 全量开关（SUBMIT_PROMPT_DETAIL_PAGES）或精选开关（SUBMIT_CURATED_PROMPT_PAGES）
+ * 任一打开，prompts 子表就进 index；两者都关则退出。
  * 不会出现"index 里少了子表但 route 还在"这种半吊子状态。
  */
 export const SITEMAP_CHILDREN = [
-  ...(SUBMIT_PROMPT_DETAIL_PAGES
+  ...(SUBMIT_PROMPT_DETAIL_PAGES || SUBMIT_CURATED_PROMPT_PAGES
     ? SITEMAP_PROMPT_LOCALES.map((loc) => ({
         path: `/sitemaps/prompts-${loc}.xml`,
         locale: loc,
@@ -179,11 +201,14 @@ export function toModelSitemapRows(models: ModelRow[]): MetadataRoute.Sitemap {
   );
 }
 
-/** 详情页：某 locale 的全部 prompt */
+/** 详情页：某 locale 的全部 prompt（全量开关）或精选头部（精选开关） */
 export async function buildPromptsSitemap(locale: (typeof locales)[number]): Promise<MetadataRoute.Sitemap> {
-  return getCachedData(`${CACHE_KEYS.sitemapOutput}-prompts-${locale}`, async () =>
-    toPromptSitemapRows(await listAllSlugsForSitemap(), locale),
-  );
+  return getCachedData(`${CACHE_KEYS.sitemapOutput}-prompts-${locale}`, async () => {
+    const rows = SUBMIT_PROMPT_DETAIL_PAGES
+      ? await listAllSlugsForSitemap()
+      : await listCuratedPromptsForSitemap(CURATED_PROMPT_LIMIT, CURATED_MIN_DESC_LENGTH);
+    return toPromptSitemapRows(rows, locale);
+  });
 }
 
 /** tag 页：3 locale */

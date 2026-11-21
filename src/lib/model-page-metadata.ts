@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server';
 import { listAllModels, getModelName } from '@/db/queries';
 import { SITE_URL, DEFAULT_OG_IMAGE } from '@/lib/site';
 import { buildSeoAlternates, seoRobots } from '@/lib/seo';
+import { getModelEditorial } from '@/lib/model-editorial';
 
 /**
  * model 页 metadata 共享构造（2026-10-08 P1-1）
@@ -35,10 +36,15 @@ export async function buildModelMetadata({ locale, model, page, filtered }: Args
 
   const canonical = path(locale);
 
+  // 2026-11-21：有编辑性内容的模型，第 1 页主变体用逐页撰写的 summary
+  // 替代模板 description（静态数据，零新增查询；分页/筛选变体维持模板）。
+  const editorial = page === 1 && !filtered ? getModelEditorial(model) : null;
+  const description = editorial ? editorial.summary : t('modelDescription', { name, count });
+
   return {
     // 不要手写站点名后缀：layout 的 title 模板会再拼一次（曾出现 "x | AVP | AVP"）
     title: t('modelTitle', { name }),
-    description: t('modelDescription', { name, count }),
+    description,
     alternates: {
       canonical,
       languages: buildSeoAlternates(path),
@@ -48,7 +54,7 @@ export async function buildModelMetadata({ locale, model, page, filtered }: Args
     robots: seoRobots(locale, { noindex: filtered }),
     openGraph: {
       title: t('modelTitle', { name }),
-      description: t('modelDescription', { name, count }),
+      description,
       url: canonical,
       locale: t('ogLocale'),
       images: [

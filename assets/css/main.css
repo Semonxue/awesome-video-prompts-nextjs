@@ -1532,3 +1532,153 @@
     font-size: 14px;
   }
 }
+
+/* ============================================================
+   模型页编辑性内容（2026-11-21）
+   热门模型的独特内容区：事实表 / 写作技巧 / 精选示例 / 来源行。
+   数据源 data/model-content.json（静态 import，零运行时查询）。
+   ============================================================ */
+.content-page-body__subtitle {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 26px 0 12px;
+  line-height: 1.4;
+}
+
+.model-facts {
+  margin: 18px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  max-width: 72ch;
+}
+
+.model-facts__row {
+  display: flex;
+  gap: 12px;
+  padding: 5px 0;
+}
+
+.model-facts__row + .model-facts__row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.model-facts__label {
+  flex: 0 0 130px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.model-facts__value {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.model-tips__item {
+  margin-bottom: 14px;
+  max-width: 72ch;
+}
+
+.model-tips__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+}
+
+.model-tips__body {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.model-examples__item {
+  margin-bottom: 14px;
+  padding-left: 14px;
+  border-left: 3px solid var(--border-subtle);
+  max-width: 72ch;
+}
+
+.model-examples__title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.model-examples__title a {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.model-examples__comment {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.model-editorial-meta {
+  margin-top: 20px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  max-width: 72ch;
+}
+
+.model-editorial-meta a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .model-facts__row {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .model-facts__label {
+    flex: none;
+  }
+}
+
+/* 404 页（2026-11-21）：纯静态，回主干的链接 */
+.not-found-page {
+  max-width: 640px;
+  margin: 80px auto;
+  padding: 0 20px;
+  text-align: center;
+}
+
+.not-found-page h1 {
+  font-size: 28px;
+  color: var(--text-primary);
+  margin: 0 0 12px;
+}
+
+.not-found-page p {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  margin: 0 0 24px;
+}
+
+.not-found-page nav {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.not-found-page a {
+  font-size: 15px;
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

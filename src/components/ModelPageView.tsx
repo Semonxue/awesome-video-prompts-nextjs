@@ -21,6 +21,7 @@ import {
   buildModelIntro,
   buildFaqSchema,
 } from '@/lib/content-pages';
+import { getModelEditorial, mergeEditorialFaq } from '@/lib/model-editorial';
 import { SITE_URL } from '@/lib/site';
 
 /**
@@ -142,6 +143,13 @@ export async function ModelPageView({ locale, model, page, tag }: Props) {
       })
     : [];
 
+  // ---- 2026-11-21：热门模型的编辑性内容（data/model-content.json，静态 import） ----
+  // 只在「主变体 + 第 1 页」输出：/p/N 与 ?tag= 变体不重复正文（防 doorway）。
+  // 有编辑内容时，模板化的 tag-overview 段不再输出（其数字与交叉链已由
+  // 编辑导语 + 顶部 tag tabs + 数据派生导语覆盖），避免同页两套重复导语。
+  const editorial = isMainVariant && page === 1 ? getModelEditorial(model) : null;
+  const pageFaq = editorial ? mergeEditorialFaq(editorial.faq, modelFaq) : modelFaq;
+
   // 结构化数据只在「主变体 + 第 1 页」输出
   const showSchema = isMainVariant && page === 1;
   const modelCollectionSchema = showSchema
@@ -154,7 +162,7 @@ export async function ModelPageView({ locale, model, page, tag }: Props) {
         })),
       })
     : null;
-  const modelFaqSchema = showSchema ? buildFaqSchema(modelFaq) : null;
+  const modelFaqSchema = showSchema ? buildFaqSchema(pageFaq) : null;
 
   return (
     <>
@@ -237,8 +245,9 @@ export async function ModelPageView({ locale, model, page, tag }: Props) {
         )}
 
         {/* 2026-10-15：数据派生的概览 + 主力 tag / 相关 model 交叉链
-            数字全部来自本页已加载的数据，零新增 D1 查询。 */}
-        {!tag && (
+            数字全部来自本页已加载的数据，零新增 D1 查询。
+            有编辑性内容的模型不再输出这段模板导语（2026-11-21）。 */}
+        {!tag && !editorial && (
           <section className="tag-overview">
             <p className="tag-overview__text">
               {t('overviewText', {
@@ -284,7 +293,87 @@ export async function ModelPageView({ locale, model, page, tag }: Props) {
             docs/SEO-STATUS-AND-COST-NEUTRAL-PLAN-2026-10-18.md §6.4。
             内容全部由本页数据派生（零虚构、零新增 D1 查询）。
             带 ?tag= 筛选的变体页不输出（避免与主页面重复 → doorway abuse）。 */}
-        {isMainVariant && modelIntro.length > 0 && (
+        {/* 2026-11-21：热门模型的编辑性内容（独特导语 + 核实事实 + 写作技巧 +
+            精选示例点评 + 独特 FAQ）。数据源 data/model-content.json 静态 import，
+            零新增运行时查询。库内实时数字仍由下方 modelIntro 数据派生段提供。 */}
+        {isMainVariant && editorial && (
+          <section className="content-page-body" aria-label={t('aboutThisModel', { model: modelName })}>
+            <h2 className="content-page-body__title">{t('aboutThisModel', { model: modelName })}</h2>
+            {editorial.overview.map((para, i) => (
+              <p key={i} className="content-page-body__para">
+                {para}
+              </p>
+            ))}
+
+            <dl className="model-facts">
+              {editorial.facts.map((f) => (
+                <div key={f.label} className="model-facts__row">
+                  <dt className="model-facts__label">{f.label}</dt>
+                  <dd className="model-facts__value">{f.value}</dd>
+                </div>
+              ))}
+            </dl>
+
+            {modelIntro.map((para, i) => (
+              <p key={`lib-${i}`} className="content-page-body__para">
+                {para}
+              </p>
+            ))}
+
+            <h3 className="content-page-body__subtitle">{t('promptTipsTitle', { model: modelName })}</h3>
+            <div className="model-tips">
+              {editorial.tips.map((tip) => (
+                <div key={tip.title} className="model-tips__item">
+                  <h4 className="model-tips__title">{tip.title}</h4>
+                  <p className="model-tips__body">{tip.body}</p>
+                </div>
+              ))}
+            </div>
+
+            <h3 className="content-page-body__subtitle">{t('featuredTitle', { model: modelName })}</h3>
+            <div className="model-examples">
+              {editorial.examples.map((ex) => (
+                <article key={ex.slug} className="model-examples__item">
+                  <h4 className="model-examples__title">
+                    <Link href={`/${locale}/prompts/${ex.slug}`}>{ex.title}</Link>
+                  </h4>
+                  <p className="model-examples__comment">{ex.comment}</p>
+                </article>
+              ))}
+            </div>
+
+            {pageFaq.length > 0 && (
+              <div className="content-page-faq">
+                <h3 className="content-page-faq__title">{t('faqTitle')}</h3>
+                {pageFaq.map((item, i) => (
+                  <div key={i} className="content-page-faq__item">
+                    <h4 className="content-page-faq__q">{item.question}</h4>
+                    <p className="content-page-faq__a">{item.answer}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <p className="model-editorial-meta">
+              {t('editorialReviewed', { date: editorial.reviewedAt })}
+              {editorial.sources.length > 0 && (
+                <>
+                  {' · '}
+                  {editorial.sources.map((s, i) => (
+                    <span key={s.url}>
+                      {i > 0 && ', '}
+                      <a href={s.url} target="_blank" rel="noopener noreferrer">
+                        {s.label}
+                      </a>
+                    </span>
+                  ))}
+                </>
+              )}
+            </p>
+          </section>
+        )}
+
+        {isMainVariant && !editorial && modelIntro.length > 0 && (
           <section className="content-page-body" aria-label={t('aboutThisModel', { model: modelName })}>
             <h2 className="content-page-body__title">{t('aboutThisModel', { model: modelName })}</h2>
             {modelIntro.map((para, i) => (

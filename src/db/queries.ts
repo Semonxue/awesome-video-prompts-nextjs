@@ -13,6 +13,34 @@ export async function listAllSlugsForSitemap(): Promise<Array<{ slug: string; up
 }
 
 /**
+ * 精选详情页 sitemap（2026-11-21）：只取「完整提示词正文 + 至少 1 个 tag」的最新 N 条。
+ *
+ * 与 listAllSlugsForSitemap 的区别：质量闸门在 SQL 里完成，单条查询，
+ * 只在构建 prompts sitemap 时调用（结果走 getCachedData + 8h 边缘缓存），
+ * 运行时页面路径不经过这里 → 不增加日常 D1 成本。
+ */
+export async function listCuratedPromptsForSitemap(
+  limit: number,
+  minDescLength: number,
+): Promise<Array<{ slug: string; updatedAt: string }>> {
+  const d1 = await getD1();
+  const db = getDb(d1);
+  const rows = await db
+    .select({ slug: prompts.slug, updatedAt: prompts.updatedAt })
+    .from(prompts)
+    .where(
+      and(
+        eq(prompts.isDraft, 0),
+        sql`LENGTH(${prompts.description}) >= ${minDescLength}`,
+        sql`EXISTS (SELECT 1 FROM prompt_tags pt WHERE pt.prompt_id = ${prompts.id})`,
+      ),
+    )
+    .orderBy(desc(prompts.promptDate))
+    .limit(limit);
+  return rows;
+}
+
+/**
  * 数据查询层（Page → DB 边界）
  *
  * 实现：在 Cloudflare Workers 运行时通过 getCloudflareContext() 拿 D1 binding

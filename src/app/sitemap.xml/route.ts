@@ -25,8 +25,11 @@
  *   2026-10-15：`SUBMIT_PROMPT_DETAIL_PAGES = false` → **实际提交 0 条 prompt 详情页**。
  *   2026-10-18：zh/ja 全部 noindex（src/lib/seo.ts），sitemap 只剩 en 的
  *               tags / models / static，合计约 1,000 条。
+ *   2026-11-21：精选提交开启（SUBMIT_CURATED_PROMPT_PAGES）——prompts-en 子表
+ *               回到 index，但只含「完整正文 + 有 tag」的最新 300 条；
+ *               同时 index 层不再输出每日跳动的假 lastmod。
  *   子表路由 /sitemaps/prompts-{en,zh,ja}.xml 仍然在线（HTTP 200），
- *   只是不在 index 里；恢复提交只需把 SUBMIT_PROMPT_DETAIL_PAGES 改回 true。
+ *   全量恢复提交只需把 SUBMIT_PROMPT_DETAIL_PAGES 改回 true。
  */
 import { SITE_URL } from '@/lib/site';
 import { SITEMAP_CHILDREN } from '@/lib/sitemap-builders';
@@ -38,10 +41,14 @@ const XML_HEAD = `<?xml version="1.0" encoding="UTF-8"?>
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`;
 
 export async function GET() {
+  // 2026-11-21：不再给子表写 <lastmod>。
+  // 旧实现每次请求取当天日期 → 所有子表"每天都在变"，是失真信号
+  //（Google 明确 sitemapindex 的 lastmod 应反映子表内容的真实变更时间）。
+  // 子表自身已按策略省略/携带真实 lastmod（见 sitemap-builders.ts），
+  // index 层省略是最诚实的表达。
   const body = `${XML_HEAD}
 ${SITEMAP_CHILDREN.map((c) => `  <sitemap>
     <loc>${SITE_URL}${c.path}</loc>
-    <lastmod>${new Date().toISOString().slice(0, 10)}</lastmod>
   </sitemap>`).join('\n')}
 </sitemapindex>`;
 

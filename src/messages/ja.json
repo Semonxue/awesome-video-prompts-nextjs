@@ -65,13 +65,16 @@
     "noPrompts": "プロンプトが見つかりません",
     "loadingMore": "プロンプトをもっと読み込み中…",
     "paginationLabel": "{model} のページ送り",
-    "overviewText": "{count} 件の {model} プロンプトを掲載しています。ライブラリ全体の {total} 件中 {share}% に相当し、よく使われるタグは {tags} です。各項目には完全なプロンプト本文・元動画・生成設定が付属しています。",
+    "overviewText": "{count} 件の {model} プロンプトを掲載しています。ライブラリ全体の {total} 件中 {share}% に相当し、よく使われるタグは {tags} です。各項目には完全なプロンプト本文と元動画が付属しています。",
     "overviewNoTag": "さまざまなスタイル",
     "topTags": "頻出タグ",
     "tagTitleCount": "{count} 件",
     "relatedModels": "併用されることが多いモデル",
     "aboutThisModel": "{model} 動画プロンプトについて",
-    "faqTitle": "よくある質問"
+    "faqTitle": "よくある質問",
+    "promptTipsTitle": "{model} プロンプトを書くコツ",
+    "featuredTitle": "注目の {model} プロンプト",
+    "editorialReviewed": "モデル情報の確認日：{date}"
   },
   "tag": {
     "breadcrumbTags": "タグ",

@@ -65,13 +65,16 @@
     "noPrompts": "未找到提示词",
     "loadingMore": "加载更多提示词…",
     "paginationLabel": "{model} 分页",
-    "overviewText": "这里有 {count} 条 {model} 提示词，占全站 {total} 条的 {share}%。其中最常配合的标签是 {tags}。每条都附完整提示词原文、来源视频与生成设置。",
+    "overviewText": "这里有 {count} 条 {model} 提示词，占全站 {total} 条的 {share}%。其中最常配合的标签是 {tags}。每条都附完整提示词原文与来源视频。",
     "overviewNoTag": "多种风格",
     "topTags": "高频标签",
     "tagTitleCount": "{count} 条提示词",
     "relatedModels": "常与以下模型搭配",
     "aboutThisModel": "关于 {model} 视频提示词",
-    "faqTitle": "常见问题"
+    "faqTitle": "常见问题",
+    "promptTipsTitle": "如何写好 {model} 提示词",
+    "featuredTitle": "精选 {model} 提示词",
+    "editorialReviewed": "模型事实核实于 {date}"
   },
   "tag": {
     "breadcrumbTags": "标签",

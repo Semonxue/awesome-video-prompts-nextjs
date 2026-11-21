@@ -17,6 +17,9 @@ import {
   SITEMAP_CHILDREN,
   SITEMAP_PROMPT_LOCALES,
   SUBMIT_PROMPT_DETAIL_PAGES,
+  SUBMIT_CURATED_PROMPT_PAGES,
+  CURATED_PROMPT_LIMIT,
+  CURATED_MIN_DESC_LENGTH,
   toTagSitemapRows,
   toModelSitemapRows,
   toPromptSitemapRows,
@@ -42,16 +45,22 @@ describe('sitemap 拆分结构', () => {
     expect(paths).toContain('/sitemaps/static.xml');
   });
 
-  it('2026-10-15：详情页默认退出提交面（SITEMAP_CHILDREN 里没有 prompts-*）', () => {
+  it('2026-11-21：全量提交仍关闭，精选提交把 prompts-en 带回 index', () => {
     expect(SUBMIT_PROMPT_DETAIL_PAGES).toBe(false);
+    expect(SUBMIT_CURATED_PROMPT_PAGES).toBe(true);
     const paths = SITEMAP_CHILDREN.map((c) => c.path);
-    expect(paths.filter((p) => p.includes('prompts-'))).toEqual([]);
-    // 主体只剩 tags / models / static
     expect(paths).toEqual([
+      '/sitemaps/prompts-en.xml',
       '/sitemaps/tags.xml',
       '/sitemaps/models.xml',
       '/sitemaps/static.xml',
     ]);
+  });
+
+  it('精选提交的闸门保持保守（上限与正文长度线不许悄悄放大）', () => {
+    // 放大前先按 sitemap-builders.ts 注释里的口径看 GSC 收录率
+    expect(CURATED_PROMPT_LIMIT).toBeLessThanOrEqual(500);
+    expect(CURATED_MIN_DESC_LENGTH).toBeGreaterThanOrEqual(400);
   });
 
   it('退出提交面 ≠ 封死：详情页子表 route 仍在，改开关即可一键恢复', () => {

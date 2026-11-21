@@ -65,13 +65,16 @@
     "noPrompts": "No prompts found.",
     "loadingMore": "Loading more prompts…",
     "paginationLabel": "{model} pagination",
-    "overviewText": "Browse {count} {model} video prompts — {share}% of the {total} prompts in our library. They are most often written for {tags}. Each entry includes the full prompt text, the source clip and the settings it was generated with.",
+    "overviewText": "Browse {count} {model} video prompts — {share}% of the {total} prompts in our library. They are most often written for {tags}. Each entry includes the full prompt text and the source clip.",
     "overviewNoTag": "a range of styles",
     "topTags": "Most common tags",
     "tagTitleCount": "{count} prompts",
     "relatedModels": "Often paired with",
     "aboutThisModel": "About {model} video prompts",
-    "faqTitle": "Frequently asked questions"
+    "faqTitle": "Frequently asked questions",
+    "promptTipsTitle": "How to write better {model} prompts",
+    "featuredTitle": "Featured {model} prompts",
+    "editorialReviewed": "Model facts checked on {date}"
   },
   "tag": {
     "breadcrumbTags": "Tags",
